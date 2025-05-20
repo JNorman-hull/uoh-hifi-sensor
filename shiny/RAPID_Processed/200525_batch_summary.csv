@@ -1,0 +1,2 @@
+file,class,sensor,date_deploy,time_deploy,duration[mm:ss],pres_min[kPa],pres_min[time],HIG_max[g],HIG_max[time],messages
+B67-0807110036,2000_combined,B67,07/08,11:00:36,00:59,79.90000000000234,29.150000000000002,566.9,29.123,HIG: High impact event >= 400g found
