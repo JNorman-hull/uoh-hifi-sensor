@@ -178,7 +178,7 @@ server <- function(input, output, session) {
     return(sensor_names)
   })
   
-  # Update the sensor dropdown when processing is complete
+  # Update the sensor dropdown to always show available processed sensors
   observe({
     # Always get the list of all processed sensors
     choices <- processed_sensors()
@@ -206,7 +206,7 @@ server <- function(input, output, session) {
     return(data)
   })
   
-  # Get nadir information for the selected sensor
+  # Simplified nadir_info reactive function
   nadir_info <- reactive({
     req(input$plot_sensor)
     
@@ -223,8 +223,8 @@ server <- function(input, output, session) {
       
       if (!is.null(selected_summary)) {
         return(list(
-          time = as.numeric(selected_summary$`pres_min.time.`),
-          value = as.numeric(selected_summary$`pres_min.kPa.`)
+          time = as.numeric(selected_summary$`pres_min[time]`),
+          value = as.numeric(selected_summary$`pres_min[kPa]`)
         ))
       }
     }
@@ -238,19 +238,35 @@ server <- function(input, output, session) {
       summary_files <- summary_files[order(file_info$mtime, decreasing = TRUE)]
       
       # Try to read the most recent summary file
-      if (file.exists(summary_files[1])) {
-        summary_df <- read.csv(summary_files[1])
+      summary_file <- summary_files[1]
+      if (file.exists(summary_file)) {
+        summary_df <- read.csv(summary_file, check.names = FALSE)
         
         # Look for the sensor in this summary file
         if ("file" %in% names(summary_df)) {
           sensor_row <- summary_df[summary_df$file == input$plot_sensor, ]
           
           if (nrow(sensor_row) > 0) {
-            # Found the sensor data
-            return(list(
-              time = as.numeric(sensor_row$`pres_min.time.`),
-              value = as.numeric(sensor_row$`pres_min.kPa.`)
-            ))
+            # Try different possible column name formats
+            time_col <- NULL
+            value_col <- NULL
+            
+            # Check for different potential column name formats
+            possible_time_cols <- c("pres_min[time]", "pres_min.time.", "pres_min.time")
+            possible_value_cols <- c("pres_min[kPa]", "pres_min.kPa.", "pres_min.kPa")
+            
+            for (col in names(sensor_row)) {
+              if (col %in% possible_time_cols) time_col <- col
+              if (col %in% possible_value_cols) value_col <- col
+            }
+            
+            # If we found both columns, return the data
+            if (!is.null(time_col) && !is.null(value_col)) {
+              return(list(
+                time = as.numeric(sensor_row[[time_col]]),
+                value = as.numeric(sensor_row[[value_col]])
+              ))
+            }
           }
         }
       }
@@ -372,6 +388,18 @@ server <- function(input, output, session) {
         )
       }
     }
+    
+    # Add configuration for plot export options
+    p <- p %>% config(
+      displaylogo = FALSE,
+      toImageButtonOptions = list(
+        format = input$plot_filetype,
+        filename = paste0(input$plot_sensor, "_plot"),
+        height = input$plot_height_cm / 2.54 * input$plot_dpi,  # Convert cm to px based on DPI
+        width = input$plot_width_cm / 2.54 * input$plot_dpi,
+        scale = 1
+      )
+    )
     
     return(p)
   })

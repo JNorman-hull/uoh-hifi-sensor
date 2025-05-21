@@ -60,7 +60,25 @@ ui <- navbarPage(
                                   "Inertial Acceleration [m/s²]" = "inacc_mag_ms",
                                   "Rotational Magnitude [deg/s]" = "rot_mag_degs"),
                       selected = "higacc_mag_g"),
-          checkboxInput("show_nadir", "Show Pressure Nadir", value = TRUE)
+          checkboxInput("show_nadir", "Show Pressure Nadir", value = TRUE),
+          
+          hr(),
+          
+          # NEW - Plot Export Options
+          h4("Plot Export Options"),
+          selectInput("plot_filetype", "File Type:",
+                      choices = c("PNG" = "png", 
+                                  "SVG" = "svg", 
+                                  "JPEG" = "jpeg"),
+                      selected = "png"),
+          numericInput("plot_dpi", "DPI:", 
+                       value = 300, min = 72, max = 600, step = 1),
+          fluidRow(
+            column(6, numericInput("plot_width_cm", "Width (cm):", 
+                                   value = 25, min = 5, max = 100, step = 1)),
+            column(6, numericInput("plot_height_cm", "Height (cm):", 
+                                   value = 15, min = 5, max = 100, step = 1))
+          )
         )
       ),
       
