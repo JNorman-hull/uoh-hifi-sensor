@@ -180,16 +180,8 @@ server <- function(input, output, session) {
   
   # Update the sensor dropdown when processing is complete
   observe({
-    # Use either processed sensors or sensors from summary data
+    # Always get the list of all processed sensors
     choices <- processed_sensors()
-    
-    # If we have summary data, use those sensor names instead
-    if (!is.null(values$summary_data) && length(values$summary_data) > 0) {
-      sensor_names <- sapply(values$summary_data, function(x) x$file)
-      if (length(sensor_names) > 0) {
-        choices <- sensor_names
-      }
-    }
     
     # If we have choices, update the dropdown
     if (length(choices) > 0) {
@@ -217,25 +209,55 @@ server <- function(input, output, session) {
   # Get nadir information for the selected sensor
   nadir_info <- reactive({
     req(input$plot_sensor)
-    req(values$summary_data)
     
-    # Find the summary data for the selected sensor
-    selected_summary <- NULL
-    for (summary in values$summary_data) {
-      if (summary$file == input$plot_sensor) {
-        selected_summary <- summary
-        break
+    # Try to find nadir info in current session data first
+    if (!is.null(values$summary_data) && length(values$summary_data) > 0) {
+      # Find the summary data for the selected sensor
+      selected_summary <- NULL
+      for (summary in values$summary_data) {
+        if (summary$file == input$plot_sensor) {
+          selected_summary <- summary
+          break
+        }
+      }
+      
+      if (!is.null(selected_summary)) {
+        return(list(
+          time = as.numeric(selected_summary$`pres_min.time.`),
+          value = as.numeric(selected_summary$`pres_min.kPa.`)
+        ))
       }
     }
     
-    if (is.null(selected_summary)) {
-      return(NULL)
+    # If not found in session data, try to read from most recent summary CSV
+    summary_files <- list.files(path = output_dir(), pattern = "batch_summary\\.csv$", full.names = TRUE)
+    
+    if (length(summary_files) > 0) {
+      # Sort by file modification time to get the most recent
+      file_info <- file.info(summary_files)
+      summary_files <- summary_files[order(file_info$mtime, decreasing = TRUE)]
+      
+      # Try to read the most recent summary file
+      if (file.exists(summary_files[1])) {
+        summary_df <- read.csv(summary_files[1])
+        
+        # Look for the sensor in this summary file
+        if ("file" %in% names(summary_df)) {
+          sensor_row <- summary_df[summary_df$file == input$plot_sensor, ]
+          
+          if (nrow(sensor_row) > 0) {
+            # Found the sensor data
+            return(list(
+              time = as.numeric(sensor_row$`pres_min.time.`),
+              value = as.numeric(sensor_row$`pres_min.kPa.`)
+            ))
+          }
+        }
+      }
     }
     
-    return(list(
-      time = as.numeric(selected_summary$`pres_min[time]`),
-      value = as.numeric(selected_summary$`pres_min[kPa]`)
-    ))
+    # If can't find nadir info, return NULL
+    return(NULL)
   })
   
   # Create the plot
