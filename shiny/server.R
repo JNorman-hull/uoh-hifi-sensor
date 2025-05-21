@@ -84,16 +84,12 @@ server <- function(input, output, session) {
     
     # Get selected sensors
     selected_sensors <- c()
-    
     for (sensor in values$sensor_names) {
       input_id <- paste0("sensor_", make.names(sensor))
       if (!is.null(input[[input_id]]) && isTRUE(input[[input_id]])) {
         selected_sensors <- c(selected_sensors, sensor)
       }
     }
-    
-    # Switch to the processing log tab - use the value, not the title
-    updateTabsetPanel(session, "mainTabset", selected = "processing_log")
     
     # Check if any sensors are selected
     if (length(selected_sensors) == 0) {
@@ -110,25 +106,31 @@ server <- function(input, output, session) {
     # Disable the process button during processing
     shinyjs::disable("process_btn")
     
-    # Process in step-by-step manner
-    result <- process_sensors_step_by_step(
-      selected_sensors, 
-      raw_data_path(), 
-      output_dir(),
-      session
-    )
+    # Force UI to update by switching to log tab FIRST
+    updateTabsetPanel(session, "mainTabset", selected = "processing_log")
     
-    # Update after completion
-    values$summary_data <- result$summary_data
-    values$log_messages <- result$log_messages
-    values$processing_complete <- TRUE
-    values$is_processing <- FALSE
-    
-    # Switch to results tab when processing is complete
-    updateTabsetPanel(session, "mainTabset", selected = "results_summary")
-    
-    # Re-enable the button
-    shinyjs::enable("process_btn")
+    # Use a small delay to ensure UI updates before processing starts
+    shinyjs::delay(100, {
+      # Process in step-by-step manner
+      result <- process_sensors_step_by_step(
+        selected_sensors, 
+        raw_data_path(), 
+        output_dir(),
+        session
+      )
+      
+      # Update after completion
+      values$summary_data <- result$summary_data
+      values$log_messages <- result$log_messages
+      values$processing_complete <- TRUE
+      values$is_processing <- FALSE
+      
+      # Switch to results tab when processing is complete
+      updateTabsetPanel(session, "mainTabset", selected = "results_summary")
+      
+      # Re-enable the button
+      shinyjs::enable("process_btn")
+    })
   })
   
   # Display results table
