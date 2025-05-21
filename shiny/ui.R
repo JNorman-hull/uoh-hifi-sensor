@@ -23,21 +23,45 @@ ui <- navbarPage(
   tabPanel(
     "Process Sensors",
     
-    # Keep sidebarLayout
+    # Keep sidebarLayout but make the sidebar content conditional
     sidebarLayout(
       sidebarPanel(
         width = 3,
         
-        # Display file locations
-        h4("File Locations"),
-        verbatimTextOutput("raw_data_location"),
-        verbatimTextOutput("output_location"),
+        # File locations sidebar - only show when not on plots tab
+        conditionalPanel(
+          condition = "input.mainTabset !== 'plots'",
+          h4("File Locations"),
+          verbatimTextOutput("raw_data_location"),
+          verbatimTextOutput("output_location"),
+          
+          hr(),
+          
+          # Add action button
+          actionButton("process_btn", "Process Selected Sensors", 
+                       class = "btn-primary btn-block")
+        ),
         
-        hr(),
-        
-        # Add action button
-        actionButton("process_btn", "Process Selected Sensors", 
-                     class = "btn-primary btn-block")
+        # Plot options sidebar - only show when on plots tab
+        conditionalPanel(
+          condition = "input.mainTabset === 'plots'",
+          h4("Plot Options"),
+          selectInput("plot_sensor", "Select Sensor:", choices = NULL),
+          selectInput("left_y_var", "Left Y-Axis:",
+                      choices = c("Pressure [kPa]" = "pressure_kpa",
+                                  "HIG Acceleration [g]" = "higacc_mag_g",
+                                  "Inertial Acceleration [m/s²]" = "inacc_mag_ms",
+                                  "Rotational Magnitude [deg/s]" = "rot_mag_degs"),
+                      selected = "pressure_kpa"),
+          selectInput("right_y_var", "Right Y-Axis (Optional):",
+                      choices = c("None" = "",
+                                  "Pressure [kPa]" = "pressure_kpa",
+                                  "HIG Acceleration [g]" = "higacc_mag_g",
+                                  "Inertial Acceleration [m/s²]" = "inacc_mag_ms",
+                                  "Rotational Magnitude [deg/s]" = "rot_mag_degs"),
+                      selected = "higacc_mag_g"),
+          checkboxInput("show_nadir", "Show Pressure Nadir", value = TRUE)
+        )
       ),
       
       mainPanel(
@@ -76,12 +100,12 @@ ui <- navbarPage(
             DT::dataTableOutput("results_table")
           ),
           
-          # Tab 4: Plots (placeholder for now)
+          # Tab 4: Plots - modified to be simpler since options moved to sidebar
           tabPanel(
             title = "Plots",
             value = "plots",
-            h3("Interactive Plots"),
-            p("Plot functionality will be implemented in the next phase.")
+            h3("Interactive Plot"),
+            plotlyOutput("sensor_plot", height = "600px")
           )
         )
       )
