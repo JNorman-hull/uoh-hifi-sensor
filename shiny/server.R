@@ -1,9 +1,3 @@
-# Server definition, called once for every R process
-
-#when user wants to run the python script
-#reticulate::source_python('./scripts/RAPID_import.py')
-
-
 server <- function(input, output, session) {
   
   # Define reactive values
@@ -11,7 +5,8 @@ server <- function(input, output, session) {
     sensor_names = NULL,
     processing_complete = FALSE,
     log_messages = character(0),
-    summary_data = NULL
+    summary_data = NULL,
+    is_processing = FALSE
   )
   
   # Raw data location
@@ -73,8 +68,20 @@ server <- function(input, output, session) {
     paste(values$log_messages, collapse = "\n")
   })
   
+  # Helper function to consistently update messages
+  updateLogMessage <- function(message) {
+    values$log_messages <- c(values$log_messages, message)
+    session$sendCustomMessage("updateProcessLog", list(text = paste(values$log_messages, collapse = "\n")))
+  }
+  
   # Process button click handler
   observeEvent(input$process_btn, {
+    # Prevent multiple processing jobs
+    if (values$is_processing) {
+      updateLogMessage("Processing already in progress. Please wait...")
+      return()
+    }
+    
     # Get selected sensors
     selected_sensors <- c()
     
@@ -87,24 +94,35 @@ server <- function(input, output, session) {
     
     # Check if any sensors are selected
     if (length(selected_sensors) == 0) {
-      values$log_messages <- "No sensors selected. Please select at least one sensor to process."
+      updateLogMessage("No sensors selected. Please select at least one sensor to process.")
       return()
     }
     
-    # Reset log messages
-    values$log_messages <- "Starting processing..."
+    # Reset state
+    values$is_processing <- TRUE
+    values$processing_complete <- FALSE
+    values$summary_data <- NULL
+    values$log_messages <- character(0)
     
-    # Process selected sensors
-    result <- process_selected_sensors(
-      selected_sensors,
-      raw_data_path = raw_data_path(),
-      output_dir = output_dir()
+    # Disable the process button during processing
+    shinyjs::disable("process_btn")
+    
+    # Process in step-by-step manner
+    result <- process_sensors_step_by_step(
+      selected_sensors, 
+      raw_data_path(), 
+      output_dir(),
+      session
     )
     
-    # Update reactive values with results
+    # Update after completion
     values$summary_data <- result$summary_data
     values$log_messages <- result$log_messages
     values$processing_complete <- TRUE
+    values$is_processing <- FALSE
+    
+    # Re-enable the button
+    shinyjs::enable("process_btn")
   })
   
   # Display results table
@@ -112,10 +130,13 @@ server <- function(input, output, session) {
     req(values$processing_complete)
     req(length(values$summary_data) > 0)
     
-    # Convert the Python list of dictionaries to an R data frame
+    # Convert the list of dictionaries to an R data frame
     summary_df <- do.call(rbind, lapply(values$summary_data, function(x) {
-      # Convert each dictionary to a single-row data frame
-      as.data.frame(x, stringsAsFactors = FALSE)
+      df <- as.data.frame(x, stringsAsFactors = FALSE)
+      
+      # Reorder to put 'file' first
+      col_order <- c("file", setdiff(names(df), "file"))
+      df[, col_order]
     }))
     
     # If conversion worked and we have data, display it

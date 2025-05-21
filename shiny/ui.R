@@ -1,7 +1,23 @@
-# User interface objects
-
 ui <- navbarPage(
   title = "UoH RAPID processing",
+  
+  # Combine shinyjs and JavaScript in the header
+  header = tags$head(
+    # Initialize shinyjs inside header
+    shinyjs::useShinyjs(),
+    
+    # JavaScript for log updates
+    tags$script(HTML("
+      Shiny.addCustomMessageHandler('updateProcessLog', function(message) {
+        var logElement = document.getElementById('process_log');
+        if (logElement) {
+          logElement.textContent = message.text;
+          // Auto-scroll to bottom of log
+          logElement.scrollTop = logElement.scrollHeight;
+        }
+      });
+    "))
+  ),
   
   # Navbar 1 - Main processing page
   tabPanel(
