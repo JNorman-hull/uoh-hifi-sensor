@@ -92,6 +92,9 @@ server <- function(input, output, session) {
       }
     }
     
+    # Switch to the processing log tab - use the value, not the title
+    updateTabsetPanel(session, "mainTabset", selected = "processing_log")
+    
     # Check if any sensors are selected
     if (length(selected_sensors) == 0) {
       updateLogMessage("No sensors selected. Please select at least one sensor to process.")
@@ -120,6 +123,9 @@ server <- function(input, output, session) {
     values$log_messages <- result$log_messages
     values$processing_complete <- TRUE
     values$is_processing <- FALSE
+    
+    # Switch to results tab when processing is complete
+    updateTabsetPanel(session, "mainTabset", selected = "results_summary")
     
     # Re-enable the button
     shinyjs::enable("process_btn")
