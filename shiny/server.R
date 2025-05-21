@@ -163,7 +163,7 @@ server <- function(input, output, session) {
   })
   
   #=================================================================
-  # NEW CODE FOR INTERACTIVE PLOTLY PLOTS
+  # INTERACTIVE PLOTLY PLOTS CODE
   #=================================================================
   
   # Create a reactive expression to get the list of processed sensors
@@ -204,6 +204,20 @@ server <- function(input, output, session) {
     # Read the CSV
     data <- read.csv(file_path)
     return(data)
+  })
+  
+  # Display calculated pixel dimensions for export
+  output$plot_pixel_dimensions <- renderText({
+    # Return empty if using default settings
+    if (input$use_default_export) {
+      return("")
+    }
+    
+    # Calculate pixel dimensions based on cm and DPI
+    width_px <- round(input$plot_width_cm / 2.54 * input$plot_dpi)
+    height_px <- round(input$plot_height_cm / 2.54 * input$plot_dpi)
+    
+    paste0("Output dimensions: ", width_px, " × ", height_px, " pixels")
   })
   
   # Simplified nadir_info reactive function
@@ -293,10 +307,16 @@ server <- function(input, output, session) {
     left_color <- colors[which(var_names == left_var)]
     left_label <- var_labels[which(var_names == left_var)]
     
-    # Initialize the plot
+    # Determine if we need more right margin for a secondary y-axis
+    has_right_axis <- input$right_y_var != ""
+    right_margin <- if (has_right_axis) 80 else 30
+    
+    # Initialize the plot with basic layout
     p <- plot_ly() %>%
       layout(
         title = paste("Sensor Data:", input$plot_sensor),
+        showlegend = input$show_legend,
+        margin = list(l = 80, r = right_margin, t = 50, b = 50),  # Set explicit margins
         xaxis = list(
           title = "Time [s]",
           showline = TRUE,
@@ -328,7 +348,7 @@ server <- function(input, output, session) {
     )
     
     # If right y-axis is selected, add it
-    if (input$right_y_var != "") {
+    if (has_right_axis) {
       right_var <- input$right_y_var
       right_color <- colors[which(var_names == right_var)]
       right_label <- var_labels[which(var_names == right_var)]
@@ -389,23 +409,79 @@ server <- function(input, output, session) {
       }
     }
     
-    # Add configuration for plot export options
-    p <- p %>% config(
-      displaylogo = FALSE,
-      toImageButtonOptions = list(
-        format = input$plot_filetype,
-        filename = paste0(input$plot_sensor, "_plot"),
-        height = input$plot_height_cm / 2.54 * input$plot_dpi,  # Convert cm to px based on DPI
-        width = input$plot_width_cm / 2.54 * input$plot_dpi,
-        scale = 1
+    # Apply appropriate configuration based on the "Use Default" setting
+    if (input$use_default_export) {
+      # Use plotly's default settings
+      p <- p %>% config(
+        displaylogo = FALSE
       )
-    )
+    } else {
+      # Calculate the correct scaling factor based on DPI
+      dpi_scale <- input$plot_dpi / 96  # Plotly uses 96 DPI as reference
+      
+      # Apply custom font sizes to layout
+      p <- p %>% layout(
+        font = list(size = input$plot_font_size),
+        title = list(font = list(size = input$plot_font_size + 2)),
+        xaxis = list(
+          title = "Time [s]",
+          showline = TRUE,
+          linecolor = "black",
+          linewidth = 1,
+          showticklabels = TRUE,
+          ticks = "outside",
+          tickcolor = "black",
+          tickfont = list(size = input$plot_font_size)
+        ),
+        yaxis = list(
+          title = left_label,
+          showline = TRUE,
+          linecolor = "black",
+          linewidth = 1,
+          showticklabels = TRUE,
+          ticks = "outside",
+          tickcolor = "black",
+          tickfont = list(size = input$plot_font_size)
+        ),
+        legend = list(font = list(size = input$plot_font_size))
+      )
+      
+      # If right axis is present, update its font too
+      if (has_right_axis) {
+        p <- p %>% layout(
+          yaxis2 = list(
+            title = right_label,
+            overlaying = "y",
+            side = "right",
+            showline = TRUE,
+            linecolor = "black",
+            linewidth = 1,
+            showticklabels = TRUE,
+            ticks = "outside",
+            tickcolor = "black",
+            tickfont = list(size = input$plot_font_size)
+          )
+        )
+      }
+      
+      # Apply custom export settings
+      p <- p %>% config(
+        displaylogo = FALSE,
+        toImageButtonOptions = list(
+          format = input$plot_filetype,
+          filename = paste0(input$plot_sensor, "_plot"),
+          width = round(input$plot_width_cm / 2.54 * input$plot_dpi),
+          height = round(input$plot_height_cm / 2.54 * input$plot_dpi),
+          scale = dpi_scale
+        )
+      )
+    }
     
     return(p)
   })
   
-  #  EXPAND CODE HERE
+  
+  #EXPAND CODE HERE
   
   
-
 }

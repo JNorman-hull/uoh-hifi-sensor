@@ -61,23 +61,33 @@ ui <- navbarPage(
                                   "Rotational Magnitude [deg/s]" = "rot_mag_degs"),
                       selected = "higacc_mag_g"),
           checkboxInput("show_nadir", "Show Pressure Nadir", value = TRUE),
+          checkboxInput("show_legend", "Show Legend", value = TRUE),
           
           hr(),
           
           # NEW - Plot Export Options
           h4("Plot Export Options"),
-          selectInput("plot_filetype", "File Type:",
-                      choices = c("PNG" = "png", 
-                                  "SVG" = "svg", 
-                                  "JPEG" = "jpeg"),
-                      selected = "png"),
-          numericInput("plot_dpi", "DPI:", 
-                       value = 300, min = 72, max = 600, step = 1),
-          fluidRow(
-            column(6, numericInput("plot_width_cm", "Width (cm):", 
-                                   value = 25, min = 5, max = 100, step = 1)),
-            column(6, numericInput("plot_height_cm", "Height (cm):", 
-                                   value = 15, min = 5, max = 100, step = 1))
+          checkboxInput("use_default_export", "Use Default Export Settings", value = FALSE),
+          
+          # Show custom options only when not using defaults
+          conditionalPanel(
+            condition = "!input.use_default_export",
+            selectInput("plot_filetype", "File Type:",
+                        choices = c("PNG" = "png", 
+                                    "SVG" = "svg", 
+                                    "JPEG" = "jpeg"),
+                        selected = "png"),
+            numericInput("plot_dpi", "DPI:", 
+                         value = 300, min = 72, max = 600, step = 1),
+            fluidRow(
+              column(6, numericInput("plot_width_cm", "Width (cm):", 
+                                     value = 16, min = 5, max = 100, step = 1)),
+              column(6, numericInput("plot_height_cm", "Height (cm):", 
+                                     value = 10, min = 5, max = 100, step = 1))
+            ),
+            numericInput("plot_font_size", "Font Size (pt):", 
+                         value = 10, min = 6, max = 24, step = 1),
+            verbatimTextOutput("plot_pixel_dimensions")
           )
         )
       ),
