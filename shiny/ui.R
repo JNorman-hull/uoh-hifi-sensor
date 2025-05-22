@@ -91,25 +91,25 @@ ui <- navbarPage(
           
           # Plots Tab
           tabPanel(
-            title = "Interactive Plots",
+            title = "Complete passage",
             value = "interactive_plots",
             plotsUI("plots")
           ),
           
           # Additional Analysis Tab
           tabPanel(
-            title = "Data Analysis",
-            value = "data_analysis",
-            h3("Data Analysis"),
-            p("This tab is reserved for additional data analysis features.")
+            title = "ROI delineation",
+            value = "roi_delineation",
+            h3("Trim and delineate sensor time series"),
+            p("This tab is reserved for ROI delineation ")
           ),
           
           # Export Tab
           tabPanel(
-            title = "Export Options",
-            value = "export_options",
-            h3("Export Options"),
-            p("This tab is reserved for batch export and report generation features.")
+            title = "Time normalization",
+            value = "time_normalization",
+            h3("Time normalization"),
+            p("This tab is reserved for Time normalization.")
           )
         )
       )
@@ -118,7 +118,7 @@ ui <- navbarPage(
   
   # Placeholder for future expansion
   tabPanel(
-    "Settings",
-    h3("This page is reserved for application settings and configuration")
+    "Data analysis",
+    h3("This page is reserved for data analysis")
   )
 )

@@ -3,7 +3,7 @@ plotsUI <- function(id) {
   ns <- NS(id)
   
   tagList(
-    h3("Interactive Plot"),
+    h3("Complete sensor passage"),
     plotlyOutput(ns("sensor_plot"), height = "600px")
   )
 }
@@ -20,19 +20,23 @@ plotsSidebarUI <- function(id) {
                             "Inertial Acceleration [m/s²]" = "inacc_mag_ms",
                             "Rotational Magnitude [deg/s]" = "rot_mag_degs"),
                 selected = "pressure_kpa"),
-    selectInput(ns("right_y_var"), "Right Y-Axis (Optional):",
-                choices = c("None" = "",
+    selectInput(ns("right_y_var"), "Right Y-Axis:",
+                choices = c("None" = "none",
                             "Pressure [kPa]" = "pressure_kpa",
                             "HIG Acceleration [g]" = "higacc_mag_g",
                             "Inertial Acceleration [m/s²]" = "inacc_mag_ms",
                             "Rotational Magnitude [deg/s]" = "rot_mag_degs"),
-                selected = "higacc_mag_g"),
+                selected = "none"),
+   
+    hr(),
+    
+    h4("Pressure Nadir Options"),
     checkboxInput(ns("show_nadir"), "Show Pressure Nadir", value = TRUE),
-    checkboxInput(ns("show_legend"), "Show Legend", value = TRUE),
     
     hr(),
     
     h4("Plot Export Options"),
+    checkboxInput(ns("show_legend"), "Show Legend", value = TRUE),
     checkboxInput(ns("use_default_export"), "Use Default Export Settings", value = FALSE),
     
     conditionalPanel(
@@ -193,7 +197,7 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       left_color <- colors[which(var_names == left_var)]
       left_label <- var_labels[which(var_names == left_var)]
       
-      has_right_axis <- input$right_y_var != ""
+      has_right_axis <- input$right_y_var !="none"
       right_margin <- if (has_right_axis) 80 else 30
       
       p <- plot_ly() %>%
