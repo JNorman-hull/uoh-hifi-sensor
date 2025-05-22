@@ -1,4 +1,3 @@
-
 plotsUI <- function(id) {
   ns <- NS(id)
   
@@ -27,11 +26,16 @@ plotsSidebarUI <- function(id) {
                             "Inertial Acceleration [m/s²]" = "inacc_mag_ms",
                             "Rotational Magnitude [deg/s]" = "rot_mag_degs"),
                 selected = "none"),
-   
+    
     hr(),
     
     h4("Pressure Nadir Options"),
     checkboxInput(ns("show_nadir"), "Show Pressure Nadir", value = TRUE),
+    verbatimTextOutput(ns("current_nadir_display")),
+    actionButton(ns("edit_nadir_btn"), "Select Pressure Nadir", class = "btn-warning btn-sm"),
+    actionButton(ns("save_nadir_btn"), "Save Pressure Nadir", class = "btn-success btn-sm"),
+    actionButton(ns("cancel_nadir_btn"), "Cancel", class = "btn-danger btn-sm"),
+    textOutput(ns("nadir_status")),
     
     hr(),
     
@@ -65,11 +69,16 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
+    # Nadir editing values
+    nadir_values <- reactiveValues(
+      edit_mode = FALSE,
+      selected_point = NULL,
+      nadir_updated = 0
+    )
+    
     # Create a reactive expression to get the list of processed sensors
     processed_sensors <- reactive({
-      # Add dependency on processing completion to trigger refresh
       processing_complete()
-      
       min_files <- list.files(path = file.path(output_dir(), "csv"), 
                               pattern = "_min\\.csv$", full.names = FALSE)
       sensor_names <- gsub("_min\\.csv$", "", min_files)
@@ -82,11 +91,10 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       current_choice <- input$plot_sensor
       
       if (length(choices) > 0) {
-        # Preserve current selection if it still exists
         selected_value <- if (!is.null(current_choice) && current_choice %in% choices) {
           current_choice
         } else {
-          choices[1]  # Default to first choice
+          choices[1]
         }
         
         updateSelectInput(session, "plot_sensor", 
@@ -124,6 +132,7 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
     # Nadir info reactive function
     nadir_info <- reactive({
       req(input$plot_sensor)
+      nadir_values$nadir_updated  # Force refresh
       
       # Try to find nadir info in current session data first
       if (!is.null(summary_data()) && length(summary_data()) > 0) {
@@ -181,6 +190,86 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       }
       
       return(NULL)
+    })
+    
+    # Display current nadir
+    output$current_nadir_display <- renderText({
+      nadir <- nadir_info()
+      if (!is.null(nadir)) {
+        paste0("Time: ", round(nadir$time, 3), "s\nPressure: ", round(nadir$value, 2), " kPa")
+      } else {
+        "No nadir data available"
+      }
+    })
+    
+    # Initialize button states
+    observe({
+      if (nadir_values$edit_mode) {
+        shinyjs::disable("edit_nadir_btn")
+        shinyjs::enable("save_nadir_btn")
+        shinyjs::enable("cancel_nadir_btn")
+      } else {
+        shinyjs::enable("edit_nadir_btn")
+        shinyjs::disable("save_nadir_btn")
+        shinyjs::disable("cancel_nadir_btn")
+      }
+    })
+    
+    # Edit nadir button
+    observeEvent(input$edit_nadir_btn, {
+      nadir_values$edit_mode <- TRUE
+      nadir_values$selected_point <- NULL
+    })
+    
+    # Cancel nadir button
+    observeEvent(input$cancel_nadir_btn, {
+      nadir_values$edit_mode <- FALSE
+      nadir_values$selected_point <- NULL
+    })
+    
+    # Save nadir button
+    observeEvent(input$save_nadir_btn, {
+      req(nadir_values$selected_point)
+      
+      summary_files <- list.files(path = output_dir(), pattern = "batch_summary\\.csv$", full.names = TRUE)
+      if (length(summary_files) > 0) {
+        summary_file <- summary_files[which.max(file.info(summary_files)$mtime)]
+        summary_df <- read.csv(summary_file)
+        row_idx <- which(summary_df$file == input$plot_sensor)
+        
+        if (length(row_idx) > 0) {
+          summary_df[row_idx, "pres_min.time."] <- nadir_values$selected_point$x
+          summary_df[row_idx, "pres_min.kPa."] <- nadir_values$selected_point$y
+          write.csv(summary_df, summary_file, row.names = FALSE)
+          
+          nadir_values$nadir_updated <- nadir_values$nadir_updated + 1
+          nadir_values$edit_mode <- FALSE
+          nadir_values$selected_point <- NULL
+        }
+      }
+    })
+    
+    # Handle plot clicks (only when in edit mode)
+    observeEvent(event_data("plotly_click", source = "nadir_plot"), {
+      req(nadir_values$edit_mode)
+      click_data <- event_data("plotly_click", source = "nadir_plot")
+      if (!is.null(click_data)) {
+        nadir_values$selected_point <- list(x = click_data$x, y = click_data$y)
+      }
+    })
+    
+    # Status display
+    output$nadir_status <- renderText({
+      if (nadir_values$edit_mode) {
+        if (!is.null(nadir_values$selected_point)) {
+          paste0("Selected: ", round(nadir_values$selected_point$y, 2), " kPa at ", 
+                 round(nadir_values$selected_point$x, 3), "s")
+        } else {
+          "Edit mode: Click on plot to select nadir"
+        }
+      } else {
+        ""
+      }
     })
     
     # Create the plot
@@ -290,6 +379,22 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
         }
       }
       
+      # Add selected point if in edit mode
+      if (nadir_values$edit_mode && !is.null(nadir_values$selected_point)) {
+        p <- p %>% add_trace(
+          x = nadir_values$selected_point$x,
+          y = nadir_values$selected_point$y,
+          name = "Selected Nadir",
+          type = "scatter",
+          mode = "markers+text",
+          marker = list(color = "purple", size = 12, symbol = "diamond"),
+          text = paste("New:", round(nadir_values$selected_point$y, 2), "kPa"),
+          textposition = "top center",
+          textfont = list(color = "purple"),
+          showlegend = FALSE
+        )
+      }
+      
       if (input$use_default_export) {
         p <- p %>% config(displaylogo = FALSE)
       } else {
@@ -349,6 +454,9 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
           )
         )
       }
+      
+      p$x$source <- "nadir_plot"
+      p <- p %>% event_register("plotly_click")
       
       return(p)
     })
