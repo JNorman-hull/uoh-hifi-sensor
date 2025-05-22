@@ -249,12 +249,13 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       }
     })
     
-    # Handle plot clicks (only when in edit mode)
-    observeEvent(event_data("plotly_click", source = "nadir_plot"), {
-      req(nadir_values$edit_mode)
-      click_data <- event_data("plotly_click", source = "nadir_plot")
-      if (!is.null(click_data)) {
-        nadir_values$selected_point <- list(x = click_data$x, y = click_data$y)
+    # Handle plot clicks - moved inside an observe block
+    observe({
+      if (nadir_values$edit_mode) {
+        click_data <- event_data("plotly_click", source = "nadir_plot")
+        if (!is.null(click_data)) {
+          nadir_values$selected_point <- list(x = click_data$x, y = click_data$y)
+        }
       }
     })
     
@@ -455,6 +456,7 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
         )
       }
       
+      # Always set source and register click events
       p$x$source <- "nadir_plot"
       p <- p %>% event_register("plotly_click")
       
