@@ -11,6 +11,12 @@ dir.create("./RAPID_Processed", showWarnings = FALSE, recursive = TRUE)
 # Import Python functions (with no main block)
 source_python("rapid_functions.py")
 
+# Source all modules
+source("modules/fileSelectionModule.R")
+source("modules/processingModule.R")
+source("modules/resultsModule.R")
+source("modules/plotsModule.R")
+
 # Create a wrapper function to get unique sensor names (without extensions)
 get_sensor_names <- function(raw_data_path = "./RAW_data/RAPID") {
   # Find all IMP files

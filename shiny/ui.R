@@ -6,148 +6,119 @@ ui <- navbarPage(
     # Initialize shinyjs inside header
     shinyjs::useShinyjs(),
     
-    # JavaScript for log updates
+    # JavaScript for log updates and processing completion
     tags$script(HTML("
       Shiny.addCustomMessageHandler('updateProcessLog', function(message) {
-        var logElement = document.getElementById('process_log');
+        var logElement = document.getElementById('processing-process_log');
         if (logElement) {
           logElement.textContent = message.text;
           // Auto-scroll to bottom of log
           logElement.scrollTop = logElement.scrollHeight;
         }
       });
+      
+      Shiny.addCustomMessageHandler('processingComplete', function(message) {
+        // Can add additional UI feedback when processing completes
+        console.log('Processing completed successfully');
+      });
     "))
   ),
   
-  # Navbar 1 - Main processing page
+  # Main processing page
   tabPanel(
     "Process Sensors",
     
-    # Keep sidebarLayout but make the sidebar content conditional
     sidebarLayout(
       sidebarPanel(
         width = 3,
         
-        # File locations sidebar - only show when not on plots tab
-        conditionalPanel(
-          condition = "input.mainTabset !== 'plots'",
-          h4("File Locations"),
-          verbatimTextOutput("raw_data_location"),
-          verbatimTextOutput("output_location"),
-          
-          hr(),
-          
-          # Add action button
-          actionButton("process_btn", "Process Selected Sensors", 
-                       class = "btn-primary btn-block")
-        ),
+        h4("File Locations"),
+        verbatimTextOutput("raw_data_location"),
+        verbatimTextOutput("output_location"),
         
-        # Plot options sidebar - only show when on plots tab
-        conditionalPanel(
-          condition = "input.mainTabset === 'plots'",
-          h4("Plot Options"),
-          selectInput("plot_sensor", "Select Sensor:", choices = NULL),
-          selectInput("left_y_var", "Left Y-Axis:",
-                      choices = c("Pressure [kPa]" = "pressure_kpa",
-                                  "HIG Acceleration [g]" = "higacc_mag_g",
-                                  "Inertial Acceleration [m/s²]" = "inacc_mag_ms",
-                                  "Rotational Magnitude [deg/s]" = "rot_mag_degs"),
-                      selected = "pressure_kpa"),
-          selectInput("right_y_var", "Right Y-Axis (Optional):",
-                      choices = c("None" = "",
-                                  "Pressure [kPa]" = "pressure_kpa",
-                                  "HIG Acceleration [g]" = "higacc_mag_g",
-                                  "Inertial Acceleration [m/s²]" = "inacc_mag_ms",
-                                  "Rotational Magnitude [deg/s]" = "rot_mag_degs"),
-                      selected = "higacc_mag_g"),
-          checkboxInput("show_nadir", "Show Pressure Nadir", value = TRUE),
-          checkboxInput("show_legend", "Show Legend", value = TRUE),
-          
-          hr(),
-          
-          # NEW - Plot Export Options
-          h4("Plot Export Options"),
-          checkboxInput("use_default_export", "Use Default Export Settings", value = FALSE),
-          
-          # Show custom options only when not using defaults
-          conditionalPanel(
-            condition = "!input.use_default_export",
-            selectInput("plot_filetype", "File Type:",
-                        choices = c("PNG" = "png", 
-                                    "SVG" = "svg", 
-                                    "JPEG" = "jpeg"),
-                        selected = "png"),
-            numericInput("plot_dpi", "DPI:", 
-                         value = 300, min = 72, max = 600, step = 1),
-            fluidRow(
-              column(6, numericInput("plot_width_cm", "Width (cm):", 
-                                     value = 16, min = 5, max = 100, step = 1)),
-              column(6, numericInput("plot_height_cm", "Height (cm):", 
-                                     value = 10, min = 5, max = 100, step = 1))
-            ),
-            numericInput("plot_font_size", "Font Size (pt):", 
-                         value = 10, min = 6, max = 24, step = 1),
-            verbatimTextOutput("plot_pixel_dimensions")
-          )
-        )
+        hr(),
+        
+        actionButton("process_btn", "Process Selected Sensors", 
+                     class = "btn-primary btn-block")
       ),
       
       mainPanel(
         width = 9,
         
-        # Add tabset panel in the main panel with proper ID
         tabsetPanel(
           id = "mainTabset",
           
-          # Tab 1: File Selection - make sure to use exact tab values
+          # File Selection Tab
           tabPanel(
             title = "File Selection",
-            value = "file_selection", # Add a value for each tab
-            h3("Sensor Selection"),
-            
-            # Select all checkbox
-            checkboxInput("select_all", "Select All Sensors", value = FALSE),
-            
-            # Sensor selection UI
-            uiOutput("sensor_checkboxes")
+            value = "file_selection",
+            fileSelectionUI("file_selection")
           ),
           
-          # Tab 2: Processing Log
+          # Processing Log Tab
           tabPanel(
             title = "Processing Log",
-            value = "processing_log", # This value will be used in updateTabsetPanel
-            h3("Processing Log"),
-            verbatimTextOutput("process_log")
+            value = "processing_log",
+            processingUI("processing")
           ),
           
-          # Tab 3: Results Summary
+          # Results Summary Tab
           tabPanel(
             title = "Results Summary", 
             value = "results_summary",
-            h3("Processing Results"),
-            DT::dataTableOutput("results_table")
-          ),
-          
-          # Tab 4: Plots - modified to be simpler since options moved to sidebar
-          tabPanel(
-            title = "Plots",
-            value = "plots",
-            h3("Interactive Plot"),
-            plotlyOutput("sensor_plot", height = "600px")
+            resultsUI("results")
           )
         )
       )
     )
   ),
   
-  # Keep the existing placeholder tabs
+  # Data Visualization page (formerly Placeholder 1)
   tabPanel(
-    "Placeholder 1",
-    h3("This page is reserved for future expansion")
+    "Data Visualization",
+    
+    sidebarLayout(
+      sidebarPanel(
+        width = 3,
+        plotsSidebarUI("plots")
+      ),
+      
+      mainPanel(
+        width = 9,
+        
+        tabsetPanel(
+          id = "visualizationTabset",
+          
+          # Plots Tab
+          tabPanel(
+            title = "Interactive Plots",
+            value = "interactive_plots",
+            plotsUI("plots")
+          ),
+          
+          # Additional Analysis Tab
+          tabPanel(
+            title = "Data Analysis",
+            value = "data_analysis",
+            h3("Data Analysis"),
+            p("This tab is reserved for additional data analysis features.")
+          ),
+          
+          # Export Tab
+          tabPanel(
+            title = "Export Options",
+            value = "export_options",
+            h3("Export Options"),
+            p("This tab is reserved for batch export and report generation features.")
+          )
+        )
+      )
+    )
   ),
   
+  # Placeholder for future expansion
   tabPanel(
-    "Placeholder 2",
-    h3("This page is reserved for future expansion")
+    "Settings",
+    h3("This page is reserved for application settings and configuration")
   )
 )
