@@ -16,6 +16,7 @@ source("modules/fileSelectionModule.R")
 source("modules/processingModule.R")
 source("modules/resultsModule.R")
 source("modules/plotsModule.R")
+source("modules/roiModule.R")
 
 # Create a wrapper function to get unique sensor names (without extensions)
 get_sensor_names <- function(raw_data_path = "./RAW_data/RAPID") {

@@ -80,7 +80,17 @@ ui <- navbarPage(
     sidebarLayout(
       sidebarPanel(
         width = 3,
-        plotsSidebarUI("plots")
+        
+        # Conditional sidebar based on selected tab
+        conditionalPanel(
+          condition = "input.visualizationTabset == 'interactive_plots'",
+          plotsSidebarUI("plots")
+        ),
+        
+        conditionalPanel(
+          condition = "input.visualizationTabset == 'roi_delineation'",
+          roiSidebarUI("roi")
+        )
       ),
       
       mainPanel(
@@ -96,12 +106,11 @@ ui <- navbarPage(
             plotsUI("plots")
           ),
           
-          # Additional Analysis Tab
+          # ROI Delineation Tab
           tabPanel(
             title = "ROI delineation",
             value = "roi_delineation",
-            h3("Trim and delineate sensor time series"),
-            p("This tab is reserved for ROI delineation ")
+            roiUI("roi")
           ),
           
           # Export Tab
