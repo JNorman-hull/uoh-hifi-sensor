@@ -16,8 +16,9 @@ roiSidebarUI <- function(id) {
     h4("ROI Delineation Options"),
     selectInput(ns("plot_sensor"), "Select Sensor:", choices = NULL),
     
+    # Use ns() to properly namespace the output ID in the condition
     conditionalPanel(
-      condition = paste0("output.", ns("nadir_available"), " == true"),
+      condition = paste0("output['", ns("nadir_available"), "'] == true"),
       
       hr(),
       h4("ROI Configuration"),
@@ -29,13 +30,9 @@ roiSidebarUI <- function(id) {
       
       actionButton(ns("create_delineated"), "Create delineated dataset", 
                    class = "btn-primary btn-block")
-    ),
-    
-    br(),
-    textOutput(ns("status_message"))
+    )
   )
 }
-
 roiServer <- function(id, output_dir, summary_data, processing_complete = reactive(FALSE)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -44,12 +41,13 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     roi_values <- reactiveValues(
       roi_configs = NULL,
       current_config = NULL,
-      delineated_created = FALSE
+      summary_updated = 0  # Counter to trigger cache refresh when delineation happens
     )
     
-    # Cached summary data - only reads file when processing completes
+    # Cached summary data - reads file when processing completes OR when delineation happens
     summary_data_cache <- reactive({
       processing_complete()  # Invalidate when processing completes
+      roi_values$summary_updated  # Invalidate when delineation creates/updates summary
       
       summary_file <- get_latest_summary_file(output_dir())
       if (!is.null(summary_file) && file.exists(summary_file)) {
@@ -116,10 +114,10 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     })
     
     # Output for conditional panel
-    output$nadir_available <- reactive({
+    output[[ns("nadir_available")]] <- reactive({
       nadir_info()$available
     })
-    outputOptions(output, "nadir_available", suspendWhenHidden = FALSE)
+    outputOptions(output, ns("nadir_available"), suspendWhenHidden = FALSE)
     
     # Calculate ROI times
     roi_times <- reactive({
@@ -213,41 +211,44 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    # Status messages
-    output$status_message <- renderText({
+    # Show notification when nadir is not available for selected sensor (only once per sensor)
+    last_nadir_warning <- reactiveVal("")
+    
+    observe({
+      req(input$plot_sensor)
       nadir <- nadir_info()
       
-      if (!nadir$available) {
-        return("No nadir data available. Sensor must be listed in summary file.")
+      if (!nadir$available && last_nadir_warning() != input$plot_sensor) {
+        showNotification(
+          paste("No nadir data available for", input$plot_sensor, ". Sensor must be listed in summary file."),
+          type = "warning",
+          duration = 8
+        )
+        last_nadir_warning(input$plot_sensor)
       }
-      
-      if (roi_values$delineated_created) {
-        config_name <- if (!is.null(roi_values$current_config)) {
-          roi_values$current_config$label
-        } else {
-          "Unknown"
-        }
-        return(paste("Delineated dataset created successfully using", config_name, "configuration!"))
-      }
-      
-      return("")
     })
     
-    # Check if already delineated using cached data
+    # Check if already delineated - check both summary file AND actual file existence
     is_already_delineated <- reactive({
       req(input$plot_sensor)
       
-      summary_df <- summary_data_cache()
-      if (is.null(summary_df)) return(FALSE)
+      # Check if delineated file actually exists in filesystem
+      delineated_dir <- file.path(output_dir(), "csv", "delineated")
+      delineated_file <- file.path(delineated_dir, paste0(input$plot_sensor, "_delineated.csv"))
+      file_exists <- file.exists(delineated_file)
       
-      if ("delineated" %in% names(summary_df)) {
+      # Also check summary file flag
+      summary_flag <- FALSE
+      summary_df <- summary_data_cache()
+      if (!is.null(summary_df) && "delineated" %in% names(summary_df)) {
         sensor_row <- summary_df[summary_df$file == input$plot_sensor, ]
         if (nrow(sensor_row) > 0) {
-          return(sensor_row$delineated == "Y")
+          summary_flag <- (sensor_row$delineated == "Y")
         }
       }
       
-      return(FALSE)
+      # Return TRUE only if both file exists AND summary says it's delineated
+      return(file_exists && summary_flag)
     })
     
     # Create delineated dataset
@@ -282,14 +283,33 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       tryCatch({
         # Read original data
         file_path <- file.path(output_dir(), "csv", paste0(input$plot_sensor, "_min.csv"))
+        
+        if (!file.exists(file_path)) {
+          showNotification(paste("Source file not found:", basename(file_path)), type = "error")
+          return()
+        }
+        
         sensor_data <- read.csv(file_path)
         
-        # Create delineated folder
+        # Create delineated folder - always check/create fresh
         delineated_dir <- file.path(output_dir(), "csv", "delineated")
-        dir.create(delineated_dir, showWarnings = FALSE, recursive = TRUE)
+        if (!dir.exists(delineated_dir)) {
+          dir.create(delineated_dir, showWarnings = FALSE, recursive = TRUE)
+        }
+        
+        # Verify directory was created
+        if (!dir.exists(delineated_dir)) {
+          showNotification("Failed to create delineated directory", type = "error")
+          return()
+        }
         
         # Add ROI column
         times <- roi_times()
+        if (is.null(times)) {
+          showNotification("ROI times not available", type = "error")
+          return()
+        }
+        
         boundaries <- times$boundaries
         
         sensor_data$roi <- cut(sensor_data$time_s, 
@@ -301,6 +321,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         # Save delineated file
         output_file <- file.path(delineated_dir, paste0(input$plot_sensor, "_delineated.csv"))
         write.csv(sensor_data, output_file, row.names = FALSE)
+        
+        # Verify file was created
+        if (!file.exists(output_file)) {
+          showNotification("Failed to create delineated file", type = "error")
+          return()
+        }
         
         # Update summary file using shared function
         summary_file <- get_latest_summary_file(output_dir())
@@ -321,15 +347,13 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
             summary_df$delineated[sensor_idx] <- "Y"
             summary_df$roi_config[sensor_idx] <- roi_values$current_config$label
             write.csv(summary_df, summary_file, row.names = FALSE)
+            
+            # Trigger cache refresh by incrementing counter
+            roi_values$summary_updated <- roi_values$summary_updated + 1
           }
         }
         
-        roi_values$delineated_created <- TRUE
-        
-        # Reset status after delay
-        shinyjs::delay(3000, {
-          roi_values$delineated_created <- FALSE
-        })
+        showNotification("Delineated dataset created successfully!", type = "message")
         
       }, error = function(e) {
         showNotification(paste("Error creating delineated dataset:", e$message), 
@@ -445,9 +469,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       return(p)
     })
   })
-}
-
-
 load_roi_configs <- function(output_dir) {
   config_file <- file.path(output_dir, "roi_config.txt")
   
@@ -502,4 +523,5 @@ load_roi_configs <- function(output_dir) {
       )
     ))
   }
+}
 }

@@ -81,15 +81,23 @@ ui <- navbarPage(
       sidebarPanel(
         width = 3,
         
-        # Conditional sidebar based on selected tab
+        # Show plot controls when "Complete passage" tab is active
         conditionalPanel(
           condition = "input.visualizationTabset == 'interactive_plots'",
           plotsSidebarUI("plots")
         ),
         
+        # Show ROI controls when "ROI delineation" tab is active
         conditionalPanel(
           condition = "input.visualizationTabset == 'roi_delineation'",
           roiSidebarUI("roi")
+        ),
+        
+        # Show placeholder content for time normalization tab
+        conditionalPanel(
+          condition = "input.visualizationTabset == 'time_normalization'",
+          h4("Time Normalization Options"),
+          p("Time normalization controls will be added here.")
         )
       ),
       

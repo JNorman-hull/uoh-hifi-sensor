@@ -23,7 +23,7 @@ server <- function(input, output, session) {
   processing <- processingServer("processing", file_selection$selected_sensors, raw_data_path, output_dir)
   resultsServer("results", processing$summary_data, processing$processing_complete)
   plotsServer("plots", output_dir, processing$summary_data, processing$processing_complete)
-  roiServer("roi", output_dir, processing$summary_data, processing$processing_complete)  # Add ROI module
+  roiServer("roi", output_dir, processing$summary_data, processing$processing_complete)  # Added ROI module
   
   # Process button click handler
   observeEvent(input$process_btn, {
