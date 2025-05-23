@@ -44,17 +44,25 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     roi_values <- reactiveValues(
       roi_configs = NULL,
       current_config = NULL,
-      roi_times = NULL,
       delineated_created = FALSE
     )
     
-    # Get processed sensors
+    # Cached summary data - only reads file when processing completes
+    summary_data_cache <- reactive({
+      processing_complete()  # Invalidate when processing completes
+      
+      summary_file <- get_latest_summary_file(output_dir())
+      if (!is.null(summary_file) && file.exists(summary_file)) {
+        read.csv(summary_file)
+      } else {
+        NULL
+      }
+    })
+    
+    # Get processed sensors using shared function
     processed_sensors <- reactive({
       processing_complete()
-      min_files <- list.files(path = file.path(output_dir(), "csv"), 
-                              pattern = "_min\\.csv$", full.names = FALSE)
-      sensor_names <- gsub("_min\\.csv$", "", min_files)
-      return(sensor_names)
+      get_processed_sensors(output_dir())
     })
     
     # Update sensor dropdown
@@ -75,81 +83,23 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    # Load ROI configurations
+    # Load ROI configurations using shared function
     observe({
-      config_file <- file.path(output_dir(), "roi_config.txt")
+      roi_values$roi_configs <- load_roi_configs(output_dir())
       
-      if (file.exists(config_file)) {
-        config_lines <- readLines(config_file)
-        config_list <- list()
+      if (length(roi_values$roi_configs) > 0) {
+        choices <- names(roi_values$roi_configs)
+        current_choice <- input$config_choice
         
-        for (line in config_lines) {
-          if (nchar(trimws(line)) > 0 && !startsWith(trimws(line), "#")) {
-            # Parse: Config_name, 1.1, 0.3, 0.2, 0.3, 1.1
-            parts <- trimws(strsplit(line, ",")[[1]])
-            if (length(parts) == 6) {
-              config_name <- parts[1]
-              config_list[[config_name]] <- list(
-                label = config_name,
-                roi1_ingress = as.numeric(parts[2]),
-                roi2_prenadir = as.numeric(parts[3]),
-                roi3_nadir = as.numeric(parts[4]),
-                roi4_postnadir = as.numeric(parts[5]),
-                roi5_outgress = as.numeric(parts[6])
-              )
-            }
-          }
+        selected_value <- if (!is.null(current_choice) && current_choice %in% choices) {
+          current_choice
+        } else {
+          choices[1]
         }
-        
-        roi_values$roi_configs <- config_list
-        
-        # Update dropdown choices
-        if (length(config_list) > 0) {
-          choices <- names(config_list)
-          current_choice <- input$config_choice
-          
-          selected_value <- if (!is.null(current_choice) && current_choice %in% choices) {
-            current_choice
-          } else {
-            choices[1]
-          }
-          
-          updateSelectInput(session, "config_choice", 
-                            choices = choices, 
-                            selected = selected_value)
-        }
-        
-      } else {
-        # Create default config file with multiple configurations
-        default_configs <- c(
-          "Default_configuration, 1.1, 0.3, 0.2, 0.3, 1.1",
-          "Quick_passage, 0.8, 0.2, 0.1, 0.2, 0.8",
-          "Extended_analysis, 1.5, 0.5, 0.3, 0.5, 1.5"
-        )
-        writeLines(default_configs, config_file)
-        
-        # Load the default configs
-        roi_values$roi_configs <- list(
-          "Default_configuration" = list(
-            label = "Default_configuration",
-            roi1_ingress = 1.1, roi2_prenadir = 0.3, roi3_nadir = 0.2,
-            roi4_postnadir = 0.3, roi5_outgress = 1.1
-          ),
-          "Quick_passage" = list(
-            label = "Quick_passage",
-            roi1_ingress = 0.8, roi2_prenadir = 0.2, roi3_nadir = 0.1,
-            roi4_postnadir = 0.2, roi5_outgress = 0.8
-          ),
-          "Extended_analysis" = list(
-            label = "Extended_analysis",
-            roi1_ingress = 1.5, roi2_prenadir = 0.5, roi3_nadir = 0.3,
-            roi4_postnadir = 0.5, roi5_outgress = 1.5
-          )
-        )
         
         updateSelectInput(session, "config_choice", 
-                          choices = names(roi_values$roi_configs), 
-                          selected = "Default_configuration")
+                          choices = choices, 
+                          selected = selected_value)
       }
     })
     
@@ -159,48 +109,10 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       roi_values$current_config <- roi_values$roi_configs[[input$config_choice]]
     })
     
-    # Check nadir availability
+    # Get nadir info using shared function
     nadir_info <- reactive({
       req(input$plot_sensor)
-      
-      summary_files <- list.files(path = output_dir(), pattern = "batch_summary\\.csv$", full.names = TRUE)
-      
-      if (length(summary_files) > 0) {
-        file_info <- file.info(summary_files)
-        summary_files <- summary_files[order(file_info$mtime, decreasing = TRUE)]
-        
-        summary_file <- summary_files[1]
-        if (file.exists(summary_file)) {
-          summary_df <- read.csv(summary_file)
-          
-          if ("file" %in% names(summary_df)) {
-            sensor_row <- summary_df[summary_df$file == input$plot_sensor, ]
-            
-            if (nrow(sensor_row) > 0) {
-              possible_time_cols <- c("pres_min[time]", "pres_min.time.", "pres_min.time")
-              possible_value_cols <- c("pres_min[kPa]", "pres_min.kPa.", "pres_min.kPa")
-              
-              time_col <- NULL
-              value_col <- NULL
-              
-              for (col in names(sensor_row)) {
-                if (col %in% possible_time_cols) time_col <- col
-                if (col %in% possible_value_cols) value_col <- col
-              }
-              
-              if (!is.null(time_col) && !is.null(value_col)) {
-                return(list(
-                  time = as.numeric(sensor_row[[time_col]]),
-                  value = as.numeric(sensor_row[[value_col]]),
-                  available = TRUE
-                ))
-              }
-            }
-          }
-        }
-      }
-      
-      return(list(available = FALSE))
+      get_nadir_info(input$plot_sensor, output_dir())
     })
     
     # Output for conditional panel
@@ -321,21 +233,17 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       return("")
     })
     
-    # Check if already delineated
+    # Check if already delineated using cached data
     is_already_delineated <- reactive({
       req(input$plot_sensor)
       
-      summary_files <- list.files(path = output_dir(), pattern = "batch_summary\\.csv$", full.names = TRUE)
+      summary_df <- summary_data_cache()
+      if (is.null(summary_df)) return(FALSE)
       
-      if (length(summary_files) > 0) {
-        summary_file <- summary_files[which.max(file.info(summary_files)$mtime)]
-        summary_df <- read.csv(summary_file)
-        
-        if ("delineated" %in% names(summary_df)) {
-          sensor_row <- summary_df[summary_df$file == input$plot_sensor, ]
-          if (nrow(sensor_row) > 0) {
-            return(sensor_row$delineated == "Y")
-          }
+      if ("delineated" %in% names(summary_df)) {
+        sensor_row <- summary_df[summary_df$file == input$plot_sensor, ]
+        if (nrow(sensor_row) > 0) {
+          return(sensor_row$delineated == "Y")
         }
       }
       
@@ -394,10 +302,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         output_file <- file.path(delineated_dir, paste0(input$plot_sensor, "_delineated.csv"))
         write.csv(sensor_data, output_file, row.names = FALSE)
         
-        # Update summary file
-        summary_files <- list.files(path = output_dir(), pattern = "batch_summary\\.csv$", full.names = TRUE)
-        if (length(summary_files) > 0) {
-          summary_file <- summary_files[which.max(file.info(summary_files)$mtime)]
+        # Update summary file using shared function
+        summary_file <- get_latest_summary_file(output_dir())
+        if (!is.null(summary_file) && file.exists(summary_file)) {
           summary_df <- read.csv(summary_file)
           
           # Add delineated and roi_config columns if they don't exist
@@ -538,4 +445,61 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       return(p)
     })
   })
+}
+
+
+load_roi_configs <- function(output_dir) {
+  config_file <- file.path(output_dir, "roi_config.txt")
+  
+  if (file.exists(config_file)) {
+    config_lines <- readLines(config_file)
+    config_list <- list()
+    
+    for (line in config_lines) {
+      if (nchar(trimws(line)) > 0 && !startsWith(trimws(line), "#")) {
+        # Parse: Config_name, 1.1, 0.3, 0.2, 0.3, 1.1
+        parts <- trimws(strsplit(line, ",")[[1]])
+        if (length(parts) == 6) {
+          config_name <- parts[1]
+          config_list[[config_name]] <- list(
+            label = config_name,
+            roi1_ingress = as.numeric(parts[2]),
+            roi2_prenadir = as.numeric(parts[3]),
+            roi3_nadir = as.numeric(parts[4]),
+            roi4_postnadir = as.numeric(parts[5]),
+            roi5_outgress = as.numeric(parts[6])
+          )
+        }
+      }
+    }
+    
+    return(config_list)
+  } else {
+    # Create default config file with multiple configurations
+    default_configs <- c(
+      "Default_configuration, 1.1, 0.3, 0.2, 0.3, 1.1",
+      "Quick_passage, 0.8, 0.2, 0.1, 0.2, 0.8",
+      "Extended_analysis, 1.5, 0.5, 0.3, 0.5, 1.5"
+    )
+    writeLines(default_configs, config_file)
+    
+    # Return the default configs
+    return(list(
+      "Default_configuration" = list(
+        label = "Default_configuration",
+        roi1_ingress = 1.1, roi2_prenadir = 0.3, roi3_nadir = 0.2,
+        roi4_postnadir = 0.3, roi5_outgress = 1.1
+      ),
+      "Quick_passage" = list(
+        label = "Quick_passage",
+        roi1_ingress = 0.8, roi2_prenadir = 0.2, roi3_nadir = 0.1,
+        roi4_postnadir = 0.2, roi5_outgress = 0.8
+      ),
+      "Extended_analysis" = list(
+        label = "Extended_analysis",
+        roi1_ingress = 1.5, roi2_prenadir = 0.5, roi3_nadir = 0.3,
+        roi4_postnadir = 0.5, roi5_outgress = 1.5
+      )
+    ))
+  }
 }

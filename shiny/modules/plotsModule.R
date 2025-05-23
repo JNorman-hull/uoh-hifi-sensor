@@ -77,14 +77,10 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       baseline_click = NULL  # Store the click data that exists when entering edit mode
     )
     
-    
-    # Create a reactive expression to get the list of processed sensors
+    # Get processed sensors using shared function
     processed_sensors <- reactive({
       processing_complete()
-      min_files <- list.files(path = file.path(output_dir(), "csv"), 
-                              pattern = "_min\\.csv$", full.names = FALSE)
-      sensor_names <- gsub("_min\\.csv$", "", min_files)
-      return(sensor_names)
+      get_processed_sensors(output_dir())
     })
     
     # Update the sensor dropdown when processed sensors change
@@ -131,55 +127,18 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       paste0("Output dimensions: ", width_px, " × ", height_px, " pixels")
     })
     
-    # Nadir info reactive function - SIMPLIFIED VERSION
+    # Nadir info using shared function
     nadir_info <- reactive({
       req(input$plot_sensor)
       nadir_values$nadir_updated  # Force refresh when nadir is updated
       
-      # Always read from the most recent summary CSV
-      summary_files <- list.files(path = output_dir(), pattern = "batch_summary\\.csv$", full.names = TRUE)
-      
-      if (length(summary_files) > 0) {
-        file_info <- file.info(summary_files)
-        summary_files <- summary_files[order(file_info$mtime, decreasing = TRUE)]
-        
-        summary_file <- summary_files[1]
-        if (file.exists(summary_file)) {
-          summary_df <- read.csv(summary_file)  # Uses default check.names = TRUE to match save observer
-          
-          if ("file" %in% names(summary_df)) {
-            sensor_row <- summary_df[summary_df$file == input$plot_sensor, ]
-            
-            if (nrow(sensor_row) > 0) {
-              possible_time_cols <- c("pres_min[time]", "pres_min.time.", "pres_min.time")
-              possible_value_cols <- c("pres_min[kPa]", "pres_min.kPa.", "pres_min.kPa")
-              
-              time_col <- NULL
-              value_col <- NULL
-              
-              for (col in names(sensor_row)) {
-                if (col %in% possible_time_cols) time_col <- col
-                if (col %in% possible_value_cols) value_col <- col
-              }
-              
-              if (!is.null(time_col) && !is.null(value_col)) {
-                return(list(
-                  time = as.numeric(sensor_row[[time_col]]),
-                  value = as.numeric(sensor_row[[value_col]])
-                ))
-              }
-            }
-          }
-        }
-      }
-      
-      return(NULL)
+      get_nadir_info(input$plot_sensor, output_dir())
     })
     
     # Display current nadir
     output$current_nadir_display <- renderText({
       nadir <- nadir_info()
-      if (!is.null(nadir)) {
+      if (nadir$available) {
         paste0("Time: ", round(nadir$time, 3), "s\nPressure: ", round(nadir$value, 2), " kPa")
       } else {
         "No nadir data available"
@@ -217,9 +176,8 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
     observeEvent(input$save_nadir_btn, {
       req(nadir_values$selected_point)
       
-      summary_files <- list.files(path = output_dir(), pattern = "batch_summary\\.csv$", full.names = TRUE)
-      if (length(summary_files) > 0) {
-        summary_file <- summary_files[which.max(file.info(summary_files)$mtime)]
+      summary_file <- get_latest_summary_file(output_dir())
+      if (!is.null(summary_file) && file.exists(summary_file)) {
         summary_df <- read.csv(summary_file)
         row_idx <- which(summary_df$file == input$plot_sensor)
         
@@ -235,7 +193,7 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       }
     })
     
-
+    # Handle click events for nadir selection
     observe({
       if (nadir_values$edit_mode) {
         click_data <- event_data("plotly_click", source = "nadir_plot")
@@ -249,7 +207,7 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
         }
       }
     })
-
+    
     # Status display
     output$nadir_status <- renderText({
       if (nadir_values$edit_mode) {
@@ -345,29 +303,30 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
         )
       }
       
-      if (input$show_nadir && !is.null(nadir_info())) {
+      if (input$show_nadir) {
         nadir <- nadir_info()
-        
-        nadir_yaxis <- NULL
-        if (left_var == "pressure_kpa") {
-          nadir_yaxis <- "y"
-        } else if (input$right_y_var == "pressure_kpa") {
-          nadir_yaxis <- "y2"
-        }
-        
-        if (!is.null(nadir_yaxis)) {
-          p <- p %>% add_trace(
-            x = nadir$time,
-            y = nadir$value,
-            name = "Pressure Nadir",
-            type = "scatter",
-            mode = "markers+text",
-            marker = list(color = "orange", size = 10),
-            text = paste("Nadir:", round(nadir$value, 2), "kPa"),
-            textposition = "top right",
-            textfont = list(color = "orange"),
-            yaxis = nadir_yaxis
-          )
+        if (nadir$available) {
+          nadir_yaxis <- NULL
+          if (left_var == "pressure_kpa") {
+            nadir_yaxis <- "y"
+          } else if (input$right_y_var == "pressure_kpa") {
+            nadir_yaxis <- "y2"
+          }
+          
+          if (!is.null(nadir_yaxis)) {
+            p <- p %>% add_trace(
+              x = nadir$time,
+              y = nadir$value,
+              name = "Pressure Nadir",
+              type = "scatter",
+              mode = "markers+text",
+              marker = list(color = "orange", size = 10),
+              text = paste("Nadir:", round(nadir$value, 2), "kPa"),
+              textposition = "top right",
+              textfont = list(color = "orange"),
+              yaxis = nadir_yaxis
+            )
+          }
         }
       }
       
