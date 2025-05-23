@@ -73,8 +73,10 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
     nadir_values <- reactiveValues(
       edit_mode = FALSE,
       selected_point = NULL,
-      nadir_updated = 0
+      nadir_updated = 0,
+      baseline_click = NULL  # Store the click data that exists when entering edit mode
     )
+    
     
     # Create a reactive expression to get the list of processed sensors
     processed_sensors <- reactive({
@@ -201,6 +203,8 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
     observeEvent(input$edit_nadir_btn, {
       nadir_values$edit_mode <- TRUE
       nadir_values$selected_point <- NULL
+      # Store whatever click data currently exists as "baseline" to ignore
+      nadir_values$baseline_click <- event_data("plotly_click", source = "nadir_plot")
     })
     
     # Cancel nadir button
@@ -236,12 +240,16 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       if (nadir_values$edit_mode) {
         click_data <- event_data("plotly_click", source = "nadir_plot")
         if (!is.null(click_data)) {
-          nadir_values$selected_point <- list(x = click_data$x, y = click_data$y)
+          # Only respond if this click is different from the baseline we stored
+          if (is.null(nadir_values$baseline_click) ||
+              click_data$x != nadir_values$baseline_click$x ||
+              click_data$y != nadir_values$baseline_click$y) {
+            nadir_values$selected_point <- list(x = click_data$x, y = click_data$y)
+          }
         }
       }
     })
-    #Bug currently here - previous click data persists when entering nadir edit mode again, shows purple point
-    
+
     # Status display
     output$nadir_status <- renderText({
       if (nadir_values$edit_mode) {
