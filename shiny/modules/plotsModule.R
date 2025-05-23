@@ -129,30 +129,12 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       paste0("Output dimensions: ", width_px, " × ", height_px, " pixels")
     })
     
-    # Nadir info reactive function
+    # Nadir info reactive function - SIMPLIFIED VERSION
     nadir_info <- reactive({
       req(input$plot_sensor)
-      nadir_values$nadir_updated  # Force refresh
+      nadir_values$nadir_updated  # Force refresh when nadir is updated
       
-      # Try to find nadir info in current session data first
-      if (!is.null(summary_data()) && length(summary_data()) > 0) {
-        selected_summary <- NULL
-        for (summary in summary_data()) {
-          if (summary$file == input$plot_sensor) {
-            selected_summary <- summary
-            break
-          }
-        }
-        
-        if (!is.null(selected_summary)) {
-          return(list(
-            time = as.numeric(selected_summary$`pres_min[time]`),
-            value = as.numeric(selected_summary$`pres_min[kPa]`)
-          ))
-        }
-      }
-      
-      # If not found in session data, try to read from most recent summary CSV
+      # Always read from the most recent summary CSV
       summary_files <- list.files(path = output_dir(), pattern = "batch_summary\\.csv$", full.names = TRUE)
       
       if (length(summary_files) > 0) {
@@ -161,7 +143,7 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
         
         summary_file <- summary_files[1]
         if (file.exists(summary_file)) {
-          summary_df <- read.csv(summary_file, check.names = FALSE)
+          summary_df <- read.csv(summary_file)  # Uses default check.names = TRUE to match save observer
           
           if ("file" %in% names(summary_df)) {
             sensor_row <- summary_df[summary_df$file == input$plot_sensor, ]
@@ -249,7 +231,7 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       }
     })
     
-    # Handle plot clicks - moved inside an observe block
+
     observe({
       if (nadir_values$edit_mode) {
         click_data <- event_data("plotly_click", source = "nadir_plot")
@@ -258,6 +240,7 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
         }
       }
     })
+    #Bug currently here - previous click data persists when entering nadir edit mode again, shows purple point
     
     # Status display
     output$nadir_status <- renderText({
@@ -456,7 +439,6 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
         )
       }
       
-      # Always set source and register click events
       p$x$source <- "nadir_plot"
       p <- p %>% event_register("plotly_click")
       
