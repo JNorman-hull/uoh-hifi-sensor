@@ -29,7 +29,9 @@ roiSidebarUI <- function(id) {
       ),
       
       actionButton(ns("create_delineated"), "Create delineated dataset", 
-                   class = "btn-primary btn-block")
+                   class = "btn-primary btn-block"),
+      actionButton(ns("trim_sensor"), "Trim sensor start and end", 
+                   class = "btn-danger btn-block")
     )
   )
 }
@@ -41,7 +43,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     roi_values <- reactiveValues(
       roi_configs = NULL,
       current_config = NULL,
-      summary_updated = 0  # Counter to trigger cache refresh when delineation happens
+      summary_updated = 0, 
+      data_updated = 0 
     )
     
     # Cached summary data - reads file when processing completes OR when delineation happens
@@ -214,6 +217,40 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Show notification when nadir is not available for selected sensor (only once per sensor)
     last_nadir_warning <- reactiveVal("")
     
+    observeEvent(input$trim_sensor, {
+      req(input$plot_sensor)
+      
+      # Check if delineated file exists
+      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
+      
+      if (!file.exists(delineated_path)) {
+        showNotification("No delineated dataset found. Please delineate dataset first.", type = "warning")
+        return()
+      }
+      
+      # Read delineated data
+      sensor_data <- read.csv(delineated_path)
+      
+      # Check if trim levels exist
+      if (!"roi" %in% names(sensor_data) || 
+          !any(sensor_data$roi %in% c("trim_start", "trim_end"))) {
+        showNotification("Sensor data already trimmed. Delineate dataset again if you want to re-trim.", type = "warning")
+        return()
+      }
+      
+      # Perform trimming
+      trimmed_data <- sensor_data[!sensor_data$roi %in% c("trim_start", "trim_end"), ]
+      
+      # Save over existing delineated file
+      write.csv(trimmed_data, delineated_path, row.names = FALSE)
+      
+      # Trigger data refresh
+      roi_values$data_updated <- roi_values$data_updated + 1
+      
+      showNotification("Sensor data trimmed successfully!", type = "message")
+    })
+    
+    
     observe({
       req(input$plot_sensor)
       nadir <- nadir_info()
@@ -359,20 +396,25 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         showNotification(paste("Error creating delineated dataset:", e$message), 
                          type = "error")
       })
+      
+      roi_values$data_updated <- roi_values$data_updated + 1
     }
     
     # Read selected sensor data
     selected_sensor_data <- reactive({
       req(input$plot_sensor)
+      roi_values$data_updated 
       
       file_path <- file.path(output_dir(), "csv", paste0(input$plot_sensor, "_min.csv"))
+      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
       
-      if (!file.exists(file_path)) {
-        return(NULL)
+      if (file.exists(delineated_path)) {
+        return(read.csv(delineated_path))
+      } else if (file.exists(file_path)) {
+        return(read.csv(file_path))
       }
       
-      data <- read.csv(file_path)
-      return(data)
+      return(NULL)
     })
     
     # Create ROI plot
