@@ -21,9 +21,12 @@ roiSidebarUI <- function(id) {
       
       hr(),
       h4("ROI Configuration"),
-      DT::dataTableOutput(ns("roi_table"), height = "200px"),
+      selectInput(ns("config_choice"), "Configuration:", choices = NULL),
       
-      hr(),
+      div(style = "max-height: 180px; overflow-y: auto; margin-bottom: 15px;",
+          DT::dataTableOutput(ns("roi_table"))
+      ),
+      
       actionButton(ns("create_delineated"), "Create delineated dataset", 
                    class = "btn-primary btn-block")
     ),
@@ -39,7 +42,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Values for ROI processing
     roi_values <- reactiveValues(
-      roi_config = NULL,
+      roi_configs = NULL,
+      current_config = NULL,
       roi_times = NULL,
       delineated_created = FALSE
     )
@@ -71,40 +75,88 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    # Load ROI configuration
+    # Load ROI configurations
     observe({
       config_file <- file.path(output_dir(), "roi_config.txt")
       
       if (file.exists(config_file)) {
-        config_data <- readLines(config_file)
-        if (length(config_data) > 0) {
-          # Parse: Default_configuration, 1.1, 0.3, 0.2, 0.3, 1.1
-          parts <- trimws(strsplit(config_data[1], ",")[[1]])
-          if (length(parts) == 6) {
-            roi_values$roi_config <- list(
-              label = parts[1],
-              roi1_ingress = as.numeric(parts[2]),
-              roi2_prenadir = as.numeric(parts[3]),
-              roi3_nadir = as.numeric(parts[4]),
-              roi4_postnadir = as.numeric(parts[5]),
-              roi5_outgress = as.numeric(parts[6])
-            )
+        config_lines <- readLines(config_file)
+        config_list <- list()
+        
+        for (line in config_lines) {
+          if (nchar(trimws(line)) > 0 && !startsWith(trimws(line), "#")) {
+            # Parse: Config_name, 1.1, 0.3, 0.2, 0.3, 1.1
+            parts <- trimws(strsplit(line, ",")[[1]])
+            if (length(parts) == 6) {
+              config_name <- parts[1]
+              config_list[[config_name]] <- list(
+                label = config_name,
+                roi1_ingress = as.numeric(parts[2]),
+                roi2_prenadir = as.numeric(parts[3]),
+                roi3_nadir = as.numeric(parts[4]),
+                roi4_postnadir = as.numeric(parts[5]),
+                roi5_outgress = as.numeric(parts[6])
+              )
+            }
           }
         }
-      } else {
-        # Create default config
-        default_config <- "Default_configuration, 1.1, 0.3, 0.2, 0.3, 1.1"
-        writeLines(default_config, config_file)
         
-        roi_values$roi_config <- list(
-          label = "Default_configuration",
-          roi1_ingress = 1.1,
-          roi2_prenadir = 0.3,
-          roi3_nadir = 0.2,
-          roi4_postnadir = 0.3,
-          roi5_outgress = 1.1
+        roi_values$roi_configs <- config_list
+        
+        # Update dropdown choices
+        if (length(config_list) > 0) {
+          choices <- names(config_list)
+          current_choice <- input$config_choice
+          
+          selected_value <- if (!is.null(current_choice) && current_choice %in% choices) {
+            current_choice
+          } else {
+            choices[1]
+          }
+          
+          updateSelectInput(session, "config_choice", 
+                            choices = choices, 
+                            selected = selected_value)
+        }
+        
+      } else {
+        # Create default config file with multiple configurations
+        default_configs <- c(
+          "Default_configuration, 1.1, 0.3, 0.2, 0.3, 1.1",
+          "Quick_passage, 0.8, 0.2, 0.1, 0.2, 0.8",
+          "Extended_analysis, 1.5, 0.5, 0.3, 0.5, 1.5"
         )
+        writeLines(default_configs, config_file)
+        
+        # Load the default configs
+        roi_values$roi_configs <- list(
+          "Default_configuration" = list(
+            label = "Default_configuration",
+            roi1_ingress = 1.1, roi2_prenadir = 0.3, roi3_nadir = 0.2,
+            roi4_postnadir = 0.3, roi5_outgress = 1.1
+          ),
+          "Quick_passage" = list(
+            label = "Quick_passage",
+            roi1_ingress = 0.8, roi2_prenadir = 0.2, roi3_nadir = 0.1,
+            roi4_postnadir = 0.2, roi5_outgress = 0.8
+          ),
+          "Extended_analysis" = list(
+            label = "Extended_analysis",
+            roi1_ingress = 1.5, roi2_prenadir = 0.5, roi3_nadir = 0.3,
+            roi4_postnadir = 0.5, roi5_outgress = 1.5
+          )
+        )
+        
+        updateSelectInput(session, "config_choice", 
+                          choices = names(roi_values$roi_configs), 
+                          selected = "Default_configuration")
       }
+    })
+    
+    # Update current config when dropdown selection changes
+    observe({
+      req(input$config_choice, roi_values$roi_configs)
+      roi_values$current_config <- roi_values$roi_configs[[input$config_choice]]
     })
     
     # Check nadir availability
@@ -159,13 +211,13 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Calculate ROI times
     roi_times <- reactive({
-      req(input$plot_sensor, roi_values$roi_config)
+      req(input$plot_sensor, roi_values$current_config)
       nadir <- nadir_info()
       
       if (!nadir$available) return(NULL)
       
       nadir_time <- nadir$time
-      config <- roi_values$roi_config
+      config <- roi_values$current_config
       
       # Calculate ROI boundaries based on nadir time
       roi3_start <- nadir_time - (config$roi3_nadir / 2)
@@ -193,27 +245,27 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         roi_times_df <- data.frame(
           ROI = c("Sensor start trim", "ROI 1: Ingress", "ROI 2: Pre-nadir", 
                   "ROI 3: Nadir", "ROI 4: Post-nadir", "ROI 5: Outgress", "Sensor end trim"),
-          `Start time` = c(paste(round(data_start, 4), "s"),
-                           paste(round(roi1_start, 4), "s"),
-                           paste(round(roi2_start, 4), "s"),
-                           paste(round(roi3_start, 4), "s"),
-                           paste(round(roi4_start, 4), "s"),
-                           paste(round(roi5_start, 4), "s"),
-                           paste(round(roi5_end, 4), "s")),
-          `End Time` = c(paste(round(roi1_start, 4), "s"),
-                         paste(round(roi1_end, 4), "s"),
-                         paste(round(roi2_end, 4), "s"),
-                         paste(round(roi3_end, 4), "s"),
-                         paste(round(roi4_end, 4), "s"),
-                         paste(round(roi5_end, 4), "s"),
-                         paste(round(data_end, 4), "s")),
-          Duration = c(paste(round(roi1_start - data_start, 4), "s"),
-                       paste(round(config$roi1_ingress, 4), "s"),
-                       paste(round(config$roi2_prenadir, 4), "s"),
-                       paste(round(config$roi3_nadir, 4), "s"),
-                       paste(round(config$roi4_postnadir, 4), "s"),
-                       paste(round(config$roi5_outgress, 4), "s"),
-                       paste(round(data_end - roi5_end, 4), "s")),
+          `Start time` = c(paste(round(data_start, 3), "s"),
+                           paste(round(roi1_start, 3), "s"),
+                           paste(round(roi2_start, 3), "s"),
+                           paste(round(roi3_start, 3), "s"),
+                           paste(round(roi4_start, 3), "s"),
+                           paste(round(roi5_start, 3), "s"),
+                           paste(round(roi5_end, 3), "s")),
+          `End Time` = c(paste(round(roi1_start, 3), "s"),
+                         paste(round(roi1_end, 3), "s"),
+                         paste(round(roi2_end, 3), "s"),
+                         paste(round(roi3_end, 3), "s"),
+                         paste(round(roi4_end, 3), "s"),
+                         paste(round(roi5_end, 3), "s"),
+                         paste(round(data_end, 3), "s")),
+          Duration = c(paste(round(roi1_start - data_start, 3), "s"),
+                       paste(round(config$roi1_ingress, 3), "s"),
+                       paste(round(config$roi2_prenadir, 3), "s"),
+                       paste(round(config$roi3_nadir, 3), "s"),
+                       paste(round(config$roi4_postnadir, 3), "s"),
+                       paste(round(config$roi5_outgress, 3), "s"),
+                       paste(round(data_end - roi5_end, 3), "s")),
           check.names = FALSE
         )
         
@@ -234,15 +286,18 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         DT::datatable(
           times$table,
           options = list(
-            pageLength = 10,
+            pageLength = 7,
             scrollX = TRUE,
             dom = 't',
-            ordering = FALSE
+            ordering = FALSE,
+            searching = FALSE,
+            paging = FALSE,
+            info = FALSE
           ),
           rownames = FALSE,
-          class = 'cell-border stripe'
+          class = 'cell-border stripe compact'
         ) %>%
-          DT::formatStyle(columns = 1:4, fontSize = '12px')
+          DT::formatStyle(columns = 1:4, fontSize = '11px')
       }
     })
     
@@ -255,7 +310,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
       
       if (roi_values$delineated_created) {
-        return("Delineated dataset created successfully!")
+        config_name <- if (!is.null(roi_values$current_config)) {
+          roi_values$current_config$label
+        } else {
+          "Unknown"
+        }
+        return(paste("Delineated dataset created successfully using", config_name, "configuration!"))
       }
       
       return("")
@@ -284,7 +344,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Create delineated dataset
     observeEvent(input$create_delineated, {
-      req(input$plot_sensor, roi_times())
+      req(input$plot_sensor, roi_times(), roi_values$current_config)
       
       # Check if already delineated
       if (is_already_delineated()) {
@@ -304,6 +364,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Confirm replacement
     observeEvent(input$confirm_replace, {
+      req(roi_values$current_config)
       removeModal()
       create_delineated_dataset()
     })
@@ -339,15 +400,19 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           summary_file <- summary_files[which.max(file.info(summary_files)$mtime)]
           summary_df <- read.csv(summary_file)
           
-          # Add delineated column if it doesn't exist
+          # Add delineated and roi_config columns if they don't exist
           if (!"delineated" %in% names(summary_df)) {
             summary_df$delineated <- "N"
+          }
+          if (!"roi_config" %in% names(summary_df)) {
+            summary_df$roi_config <- ""
           }
           
           # Update this sensor
           sensor_idx <- which(summary_df$file == input$plot_sensor)
           if (length(sensor_idx) > 0) {
             summary_df$delineated[sensor_idx] <- "Y"
+            summary_df$roi_config[sensor_idx] <- roi_values$current_config$label
             write.csv(summary_df, summary_file, row.names = FALSE)
           }
         }
