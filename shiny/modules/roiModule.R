@@ -422,7 +422,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       sensor_data <- selected_sensor_data()
       req(sensor_data)
       nadir <- nadir_info()
-      
+      req(nadir$available)
       if (!nadir$available) {
         return(plotly_empty() %>% layout(title = "No nadir data available for this sensor"))
       }
@@ -544,8 +544,7 @@ load_roi_configs <- function(output_dir) {
       "Quick_passage, 0.8, 0.2, 0.1, 0.2, 0.8",
       "Extended_analysis, 1.5, 0.5, 0.3, 0.5, 1.5"
     )
-    writeLines(default_configs, config_file)
-    
+    writeLines(default_configs, config_file, sep = "\n")    
     # Return the default configs
     return(list(
       "Default_configuration" = list(
