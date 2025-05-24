@@ -16,6 +16,10 @@ roiSidebarUI <- function(id) {
     h4("ROI Delineation Options"),
     selectInput(ns("plot_sensor"), "Select Sensor:", choices = NULL),
     
+    div(style = "margin-bottom: 15px;",
+        textOutput(ns("delineation_status"))
+    ),
+    
     # Use ns() to properly namespace the output ID in the condition
     conditionalPanel(
       condition = paste0("output['", ns("nadir_available"), "'] == true"),
@@ -84,18 +88,62 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
+    output$delineation_status <- renderText({
+      req(input$plot_sensor)
+      
+      nadir <- nadir_info()
+      
+      if (!nadir$available) {
+        "No nadir data available"
+      } else if (is_already_delineated()) {
+        "Sensor file delineated"
+      } else {
+        "Sensor requires delineation"
+      }
+    })
+    
+    observe({
+      req(input$plot_sensor)
+      
+      nadir <- nadir_info()
+      
+      if (!nadir$available) {
+        shinyjs::runjs(paste0("
+      $('#", ns("delineation_status"), "').css({
+        'color': 'red', 
+        'font-weight': 'bold'
+      });
+    "))
+      } else if (is_already_delineated()) {
+        shinyjs::runjs(paste0("
+      $('#", ns("delineation_status"), "').css({
+        'color': 'green', 
+        'font-weight': 'bold'
+      });
+    "))
+      } else {
+        shinyjs::runjs(paste0("
+      $('#", ns("delineation_status"), "').css({
+        'color': 'orange', 
+        'font-weight': 'bold'
+      });
+    "))
+      }
+    })
+    
     # Load ROI configurations using shared function
     observe({
       roi_values$roi_configs <- load_roi_configs(output_dir())
       
       if (length(roi_values$roi_configs) > 0) {
-        choices <- names(roi_values$roi_configs)
+        config_names <- names(roi_values$roi_configs)
+        choices <- setNames(config_names, gsub("_", " ", config_names))
         current_choice <- input$config_choice
         
-        selected_value <- if (!is.null(current_choice) && current_choice %in% choices) {
+        selected_value <- if (!is.null(current_choice) && current_choice %in% config_names) {
           current_choice
         } else {
-          choices[1]
+          config_names[1]
         }
         
         updateSelectInput(session, "config_choice", 
