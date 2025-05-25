@@ -18,6 +18,7 @@ source("modules/resultsModule.R")
 source("modules/plotsModule.R")
 source("modules/roiModule.R")
 
+# Shared helper functions for sensor index system
 get_sensor_index_file <- function(output_dir) {
   index_file <- file.path(output_dir, "uoh_sensor_index.csv")
   if (file.exists(index_file)) {
@@ -25,6 +26,13 @@ get_sensor_index_file <- function(output_dir) {
   } else {
     return(NULL)
   }
+}
+
+get_processed_sensors <- function(output_dir) {
+  min_files <- list.files(path = file.path(output_dir, "csv"), 
+                          pattern = "_min\\.csv$", full.names = FALSE)
+  sensor_names <- gsub("_min\\.csv$", "", min_files)
+  return(sensor_names)
 }
 
 get_nadir_info <- function(sensor_name, output_dir) {
@@ -38,24 +46,39 @@ get_nadir_info <- function(sensor_name, output_dir) {
   }
   
   index_df <- read.csv(index_file)
+  
+  if (!"file" %in% names(index_df)) {
+    return(list(available = FALSE))
+  }
+  
   sensor_row <- index_df[index_df$file == sensor_name, ]
   
   if (nrow(sensor_row) == 0) {
     return(list(available = FALSE))
   }
   
-  # Check for nadir data columns
-  if ("pres_min.time." %in% names(sensor_row) && "pres_min.kPa." %in% names(sensor_row)) {
+  # Handle different possible column name formats
+  possible_time_cols <- c("pres_min[time]", "pres_min.time.", "pres_min.time")
+  possible_value_cols <- c("pres_min[kPa]", "pres_min.kPa.", "pres_min.kPa")
+  
+  time_col <- NULL
+  value_col <- NULL
+  
+  for (col in names(sensor_row)) {
+    if (col %in% possible_time_cols) time_col <- col
+    if (col %in% possible_value_cols) value_col <- col
+  }
+  
+  if (!is.null(time_col) && !is.null(value_col)) {
     return(list(
-      time = as.numeric(sensor_row[["pres_min.time."]]),
-      value = as.numeric(sensor_row[["pres_min.kPa."]]),
+      time = as.numeric(sensor_row[[time_col]]),
+      value = as.numeric(sensor_row[[value_col]]),
       available = TRUE
     ))
   }
   
   return(list(available = FALSE))
 }
-
 
 # Create a wrapper function to get unique sensor names (without extensions)
 get_sensor_names <- function(raw_data_path = "./RAW_data/RAPID") {

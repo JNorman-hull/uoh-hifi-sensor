@@ -23,7 +23,7 @@ server <- function(input, output, session) {
   processing <- processingServer("processing", file_selection$selected_sensors, raw_data_path, output_dir)
   resultsServer("results", processing$summary_data, processing$processing_complete)
   plotsServer("plots", output_dir, processing$summary_data, processing$processing_complete)
-  roiServer("roi", output_dir, processing$summary_data, processing$processing_complete)  # Added ROI module
+  roiServer("roi", output_dir, processing$summary_data, processing$processing_complete)
   
   # Process button click handler
   observeEvent(input$process_btn, {
@@ -41,24 +41,27 @@ server <- function(input, output, session) {
       return()
     }
     
-    # Disable the process button during processing
-    shinyjs::disable("process_btn")
-    
-    # Force UI to update by switching to log tab
-    updateTabsetPanel(session, "mainTabset", selected = "processing_log")
-    
-    # Use a small delay to ensure UI updates before processing starts
-    shinyjs::delay(100, {
-      # Start processing
-      processing$process_sensors()
+    # Call processing - let it handle everything
+    processing$process_sensors()
+  })
+  
+  # Handle UI changes when processing state changes
+  observe({
+    if (processing$is_processing()) {
+      shinyjs::disable("process_btn")
       
-      # Switch to results tab when processing is complete
-      observe({
-        if (processing$processing_complete()) {
-          updateTabsetPanel(session, "mainTabset", selected = "results_summary")
-          shinyjs::enable("process_btn")
-        }
+      # Force UI to update by switching to log tab with delay
+      shinyjs::delay(100, {
+        updateTabsetPanel(session, "mainTabset", selected = "processing_log")
       })
-    })
+    }
+  })
+  
+  # Handle completion
+  observe({
+    if (processing$processing_complete()) {
+      updateTabsetPanel(session, "mainTabset", selected = "results_summary")
+      shinyjs::enable("process_btn")
+    }
   })
 }

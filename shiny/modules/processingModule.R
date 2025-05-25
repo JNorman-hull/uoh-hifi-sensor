@@ -48,6 +48,30 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       }
     })
     
+    # Move the actual processing logic to a separate function
+    start_processing <- function() {
+      # Set processing state (don't handle UI here)
+      values$is_processing <- TRUE
+      values$processing_complete <- FALSE
+      values$summary_data <- NULL
+      values$log_messages <- character(0)
+      
+      # Process in step-by-step manner
+      result <- process_sensors_step_by_step(
+        selected_sensors(), 
+        raw_data_path(), 
+        output_dir(),
+        session
+      )
+      
+      # Update after completion
+      values$log_messages <- result$log_messages
+      values$processing_complete <- TRUE
+      values$is_processing <- FALSE
+      
+      # Send completion notification
+      session$sendCustomMessage("processingComplete", list(success = TRUE))
+    }
     # Process sensors function
     process_sensors <- function() {
       sensors <- selected_sensors()
@@ -64,28 +88,37 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
         return()
       }
       
-      # Reset state
-      values$is_processing <- TRUE
-      values$processing_complete <- FALSE
-      values$summary_data <- NULL
-      values$log_messages <- character(0)
+      # Check for existing sensors BEFORE setting processing state
+      existing_sensors <- character(0)
+      index_file <- get_sensor_index_file(output_dir())
+      if (!is.null(index_file)) {
+        index_df <- read.csv(index_file)
+        existing_sensors <- intersect(sensors, index_df$file)
+      }
       
-      # Process in step-by-step manner
-      result <- process_sensors_step_by_step(
-        sensors, 
-        raw_data_path(), 
-        output_dir(),
-        session
-      )
+      if (length(existing_sensors) > 0) {
+        showModal(modalDialog(
+          title = "Sensors Already Exist",
+          paste("The following sensors already exist in the index:", 
+                paste(existing_sensors, collapse = ", "), 
+                ". Continue and replace existing data?"),
+          footer = tagList(
+            modalButton("Cancel"),
+            actionButton(ns("confirm_replace_sensors"), "Replace", class = "btn-warning")
+          )
+        ))
+        return()  # Don't set is_processing yet - wait for confirmation
+      }
       
-      # Update after completion
-      values$log_messages <- result$log_messages
-      values$processing_complete <- TRUE
-      values$is_processing <- FALSE
-      
-      # Send completion notification
-      session$sendCustomMessage("processingComplete", list(success = TRUE))
+      # If no existing sensors, proceed directly
+      start_processing()
     }
+    
+    # Add confirm replacement handler
+    observeEvent(input$confirm_replace_sensors, {
+      removeModal()
+      start_processing()
+    })
     
     return(list(
       summary_data = summary_data_from_index,
