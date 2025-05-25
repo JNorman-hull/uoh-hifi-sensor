@@ -18,21 +18,13 @@ source("modules/resultsModule.R")
 source("modules/plotsModule.R")
 source("modules/roiModule.R")
 
-# Shared helper functions
-get_latest_summary_file <- function(output_dir) {
-  summary_files <- list.files(path = output_dir, pattern = "batch_summary\\.csv$", full.names = TRUE)
-  if (length(summary_files) > 0) {
-    summary_files[which.max(file.info(summary_files)$mtime)]
+get_sensor_index_file <- function(output_dir) {
+  index_file <- file.path(output_dir, "uoh_sensor_index.csv")
+  if (file.exists(index_file)) {
+    return(index_file)
   } else {
-    NULL
+    return(NULL)
   }
-}
-
-get_processed_sensors <- function(output_dir) {
-  min_files <- list.files(path = file.path(output_dir, "csv"), 
-                          pattern = "_min\\.csv$", full.names = FALSE)
-  sensor_names <- gsub("_min\\.csv$", "", min_files)
-  return(sensor_names)
 }
 
 get_nadir_info <- function(sensor_name, output_dir) {
@@ -40,39 +32,23 @@ get_nadir_info <- function(sensor_name, output_dir) {
     return(list(available = FALSE))
   }
   
-  summary_file <- get_latest_summary_file(output_dir)
-  if (is.null(summary_file) || !file.exists(summary_file)) {
+  index_file <- get_sensor_index_file(output_dir)
+  if (is.null(index_file)) {
     return(list(available = FALSE))
   }
   
-  summary_df <- read.csv(summary_file)
-  
-  if (!"file" %in% names(summary_df)) {
-    return(list(available = FALSE))
-  }
-  
-  sensor_row <- summary_df[summary_df$file == sensor_name, ]
+  index_df <- read.csv(index_file)
+  sensor_row <- index_df[index_df$file == sensor_name, ]
   
   if (nrow(sensor_row) == 0) {
     return(list(available = FALSE))
   }
   
-  # Handle different possible column name formats
-  possible_time_cols <- c("pres_min[time]", "pres_min.time.", "pres_min.time")
-  possible_value_cols <- c("pres_min[kPa]", "pres_min.kPa.", "pres_min.kPa")
-  
-  time_col <- NULL
-  value_col <- NULL
-  
-  for (col in names(sensor_row)) {
-    if (col %in% possible_time_cols) time_col <- col
-    if (col %in% possible_value_cols) value_col <- col
-  }
-  
-  if (!is.null(time_col) && !is.null(value_col)) {
+  # Check for nadir data columns
+  if ("pres_min.time." %in% names(sensor_row) && "pres_min.kPa." %in% names(sensor_row)) {
     return(list(
-      time = as.numeric(sensor_row[[time_col]]),
-      value = as.numeric(sensor_row[[value_col]]),
+      time = as.numeric(sensor_row[["pres_min.time."]]),
+      value = as.numeric(sensor_row[["pres_min.kPa."]]),
       available = TRUE
     ))
   }

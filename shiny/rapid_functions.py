@@ -9,6 +9,64 @@ from datetime import datetime
 from matplotlib import pyplot as plt
 plt.style.use("seaborn-v0_8-whitegrid")
 
+def append_to_sensor_index(sensor_info, output_dir):
+    """
+    Append sensor information to the persistent index file.
+    """
+    index_file = Path(output_dir) / "uoh_sensor_index.csv"
+    
+    # Define all columns with defaults
+    index_columns = [
+        'file', 'sensor', 'date_deploy', 'time_deploy', 'duration[mm:ss]',
+        'pres_min[kPa]', 'pres_min[time]', 'HIG_max[g]', 'HIG_max[time]', 
+        'messages', 'roi_config', 'delineated', 'trimmed', 
+        'pres_acclim', 'pres_1s_max', 'pres_rpc', 'pres_lrpc'
+    ]
+    
+    # Prepare row data with defaults for new columns
+    row_data = {
+        'file': sensor_info.get('file', ''),
+        'sensor': sensor_info.get('sensor', ''),
+        'date_deploy': sensor_info.get('date_deploy', ''),
+        'time_deploy': sensor_info.get('time_deploy', ''),
+        'duration[mm:ss]': sensor_info.get('duration[mm:ss]', ''),
+        'pres_min[kPa]': sensor_info.get('pres_min[kPa]', ''),
+        'pres_min[time]': sensor_info.get('pres_min[time]', ''),
+        'HIG_max[g]': sensor_info.get('HIG_max[g]', ''),
+        'HIG_max[time]': sensor_info.get('HIG_max[time]', ''),
+        'messages': sensor_info.get('messages', ''),
+        'roi_config': 'NA',
+        'delineated': 'N',
+        'trimmed': 'N',
+        'pres_acclim': 'NA',
+        'pres_1s_max': 'NA',
+        'pres_rpc': 'NA',
+        'pres_lrpc': 'NA'
+    }
+    
+    # Create or append to index
+    if index_file.exists():
+        # Read existing index
+        existing_df = pd.read_csv(index_file)
+        
+        # Check if sensor already exists and update or append
+        if sensor_info['file'] in existing_df['file'].values:
+            # Update existing row
+            idx = existing_df['file'] == sensor_info['file']
+            for col, val in row_data.items():
+                if col not in ['roi_config', 'delineated', 'trimmed', 'pres_acclim', 'pres_1s_max', 'pres_rpc', 'pres_lrpc']:
+                    existing_df.loc[idx, col] = val
+        else:
+            # Append new row
+            new_row = pd.DataFrame([row_data])
+            existing_df = pd.concat([existing_df, new_row], ignore_index=True)
+        
+        existing_df.to_csv(index_file, index=False)
+    else:
+        # Create new index file
+        df = pd.DataFrame([row_data])
+        df.to_csv(index_file, index=False)
+
 def parse_filename_info(filename):
     """
     Extract sensor name, date, and time from the filename.
@@ -277,6 +335,9 @@ def process_imp_hig_direct(imp_filename, hig_filename, output_dir):
     # Save the combined data to CSV directory
     output_file = csv_dir / f"{base_filename}.csv"
     combined_data.to_csv(output_file, index=False)
+    
+    all_info = {**file_info, **summary_info, 'file': base_filename}
+    append_to_sensor_index(all_info, output_dir)
 
     # Create and save minimal CSV
     minimal_data = create_minimal_csv(combined_data, base_filename, output_path)

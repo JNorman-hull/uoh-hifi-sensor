@@ -47,18 +47,73 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     roi_values <- reactiveValues(
       roi_configs = NULL,
       current_config = NULL,
-      summary_updated = 0, 
-      data_updated = 0 
+      summary_updated = 0,  # Counter to trigger cache refresh when delineation happens
+      data_updated = 0      # Counter to trigger plot refresh when data changes
     )
+    
+    # Helper function to check if sensor is delineated
+    is_already_delineated <- function(sensor_name) {
+      index_file <- get_sensor_index_file(output_dir())
+      if (is.null(index_file)) return(FALSE)
+      
+      index_df <- read.csv(index_file)
+      sensor_row <- index_df[index_df$file == sensor_name, ]
+      
+      if (nrow(sensor_row) == 0) return(FALSE)
+      
+      # Check flag first
+      is_flagged <- sensor_row$delineated == "Y"
+      
+      # If flagged, verify file exists
+      if (is_flagged) {
+        delineated_file <- file.path(output_dir(), "csv", "delineated", paste0(sensor_name, "_delineated.csv"))
+        if (!file.exists(delineated_file)) {
+          # File missing, update flag to N
+          index_df$delineated[index_df$file == sensor_name] <- "N"
+          write.csv(index_df, index_file, row.names = FALSE)
+          return(FALSE)
+        }
+      }
+      
+      return(is_flagged)
+    }
+    
+    # Helper function to check if sensor is trimmed
+    is_sensor_trimmed <- function(sensor_name) {
+      index_file <- get_sensor_index_file(output_dir())
+      if (is.null(index_file)) return(FALSE)
+      
+      index_df <- read.csv(index_file)
+      sensor_row <- index_df[index_df$file == sensor_name, ]
+      
+      if (nrow(sensor_row) == 0) return(FALSE)
+      
+      # Check flag first
+      is_flagged <- sensor_row$trimmed == "Y"
+      
+      # If flagged, verify file exists and is actually trimmed
+      if (is_flagged) {
+        delineated_file <- file.path(output_dir(), "csv", "delineated", paste0(sensor_name, "_delineated.csv"))
+        if (!file.exists(delineated_file)) {
+          # File missing, update both flags to N
+          index_df$delineated[index_df$file == sensor_name] <- "N"
+          index_df$trimmed[index_df$file == sensor_name] <- "N"
+          write.csv(index_df, index_file, row.names = FALSE)
+          return(FALSE)
+        }
+      }
+      
+      return(is_flagged)
+    }
     
     # Cached summary data - reads file when processing completes OR when delineation happens
     summary_data_cache <- reactive({
       processing_complete()  # Invalidate when processing completes
       roi_values$summary_updated  # Invalidate when delineation creates/updates summary
       
-      summary_file <- get_latest_summary_file(output_dir())
-      if (!is.null(summary_file) && file.exists(summary_file)) {
-        read.csv(summary_file)
+      index_file <- get_sensor_index_file(output_dir())
+      if (!is.null(index_file)) {
+        read.csv(index_file)
       } else {
         NULL
       }
@@ -88,55 +143,13 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    output$delineation_status <- renderText({
-      req(input$plot_sensor)
-      
-      nadir <- nadir_info()
-      
-      if (!nadir$available) {
-        "No nadir data available"
-      } else if (is_already_delineated()) {
-        "Sensor file delineated"
-      } else {
-        "Sensor requires delineation"
-      }
-    })
-    
-    observe({
-      req(input$plot_sensor)
-      
-      nadir <- nadir_info()
-      
-      if (!nadir$available) {
-        shinyjs::runjs(paste0("
-      $('#", ns("delineation_status"), "').css({
-        'color': 'red', 
-        'font-weight': 'bold'
-      });
-    "))
-      } else if (is_already_delineated()) {
-        shinyjs::runjs(paste0("
-      $('#", ns("delineation_status"), "').css({
-        'color': 'green', 
-        'font-weight': 'bold'
-      });
-    "))
-      } else {
-        shinyjs::runjs(paste0("
-      $('#", ns("delineation_status"), "').css({
-        'color': 'orange', 
-        'font-weight': 'bold'
-      });
-    "))
-      }
-    })
-    
     # Load ROI configurations using shared function
     observe({
       roi_values$roi_configs <- load_roi_configs(output_dir())
       
       if (length(roi_values$roi_configs) > 0) {
         config_names <- names(roi_values$roi_configs)
+        # Create named vector: display names without underscores, values with underscores
         choices <- setNames(config_names, gsub("_", " ", config_names))
         current_choice <- input$config_choice
         
@@ -169,6 +182,63 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       nadir_info()$available
     })
     outputOptions(output, ns("nadir_available"), suspendWhenHidden = FALSE)
+    
+    # Delineation status display
+    output$delineation_status <- renderText({
+      req(input$plot_sensor)
+      roi_values$summary_updated  # Reactivity to delineation changes
+      roi_values$data_updated     # Reactivity to trimming changes
+      
+      nadir <- nadir_info()
+      
+      if (!nadir$available) {
+        "No nadir data available"
+      } else if (!is_already_delineated(input$plot_sensor)) {
+        "Sensor requires delineation"
+      } else if (is_sensor_trimmed(input$plot_sensor)) {
+        "Sensor file delineated and trimmed"
+      } else {
+        "Sensor file delineated (not trimmed)"
+      }
+    })
+    
+    # CSS styling for status text
+    observe({
+      req(input$plot_sensor)
+      roi_values$summary_updated  # Reactivity to delineation changes
+      roi_values$data_updated     # Reactivity to trimming changes
+      
+      nadir <- nadir_info()
+      if (!nadir$available) {
+        shinyjs::runjs(paste0("
+          $('#", ns("delineation_status"), "').css({
+            'color': 'orange', 
+            'font-weight': 'bold'
+          });
+        "))
+      } else if (!is_already_delineated(input$plot_sensor)) {
+        shinyjs::runjs(paste0("
+          $('#", ns("delineation_status"), "').css({
+            'color': 'red', 
+            'font-weight': 'bold'
+          });
+        "))
+      } else if (is_sensor_trimmed(input$plot_sensor)) {
+        shinyjs::runjs(paste0("
+          $('#", ns("delineation_status"), "').css({
+            'color': 'green', 
+            'font-weight': 'bold'
+          });
+        "))
+      } else {
+        shinyjs::runjs(paste0("
+          $('#", ns("delineation_status"), "').css({
+            'color': 'blue', 
+            'font-weight': 'bold'
+          });
+        "))
+      }
+    })
     
     # Calculate ROI times
     roi_times <- reactive({
@@ -265,40 +335,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Show notification when nadir is not available for selected sensor (only once per sensor)
     last_nadir_warning <- reactiveVal("")
     
-    observeEvent(input$trim_sensor, {
-      req(input$plot_sensor)
-      
-      # Check if delineated file exists
-      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
-      
-      if (!file.exists(delineated_path)) {
-        showNotification("No delineated dataset found. Please delineate dataset first.", type = "warning")
-        return()
-      }
-      
-      # Read delineated data
-      sensor_data <- read.csv(delineated_path)
-      
-      # Check if trim levels exist
-      if (!"roi" %in% names(sensor_data) || 
-          !any(sensor_data$roi %in% c("trim_start", "trim_end"))) {
-        showNotification("Sensor data already trimmed. Delineate dataset again if you want to re-trim.", type = "warning")
-        return()
-      }
-      
-      # Perform trimming
-      trimmed_data <- sensor_data[!sensor_data$roi %in% c("trim_start", "trim_end"), ]
-      
-      # Save over existing delineated file
-      write.csv(trimmed_data, delineated_path, row.names = FALSE)
-      
-      # Trigger data refresh
-      roi_values$data_updated <- roi_values$data_updated + 1
-      
-      showNotification("Sensor data trimmed successfully!", type = "message")
-    })
-    
-    
     observe({
       req(input$plot_sensor)
       nadir <- nadir_info()
@@ -313,35 +349,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    # Check if already delineated - check both summary file AND actual file existence
-    is_already_delineated <- reactive({
-      req(input$plot_sensor)
-      
-      # Check if delineated file actually exists in filesystem
-      delineated_dir <- file.path(output_dir(), "csv", "delineated")
-      delineated_file <- file.path(delineated_dir, paste0(input$plot_sensor, "_delineated.csv"))
-      file_exists <- file.exists(delineated_file)
-      
-      # Also check summary file flag
-      summary_flag <- FALSE
-      summary_df <- summary_data_cache()
-      if (!is.null(summary_df) && "delineated" %in% names(summary_df)) {
-        sensor_row <- summary_df[summary_df$file == input$plot_sensor, ]
-        if (nrow(sensor_row) > 0) {
-          summary_flag <- (sensor_row$delineated == "Y")
-        }
-      }
-      
-      # Return TRUE only if both file exists AND summary says it's delineated
-      return(file_exists && summary_flag)
-    })
-    
     # Create delineated dataset
     observeEvent(input$create_delineated, {
       req(input$plot_sensor, roi_times(), roi_values$current_config)
       
       # Check if already delineated
-      if (is_already_delineated()) {
+      if (is_already_delineated(input$plot_sensor)) {
         showModal(modalDialog(
           title = "Confirm Replacement",
           "Sensor data already delineated. Continue and replace delineated file?",
@@ -361,6 +374,58 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       req(roi_values$current_config)
       removeModal()
       create_delineated_dataset()
+    })
+    
+    # Trim sensor button
+    observeEvent(input$trim_sensor, {
+      req(input$plot_sensor)
+      
+      # Check if delineated file exists
+      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
+      
+      if (!file.exists(delineated_path)) {
+        showNotification("No delineated dataset found. Please delineate dataset first.", type = "warning")
+        return()
+      }
+      
+      # Use helper function
+      if (is_sensor_trimmed(input$plot_sensor)) {
+        showNotification("Sensor data already trimmed. Delineate dataset again if you want to re-trim.", type = "warning")
+        return()
+      }
+      
+      # Read delineated data
+      sensor_data <- read.csv(delineated_path)
+      
+      # Check if trim levels exist
+      if (!"roi" %in% names(sensor_data) || 
+          !any(sensor_data$roi %in% c("trim_start", "trim_end"))) {
+        showNotification("Sensor data already trimmed. Delineate dataset again if you want to re-trim.", type = "warning")
+        return()
+      }
+      
+      # Perform trimming
+      trimmed_data <- sensor_data[!sensor_data$roi %in% c("trim_start", "trim_end"), ]
+      
+      # Save over existing delineated file
+      write.csv(trimmed_data, delineated_path, row.names = FALSE)
+      
+      # Update sensor index
+      index_file <- get_sensor_index_file(output_dir())
+      if (!is.null(index_file)) {
+        index_df <- read.csv(index_file)
+        sensor_idx <- which(index_df$file == input$plot_sensor)
+        if (length(sensor_idx) > 0) {
+          index_df$trimmed[sensor_idx] <- "Y"
+          write.csv(index_df, index_file, row.names = FALSE)
+        }
+      }
+      
+      # Trigger data refresh
+      roi_values$data_updated <- roi_values$data_updated + 1
+      roi_values$summary_updated <- roi_values$summary_updated + 1
+      
+      showNotification("Sensor data trimmed successfully!", type = "message")
     })
     
     # Function to create delineated dataset
@@ -413,28 +478,22 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           return()
         }
         
-        # Update summary file using shared function
-        summary_file <- get_latest_summary_file(output_dir())
-        if (!is.null(summary_file) && file.exists(summary_file)) {
-          summary_df <- read.csv(summary_file)
-          
-          # Add delineated and roi_config columns if they don't exist
-          if (!"delineated" %in% names(summary_df)) {
-            summary_df$delineated <- "N"
-          }
-          if (!"roi_config" %in% names(summary_df)) {
-            summary_df$roi_config <- ""
-          }
+        # Update sensor index
+        index_file <- get_sensor_index_file(output_dir())
+        if (!is.null(index_file)) {
+          index_df <- read.csv(index_file)
           
           # Update this sensor
-          sensor_idx <- which(summary_df$file == input$plot_sensor)
+          sensor_idx <- which(index_df$file == input$plot_sensor)
           if (length(sensor_idx) > 0) {
-            summary_df$delineated[sensor_idx] <- "Y"
-            summary_df$roi_config[sensor_idx] <- roi_values$current_config$label
-            write.csv(summary_df, summary_file, row.names = FALSE)
+            index_df$delineated[sensor_idx] <- "Y"
+            index_df$roi_config[sensor_idx] <- roi_values$current_config$label
+            index_df$trimmed[sensor_idx] <- "N"  # Reset trimmed status when re-delineating
+            write.csv(index_df, index_file, row.names = FALSE)
             
             # Trigger cache refresh by incrementing counter
             roi_values$summary_updated <- roi_values$summary_updated + 1
+            roi_values$data_updated <- roi_values$data_updated + 1
           }
         }
         
@@ -444,16 +503,16 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         showNotification(paste("Error creating delineated dataset:", e$message), 
                          type = "error")
       })
-      
-      roi_values$data_updated <- roi_values$data_updated + 1
     }
     
     # Read selected sensor data
     selected_sensor_data <- reactive({
       req(input$plot_sensor)
-      roi_values$data_updated 
+      roi_values$data_updated  # Invalidate when data changes
       
       file_path <- file.path(output_dir(), "csv", paste0(input$plot_sensor, "_min.csv"))
+      
+      # Check for delineated file first
       delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
       
       if (file.exists(delineated_path)) {
@@ -469,11 +528,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     output$roi_plot <- renderPlotly({
       sensor_data <- selected_sensor_data()
       req(sensor_data)
+      
       nadir <- nadir_info()
       req(nadir$available)
-      if (!nadir$available) {
-        return(plotly_empty() %>% layout(title = "No nadir data available for this sensor"))
-      }
       
       times <- roi_times()
       
@@ -539,78 +596,59 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         textfont = list(color = "orange")
       )
       
-      # Add ROI boundary lines
+      # Add ROI boundary lines (only if we have ROI times and trim data exists)
+      # Add ROI boundary lines if we have ROI times
       if (!is.null(times)) {
         roi_labels <- c("", "ROI 1", "ROI 2", "ROI 3", "ROI 4", "ROI 5", "")
         
-        for (i in 2:7) {  # Skip first and last boundaries (data start/end)
-          p <- p %>% add_segments(
-            x = times$boundaries[i], xend = times$boundaries[i],
-            y = min(sensor_data$pressure_kpa), 
-            yend = max(sensor_data$pressure_kpa),
-            line = list(color = "blue", width = 2, dash = "dash"),
-            showlegend = FALSE,
-            hoverinfo = "text",
-            text = paste("Start of", roi_labels[i])
-          )
+        if ("roi" %in% names(sensor_data)) {
+          # Data is delineated - check if trimmed or not
+          has_trim_data <- any(sensor_data$roi %in% c("trim_start", "trim_end"))
+          
+          if (has_trim_data) {
+            # Show all boundaries including trim areas
+            for (i in 2:7) {
+              p <- p %>% add_segments(
+                x = times$boundaries[i], xend = times$boundaries[i],
+                y = min(sensor_data$pressure_kpa), 
+                yend = max(sensor_data$pressure_kpa),
+                line = list(color = "blue", width = 2, dash = "dash"),
+                showlegend = FALSE,
+                hoverinfo = "text",
+                text = paste("Start of", roi_labels[i])
+              )
+            }
+          } else {
+            # Data is trimmed - show only ROI 1-5 boundaries
+            for (i in 3:6) {  # ROI 1-5 boundaries (indices 3-6 in times$boundaries)
+              p <- p %>% add_segments(
+                x = times$boundaries[i], xend = times$boundaries[i],
+                y = min(sensor_data$pressure_kpa), 
+                yend = max(sensor_data$pressure_kpa),
+                line = list(color = "blue", width = 2, dash = "dash"),
+                showlegend = FALSE,
+                hoverinfo = "text",
+                text = paste("Start of", roi_labels[i])
+              )
+            }
+          }
+        } else {
+          # Data not delineated yet - show predicted ROI boundaries (ROI 1-5 only)
+          for (i in 3:6) {  # ROI 1-5 boundaries
+            p <- p %>% add_segments(
+              x = times$boundaries[i], xend = times$boundaries[i],
+              y = min(sensor_data$pressure_kpa), 
+              yend = max(sensor_data$pressure_kpa),
+              line = list(color = "lightblue", width = 2, dash = "dot"),
+              showlegend = FALSE,
+              hoverinfo = "text",
+              text = paste("Predicted", roi_labels[i])
+            )
+          }
         }
       }
       
       return(p)
     })
   })
-load_roi_configs <- function(output_dir) {
-  config_file <- file.path(output_dir, "roi_config.txt")
-  
-  if (file.exists(config_file)) {
-    config_lines <- readLines(config_file)
-    config_list <- list()
-    
-    for (line in config_lines) {
-      if (nchar(trimws(line)) > 0 && !startsWith(trimws(line), "#")) {
-        # Parse: Config_name, 1.1, 0.3, 0.2, 0.3, 1.1
-        parts <- trimws(strsplit(line, ",")[[1]])
-        if (length(parts) == 6) {
-          config_name <- parts[1]
-          config_list[[config_name]] <- list(
-            label = config_name,
-            roi1_ingress = as.numeric(parts[2]),
-            roi2_prenadir = as.numeric(parts[3]),
-            roi3_nadir = as.numeric(parts[4]),
-            roi4_postnadir = as.numeric(parts[5]),
-            roi5_outgress = as.numeric(parts[6])
-          )
-        }
-      }
-    }
-    
-    return(config_list)
-  } else {
-    # Create default config file with multiple configurations
-    default_configs <- c(
-      "Default_configuration, 1.1, 0.3, 0.2, 0.3, 1.1",
-      "Quick_passage, 0.8, 0.2, 0.1, 0.2, 0.8",
-      "Extended_analysis, 1.5, 0.5, 0.3, 0.5, 1.5"
-    )
-    writeLines(default_configs, config_file, sep = "\n")    
-    # Return the default configs
-    return(list(
-      "Default_configuration" = list(
-        label = "Default_configuration",
-        roi1_ingress = 1.1, roi2_prenadir = 0.3, roi3_nadir = 0.2,
-        roi4_postnadir = 0.3, roi5_outgress = 1.1
-      ),
-      "Quick_passage" = list(
-        label = "Quick_passage",
-        roi1_ingress = 0.8, roi2_prenadir = 0.2, roi3_nadir = 0.1,
-        roi4_postnadir = 0.2, roi5_outgress = 0.8
-      ),
-      "Extended_analysis" = list(
-        label = "Extended_analysis",
-        roi1_ingress = 1.5, roi2_prenadir = 0.5, roi3_nadir = 0.3,
-        roi4_postnadir = 0.5, roi5_outgress = 1.5
-      )
-    ))
-  }
-}
 }

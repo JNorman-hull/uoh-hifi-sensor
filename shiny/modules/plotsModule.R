@@ -176,15 +176,15 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
     observeEvent(input$save_nadir_btn, {
       req(nadir_values$selected_point)
       
-      summary_file <- get_latest_summary_file(output_dir())
-      if (!is.null(summary_file) && file.exists(summary_file)) {
-        summary_df <- read.csv(summary_file)
-        row_idx <- which(summary_df$file == input$plot_sensor)
+      index_file <- get_sensor_index_file(output_dir())
+      if (!is.null(index_file) && file.exists(index_file)) {
+        index_df <- read.csv(index_file)
+        row_idx <- which(index_df$file == input$plot_sensor)
         
         if (length(row_idx) > 0) {
-          summary_df[row_idx, "pres_min.time."] <- nadir_values$selected_point$x
-          summary_df[row_idx, "pres_min.kPa."] <- nadir_values$selected_point$y
-          write.csv(summary_df, summary_file, row.names = FALSE)
+          index_df[row_idx, "pres_min.time."] <- nadir_values$selected_point$x
+          index_df[row_idx, "pres_min.kPa."] <- nadir_values$selected_point$y
+          write.csv(index_df, index_file, row.names = FALSE)
           
           nadir_values$nadir_updated <- nadir_values$nadir_updated + 1
           nadir_values$edit_mode <- FALSE

@@ -1,4 +1,3 @@
-
 processingUI <- function(id) {
   ns <- NS(id)
   
@@ -31,6 +30,24 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       session$sendCustomMessage("updateProcessLog", list(text = paste(values$log_messages, collapse = "\n")))
     }
     
+    # Get summary data from sensor index file
+    summary_data_from_index <- reactive({
+      values$processing_complete  # Invalidate when processing completes
+      
+      index_file <- get_sensor_index_file(output_dir())
+      if (!is.null(index_file)) {
+        index_df <- read.csv(index_file)
+        # Convert to list format for compatibility with existing code
+        summary_list <- list()
+        for (i in seq_len(nrow(index_df))) {
+          summary_list[[i]] <- as.list(index_df[i, ])
+        }
+        return(summary_list)
+      } else {
+        return(list())
+      }
+    })
+    
     # Process sensors function
     process_sensors <- function() {
       sensors <- selected_sensors()
@@ -62,7 +79,6 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       )
       
       # Update after completion
-      values$summary_data <- result$summary_data
       values$log_messages <- result$log_messages
       values$processing_complete <- TRUE
       values$is_processing <- FALSE
@@ -72,7 +88,7 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
     }
     
     return(list(
-      summary_data = reactive(values$summary_data),
+      summary_data = summary_data_from_index,
       processing_complete = reactive(values$processing_complete),
       is_processing = reactive(values$is_processing),
       log_messages = reactive(values$log_messages),
@@ -96,14 +112,11 @@ process_sensors_step_by_step <- function(selected_sensors, raw_data_path, output
   update_log("Starting processing...")
   update_log(paste("Processing", length(selected_sensors), "selected sensors"))
   
-  # Initialize data structures
-  summary_data <- list()
+  # Initialize counters for summary statistics
   n_files_w_time <- 0
   n_files_w_hig <- 0
   n_files_w_pres <- 0
-  
-  # Get current date for CSV filenames
-  current_date <- format(Sys.Date(), "%d%m%y")
+  n_processed <- 0
   
   # Process each sensor one at a time
   for (i in seq_along(selected_sensors)) {
@@ -121,7 +134,7 @@ process_sensors_step_by_step <- function(selected_sensors, raw_data_path, output
         combined_data <- result[[1]]
         summary_info <- result[[2]]
         
-        # Check for errors
+        # Count error types for summary
         if (grepl("TIME:", summary_info$messages)) {
           n_files_w_time <- n_files_w_time + 1
         }
@@ -132,9 +145,7 @@ process_sensors_step_by_step <- function(selected_sensors, raw_data_path, output
           n_files_w_pres <- n_files_w_pres + 1
         }
         
-        summary_info$file <- sensor_name
-        summary_data[[length(summary_data) + 1]] <- summary_info
-        
+        n_processed <- n_processed + 1
         update_log(paste(sensor_name, "processed successfully"))
         
       }, error = function(e) {
@@ -147,33 +158,16 @@ process_sensors_step_by_step <- function(selected_sensors, raw_data_path, output
     }
   }
   
-  # Create summary CSV
-  if (length(summary_data) > 0) {
-    # Convert to data frame
-    summary_df <- do.call(rbind, lapply(summary_data, function(x) {
-      as.data.frame(x, stringsAsFactors = FALSE)
-    }))
-    
-    # Save to CSV
-    summary_csv_filename <- paste0(current_date, "_batch_summary.csv")
-    summary_csv_path <- file.path(output_dir, summary_csv_filename)
-    write.csv(summary_df, summary_csv_path, row.names = FALSE)
-    
-    update_log("Batch sensor processing complete.")
-    update_log(paste(length(summary_data), "total sensors processed"))
-    update_log(paste(n_files_w_pres, "/", length(summary_data), "sensors contain pressure data errors"))
-    update_log(paste(n_files_w_time, "/", length(summary_data), "sensors contain time series errors"))
-    update_log(paste(n_files_w_hig, "/", length(summary_data), "sensors contain strike/collision event (HIG ≥ 400g)"))
-    
-    return(list(
-      summary_data = summary_data,
-      log_messages = log_messages
-    ))
-  } else {
-    update_log("No sensors were successfully processed.")
-    return(list(
-      summary_data = list(),
-      log_messages = log_messages
-    ))
+  # Final summary
+  update_log("Batch sensor processing complete.")
+  update_log(paste(n_processed, "total sensors processed"))
+  if (n_processed > 0) {
+    update_log(paste(n_files_w_pres, "/", n_processed, "sensors contain pressure data errors"))
+    update_log(paste(n_files_w_time, "/", n_processed, "sensors contain time series errors"))
+    update_log(paste(n_files_w_hig, "/", n_processed, "sensors contain strike/collision event (HIG ≥ 400g)"))
   }
+  
+  return(list(
+    log_messages = log_messages
+  ))
 }
