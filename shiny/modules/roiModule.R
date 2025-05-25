@@ -65,8 +65,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       if (nrow(sensor_row) == 0) return(FALSE)
       
-      # Check flag first
-      is_flagged <- sensor_row$delineated == "Y"
+      # Check flag first (handle NA as 'N')
+      delineated_val <- sensor_row$delineated
+      is_flagged <- !is.na(delineated_val) && delineated_val == "Y"
       
       # If flagged, verify file exists
       if (is_flagged) {
@@ -92,10 +93,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       if (nrow(sensor_row) == 0) return(FALSE)
       
-      # Check flag first
-      is_flagged <- sensor_row$trimmed == "Y"
+      # Check flag first (handle NA as 'N')
+      trimmed_val <- sensor_row$trimmed
+      is_flagged <- !is.na(trimmed_val) && trimmed_val == "Y"
       
-      # If flagged, verify file exists and is actually trimmed
+      # If flagged, verify file exists
       if (is_flagged) {
         delineated_file <- file.path(output_dir(), "csv", "delineated", paste0(sensor_name, "_delineated.csv"))
         if (!file.exists(delineated_file)) {

@@ -15,15 +15,7 @@ def append_to_sensor_index(sensor_info, output_dir):
     """
     index_file = Path(output_dir) / "uoh_sensor_index.csv"
     
-    # Use dot notation (what R creates from square brackets)
-    all_columns = [
-        'file', 'sensor', 'date_deploy', 'time_deploy', 'duration.mm.ss.',
-        'pres_min.kPa.', 'pres_min.time.', 'HIG_max.g.', 'HIG_max.time.', 
-        'messages', 'roi_config', 'delineated', 'trimmed', 
-        'pres_acclim', 'pres_1s_max', 'pres_rpc', 'pres_lrpc'
-    ]
-    
-    # Prepare new row data with dot notation
+    # Prepare new row data (consistent defaults: 'NA' for analysis, 'N' for flags)
     new_row_data = {
         'file': sensor_info.get('file', ''),
         'sensor': sensor_info.get('sensor', ''),
@@ -47,11 +39,11 @@ def append_to_sensor_index(sensor_info, output_dir):
     if index_file.exists():
         existing_df = pd.read_csv(index_file)
         
-        # Remove the sensor if it already exists (complete replacement)
+        # Remove the specific sensor if it exists
         if sensor_info['file'] in existing_df['file'].values:
             existing_df = existing_df[existing_df['file'] != sensor_info['file']]
         
-        # Add the new sensor data
+        # Add the new sensor row
         new_row = pd.DataFrame([new_row_data])
         updated_df = pd.concat([existing_df, new_row], ignore_index=True)
         updated_df.to_csv(index_file, index=False)
@@ -59,7 +51,7 @@ def append_to_sensor_index(sensor_info, output_dir):
         # Create new file
         new_df = pd.DataFrame([new_row_data])
         new_df.to_csv(index_file, index=False)
-
+        
 def parse_filename_info(filename):
     """
     Extract sensor name, date, and time from the filename.
