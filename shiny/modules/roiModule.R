@@ -34,10 +34,14 @@ roiSidebarUI <- function(id) {
       
       actionButton(ns("create_delineated"), "Create delineated dataset", 
                    class = "btn-primary btn-block"),
+      actionButton(ns("start_over"), "Start Over", 
+                   class = "btn-warning btn-block"),
       actionButton(ns("trim_sensor"), "Trim sensor start and end", 
                    class = "btn-danger btn-block")
     )
+    
   )
+  
 }
 roiServer <- function(id, output_dir, summary_data, processing_complete = reactive(FALSE)) {
   moduleServer(id, function(input, output, session) {
@@ -174,6 +178,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Get nadir info using shared function
     nadir_info <- reactive({
       req(input$plot_sensor)
+      roi_values$summary_updated  # Add reactivity to catch nadir updates
       get_nadir_info(input$plot_sensor, output_dir())
     })
     
@@ -209,6 +214,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       roi_values$data_updated     # Reactivity to trimming changes
       
       nadir <- nadir_info()
+      
       if (!nadir$available) {
         shinyjs::runjs(paste0("
           $('#", ns("delineation_status"), "').css({
@@ -240,9 +246,37 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
+    # Manage button states based on delineation status
+    observe({
+      req(input$plot_sensor)
+      roi_values$summary_updated  # Reactivity to changes
+      roi_values$data_updated     # Reactivity to trimming changes
+      
+      is_delineated <- is_already_delineated(input$plot_sensor)
+      is_trimmed <- is_sensor_trimmed(input$plot_sensor)
+      
+      if (is_delineated) {
+        shinyjs::disable("create_delineated")
+        shinyjs::enable("start_over")
+        
+        # Trim button: only enabled if delineated but NOT trimmed
+        if (is_trimmed) {
+          shinyjs::disable("trim_sensor")
+        } else {
+          shinyjs::enable("trim_sensor")
+        }
+      } else {
+        shinyjs::enable("create_delineated") 
+        shinyjs::disable("start_over")
+        shinyjs::disable("trim_sensor")
+      }
+    })
+    
     # Calculate ROI times
     roi_times <- reactive({
       req(input$plot_sensor, roi_values$current_config)
+      input$config_choice  # Make reactive to config changes
+      
       nadir <- nadir_info()
       
       if (!nadir$available) return(NULL)
@@ -428,6 +462,35 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       showNotification("Sensor data trimmed successfully!", type = "message")
     })
     
+    observeEvent(input$start_over, {
+      req(input$plot_sensor)
+      
+      # Remove delineated file
+      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
+      if (file.exists(delineated_path)) {
+        file.remove(delineated_path)
+      }
+      
+      # Reset flags in sensor index
+      index_file <- get_sensor_index_file(output_dir())
+      if (!is.null(index_file)) {
+        index_df <- read.csv(index_file)
+        sensor_idx <- which(index_df$file == input$plot_sensor)
+        if (length(sensor_idx) > 0) {
+          index_df$delineated[sensor_idx] <- "N"
+          index_df$trimmed[sensor_idx] <- "N"
+          index_df$roi_config[sensor_idx] <- "NA"
+          write.csv(index_df, index_file, row.names = FALSE)
+        }
+      }
+      
+      # Trigger updates
+      roi_values$summary_updated <- roi_values$summary_updated + 1
+      roi_values$data_updated <- roi_values$data_updated + 1
+      
+      showNotification("Reset to original sensor file", type = "message")
+    })
+    
     # Function to create delineated dataset
     create_delineated_dataset <- function() {
       tryCatch({
@@ -601,50 +664,16 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       if (!is.null(times)) {
         roi_labels <- c("", "ROI 1", "ROI 2", "ROI 3", "ROI 4", "ROI 5", "")
         
-        if ("roi" %in% names(sensor_data)) {
-          # Data is delineated - check if trimmed or not
-          has_trim_data <- any(sensor_data$roi %in% c("trim_start", "trim_end"))
-          
-          if (has_trim_data) {
-            # Show all boundaries including trim areas
-            for (i in 2:7) {
-              p <- p %>% add_segments(
-                x = times$boundaries[i], xend = times$boundaries[i],
-                y = min(sensor_data$pressure_kpa), 
-                yend = max(sensor_data$pressure_kpa),
-                line = list(color = "blue", width = 2, dash = "dash"),
-                showlegend = FALSE,
-                hoverinfo = "text",
-                text = paste("Start of", roi_labels[i])
-              )
-            }
-          } else {
-            # Data is trimmed - show only ROI 1-5 boundaries
-            for (i in 3:6) {  # ROI 1-5 boundaries (indices 3-6 in times$boundaries)
-              p <- p %>% add_segments(
-                x = times$boundaries[i], xend = times$boundaries[i],
-                y = min(sensor_data$pressure_kpa), 
-                yend = max(sensor_data$pressure_kpa),
-                line = list(color = "blue", width = 2, dash = "dash"),
-                showlegend = FALSE,
-                hoverinfo = "text",
-                text = paste("Start of", roi_labels[i])
-              )
-            }
-          }
-        } else {
-          # Data not delineated yet - show predicted ROI boundaries (ROI 1-5 only)
-          for (i in 3:6) {  # ROI 1-5 boundaries
-            p <- p %>% add_segments(
-              x = times$boundaries[i], xend = times$boundaries[i],
-              y = min(sensor_data$pressure_kpa), 
-              yend = max(sensor_data$pressure_kpa),
-              line = list(color = "lightblue", width = 2, dash = "dot"),
-              showlegend = FALSE,
-              hoverinfo = "text",
-              text = paste("Predicted", roi_labels[i])
-            )
-          }
+        for (i in 2:7) {  # Skip first and last boundaries (data start/end)
+          p <- p %>% add_segments(
+            x = times$boundaries[i], xend = times$boundaries[i],
+            y = min(sensor_data$pressure_kpa), 
+            yend = max(sensor_data$pressure_kpa),
+            line = list(color = "blue", width = 2, dash = "dash"),
+            showlegend = FALSE,
+            hoverinfo = "text",
+            text = paste(roi_labels[i])
+          )
         }
       }
       
