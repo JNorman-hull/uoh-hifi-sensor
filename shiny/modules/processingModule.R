@@ -55,11 +55,14 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
     
     # Move the actual processing logic to a separate function
     start_processing <- function() {
-      # Set processing state (don't handle UI here)
+      # Set processing state FIRST
       values$is_processing <- TRUE
       values$processing_complete <- FALSE
       values$summary_data <- NULL
       values$log_messages <- character(0)
+      
+      # Small delay to allow UI to update
+      Sys.sleep(0.1)
       
       # Process in step-by-step manner
       result <- process_sensors_step_by_step(

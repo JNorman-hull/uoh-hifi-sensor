@@ -54,6 +54,8 @@ server <- function(input, output, session) {
       shinyjs::delay(100, {
         updateTabsetPanel(session, "mainTabset", selected = "processing_log")
       })
+    } else {
+      shinyjs::enable("process_btn")
     }
   })
   
@@ -61,7 +63,6 @@ server <- function(input, output, session) {
   observe({
     if (processing$processing_complete()) {
       updateTabsetPanel(session, "mainTabset", selected = "results_summary")
-      shinyjs::enable("process_btn")
     }
   })
 }

@@ -14,41 +14,48 @@ def append_to_sensor_index(sensor_info, output_dir):
     Add or replace sensor in the persistent index file.
     """
     index_file = Path(output_dir) / "uoh_sensor_index.csv"
+    sensor_config_file = Path(output_dir) / "sensor_config.txt"
     
-    # Prepare new row data (consistent defaults: 'NA' for analysis, 'N' for flags)
-    new_row_data = {
-        'file': sensor_info.get('file', ''),
-        'sensor': sensor_info.get('sensor', ''),
-        'date_deploy': sensor_info.get('date_deploy', ''),
-        'time_deploy': sensor_info.get('time_deploy', ''),
-        'duration.mm.ss.': sensor_info.get('duration[mm:ss]', ''),
-        'pres_min.kPa.': sensor_info.get('pres_min[kPa]', ''),
-        'pres_min.time.': sensor_info.get('pres_min[time]', ''),
-        'HIG_max.g.': sensor_info.get('HIG_max[g]', ''),
-        'HIG_max.time.': sensor_info.get('HIG_max[time]', ''),
-        'messages': sensor_info.get('messages', ''),
-        'roi_config': 'NA',
-        'delineated': 'N',
-        'trimmed': 'N',
-        'pres_acclim': 'NA',
-        'pres_1s_max': 'NA',
-        'pres_rpc': 'NA',
-        'pres_lrpc': 'NA'
-    }
+    # Load sensor config
+    with open(sensor_config_file, 'r') as f:
+        config_lines = [line.strip() for line in f if line.strip()]
     
+    # Build new row data
+    new_row_data = {}
+    for line in config_lines:
+        if '=' in line:
+            # Has default value: "roi_config = NA"
+            col_name, default_value = [x.strip() for x in line.split('=', 1)]
+            new_row_data[col_name] = default_value
+        else:
+            # Get from sensor_info: "file"
+            col_name = line.strip()
+            # Map config column names to sensor_info keys
+            key_mapping = {
+                'duration.mm.ss.': 'duration[mm:ss]',
+                'pres_min.kPa.': 'pres_min[kPa]',
+                'pres_min.time.': 'pres_min[time]',
+                'HIG_max.g.': 'HIG_max[g]',
+                'HIG_max.time.': 'HIG_max[time]'
+            }
+            key = key_mapping.get(col_name, col_name)
+            value = sensor_info.get(key, '')
+            new_row_data[col_name] = str(value) if value is not None else ''
+    
+    # Handle the index file
     if index_file.exists():
+        # Load existing index
         existing_df = pd.read_csv(index_file)
-        
-        # Remove the specific sensor if it exists
-        if sensor_info['file'] in existing_df['file'].values:
-            existing_df = existing_df[existing_df['file'] != sensor_info['file']]
-        
-        # Add the new sensor row
+        # Remove sensor if it already exists
+        sensor_file = sensor_info.get('file', '')
+        if sensor_file and sensor_file in existing_df['file'].values:
+            existing_df = existing_df[existing_df['file'] != sensor_file]
+        # Add new sensor row
         new_row = pd.DataFrame([new_row_data])
         updated_df = pd.concat([existing_df, new_row], ignore_index=True)
         updated_df.to_csv(index_file, index=False)
     else:
-        # Create new file
+        # Create new index file
         new_df = pd.DataFrame([new_row_data])
         new_df.to_csv(index_file, index=False)
         

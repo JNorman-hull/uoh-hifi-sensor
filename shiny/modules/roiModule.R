@@ -162,10 +162,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     observe({
       req(input$plot_sensor)
       
+      nadir <- nadir_info()
       status <- sensor_status()
       
       button_states <- list(
-        "create_delineated" = !status$delineated,
+        "create_delineated" = nadir$available && !status$delineated,
         "start_over" = status$delineated,
         "trim_sensor" = status$delineated && !status$trimmed
       )

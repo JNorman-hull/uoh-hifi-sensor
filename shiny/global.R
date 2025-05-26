@@ -211,34 +211,35 @@ get_nadir_info <- function(sensor_name, output_dir) {
 
 # ROI configuration loader
 load_roi_configs <- function(output_dir) {
-  # Define default ROI configurations
-  # These could be loaded from a config file in the future
-  list(
-    "standard_diving" = list(
-      label = "standard_diving",
-      roi1_ingress = 5.0,
-      roi2_prenadir = 2.0, 
-      roi3_nadir = 1.0,
-      roi4_postnadir = 2.0,
-      roi5_outgress = 5.0
-    ),
-    "shallow_diving" = list(
-      label = "shallow_diving", 
-      roi1_ingress = 3.0,
-      roi2_prenadir = 1.5,
-      roi3_nadir = 0.5,
-      roi4_postnadir = 1.5,
-      roi5_outgress = 3.0
-    ),
-    "deep_diving" = list(
-      label = "deep_diving",
-      roi1_ingress = 8.0,
-      roi2_prenadir = 3.0,
-      roi3_nadir = 2.0,
-      roi4_postnadir = 3.0,
-      roi5_outgress = 8.0
-    )
-  )
+  config_file <- file.path(output_dir, "roi_config.txt")
+  
+  if (file.exists(config_file)) {
+    config_lines <- readLines(config_file)
+    config_list <- list()
+    
+    for (line in config_lines) {
+      if (nchar(trimws(line)) > 0 && !startsWith(trimws(line), "#")) {
+        # Parse: Config_name, 1.1, 0.3, 0.2, 0.3, 1.1
+        parts <- trimws(strsplit(line, ",")[[1]])
+        if (length(parts) == 6) {
+          config_name <- parts[1]
+          config_list[[config_name]] <- list(
+            label = config_name,
+            roi1_ingress = as.numeric(parts[2]),
+            roi2_prenadir = as.numeric(parts[3]),
+            roi3_nadir = as.numeric(parts[4]),
+            roi4_postnadir = as.numeric(parts[5]),
+            roi5_outgress = as.numeric(parts[6])
+          )
+        }
+      }
+    }
+    
+    return(config_list)
+  } else {
+    warning("ROI config file not found: ", config_file)
+    return(list())
+  }
 }
 
 # Create a wrapper function to get unique sensor names (without extensions)
