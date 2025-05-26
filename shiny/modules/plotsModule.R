@@ -10,21 +10,18 @@ plotsUI <- function(id) {
 plotsSidebarUI <- function(id) {
   ns <- NS(id)
   
+  # Get sensor variables for dropdown choices
+  sensor_vars <- get_sensor_variables()
+  var_choices <- setNames(sensor_vars$names, sensor_vars$labels)
+  
   tagList(
     h4("Plot Options"),
     selectInput(ns("plot_sensor"), "Select Sensor:", choices = NULL),
     selectInput(ns("left_y_var"), "Left Y-Axis:",
-                choices = c("Pressure [kPa]" = "pressure_kpa",
-                            "HIG Acceleration [g]" = "higacc_mag_g",
-                            "Inertial Acceleration [m/s²]" = "inacc_mag_ms",
-                            "Rotational Magnitude [deg/s]" = "rot_mag_degs"),
+                choices = var_choices,
                 selected = "pressure_kpa"),
     selectInput(ns("right_y_var"), "Right Y-Axis:",
-                choices = c("None" = "none",
-                            "Pressure [kPa]" = "pressure_kpa",
-                            "HIG Acceleration [g]" = "higacc_mag_g",
-                            "Inertial Acceleration [m/s²]" = "inacc_mag_ms",
-                            "Rotational Magnitude [deg/s]" = "rot_mag_degs"),
+                choices = c("None" = "none", var_choices),
                 selected = "none"),
     
     hr(),
@@ -74,7 +71,7 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       edit_mode = FALSE,
       selected_point = NULL,
       nadir_updated = 0,
-      baseline_click = NULL  # Store the click data that exists when entering edit mode
+      baseline_click = NULL
     )
     
     # Get processed sensors using shared function
@@ -83,36 +80,15 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       get_processed_sensors(output_dir())
     })
     
-    # Update the sensor dropdown when processed sensors change
+    # Update sensor dropdown using shared function
     observe({
-      choices <- processed_sensors()
-      current_choice <- input$plot_sensor
-      
-      if (length(choices) > 0) {
-        selected_value <- if (!is.null(current_choice) && current_choice %in% choices) {
-          current_choice
-        } else {
-          choices[1]
-        }
-        
-        updateSelectInput(session, "plot_sensor", 
-                          choices = choices, 
-                          selected = selected_value)
-      }
+      update_sensor_dropdown(session, "plot_sensor", processed_sensors(), input$plot_sensor)
     })
     
-    # Create a reactive to read the selected sensor data
+    # Read sensor data using shared function
     selected_sensor_data <- reactive({
       req(input$plot_sensor)
-      
-      file_path <- file.path(output_dir(), "csv", paste0(input$plot_sensor, "_min.csv"))
-      
-      if (!file.exists(file_path)) {
-        return(NULL)
-      }
-      
-      data <- read.csv(file_path)
-      return(data)
+      read_sensor_data(output_dir(), input$plot_sensor, "min")
     })
     
     # Display calculated pixel dimensions for export
@@ -127,7 +103,7 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       paste0("Output dimensions: ", width_px, " × ", height_px, " pixels")
     })
     
-    # Nadir info using shared function
+    # Nadir info using shared function with reactivity
     nadir_info <- reactive({
       req(input$plot_sensor)
       nadir_values$nadir_updated  # Force refresh when nadir is updated
@@ -145,24 +121,20 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       }
     })
     
-    # Initialize button states
+    # Button state management using shared function
     observe({
-      if (nadir_values$edit_mode) {
-        shinyjs::disable("edit_nadir_btn")
-        shinyjs::enable("save_nadir_btn")
-        shinyjs::enable("cancel_nadir_btn")
-      } else {
-        shinyjs::enable("edit_nadir_btn")
-        shinyjs::disable("save_nadir_btn")
-        shinyjs::disable("cancel_nadir_btn")
-      }
+      button_states <- list(
+        "edit_nadir_btn" = !nadir_values$edit_mode,
+        "save_nadir_btn" = nadir_values$edit_mode,
+        "cancel_nadir_btn" = nadir_values$edit_mode
+      )
+      manage_button_states(session, button_states)
     })
     
     # Edit nadir button
     observeEvent(input$edit_nadir_btn, {
       nadir_values$edit_mode <- TRUE
       nadir_values$selected_point <- NULL
-      # Store whatever click data currently exists as "baseline" to ignore
       nadir_values$baseline_click <- event_data("plotly_click", source = "nadir_plot")
     })
     
@@ -172,24 +144,26 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       nadir_values$selected_point <- NULL
     })
     
-    # Save nadir button
+    # Save nadir button using shared function
     observeEvent(input$save_nadir_btn, {
       req(nadir_values$selected_point)
       
-      index_file <- get_sensor_index_file(output_dir())
-      if (!is.null(index_file) && file.exists(index_file)) {
-        index_df <- read.csv(index_file)
-        row_idx <- which(index_df$file == input$plot_sensor)
-        
-        if (length(row_idx) > 0) {
-          index_df[row_idx, "pres_min.time."] <- nadir_values$selected_point$x
-          index_df[row_idx, "pres_min.kPa."] <- nadir_values$selected_point$y
-          write.csv(index_df, index_file, row.names = FALSE)
-          
-          nadir_values$nadir_updated <- nadir_values$nadir_updated + 1
-          nadir_values$edit_mode <- FALSE
-          nadir_values$selected_point <- NULL
-        }
+      success <- safe_update_sensor_index(
+        output_dir(), 
+        input$plot_sensor,
+        list(
+          "pres_min.time." = nadir_values$selected_point$x,
+          "pres_min.kPa." = nadir_values$selected_point$y
+        )
+      )
+      
+      if (success) {
+        nadir_values$nadir_updated <- nadir_values$nadir_updated + 1
+        nadir_values$edit_mode <- FALSE
+        nadir_values$selected_point <- NULL
+        showNotification("Nadir updated successfully!", type = "message")
+      } else {
+        showNotification("Failed to update nadir", type = "error")
       }
     })
     
@@ -227,16 +201,15 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       sensor_data <- selected_sensor_data()
       req(sensor_data)
       
-      var_names <- c("pressure_kpa", "higacc_mag_g", "inacc_mag_ms", "rot_mag_degs")
-      var_labels <- c("Pressure [kPa]", "HIG Acceleration [g]", 
-                      "Inertial Acceleration [m/s²]", "Rotational Magnitude [deg/s]")
-      colors <- c("black", "red", "blue", "green")
+      # Get sensor variables using shared function
+      sensor_vars <- get_sensor_variables()
       
       left_var <- input$left_y_var
-      left_color <- colors[which(var_names == left_var)]
-      left_label <- var_labels[which(var_names == left_var)]
+      left_idx <- which(sensor_vars$names == left_var)
+      left_color <- sensor_vars$colors[left_idx]
+      left_label <- sensor_vars$labels[left_idx]
       
-      has_right_axis <- input$right_y_var !="none"
+      has_right_axis <- input$right_y_var != "none"
       right_margin <- if (has_right_axis) 80 else 30
       
       p <- plot_ly() %>%
@@ -275,8 +248,9 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
       
       if (has_right_axis) {
         right_var <- input$right_y_var
-        right_color <- colors[which(var_names == right_var)]
-        right_label <- var_labels[which(var_names == right_var)]
+        right_idx <- which(sensor_vars$names == right_var)
+        right_color <- sensor_vars$colors[right_idx]
+        right_label <- sensor_vars$labels[right_idx]
         
         p <- p %>% layout(
           yaxis2 = list(
@@ -346,6 +320,7 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
         )
       }
       
+      # Configure export settings
       if (input$use_default_export) {
         p <- p %>% config(displaylogo = FALSE)
       } else {
@@ -353,57 +328,18 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
         
         p <- p %>% layout(
           font = list(size = input$plot_font_size),
-          title = list(font = list(size = input$plot_font_size + 2)),
-          xaxis = list(
-            title = "Time [s]",
-            showline = TRUE,
-            linecolor = "black",
-            linewidth = 1,
-            showticklabels = TRUE,
-            ticks = "outside",
-            tickcolor = "black",
-            tickfont = list(size = input$plot_font_size)
-          ),
-          yaxis = list(
-            title = left_label,
-            showline = TRUE,
-            linecolor = "black",
-            linewidth = 1,
-            showticklabels = TRUE,
-            ticks = "outside",
-            tickcolor = "black",
-            tickfont = list(size = input$plot_font_size)
-          ),
-          legend = list(font = list(size = input$plot_font_size))
-        )
-        
-        if (has_right_axis) {
-          p <- p %>% layout(
-            yaxis2 = list(
-              title = right_label,
-              overlaying = "y",
-              side = "right",
-              showline = TRUE,
-              linecolor = "black",
-              linewidth = 1,
-              showticklabels = TRUE,
-              ticks = "outside",
-              tickcolor = "black",
-              tickfont = list(size = input$plot_font_size)
+          title = list(font = list(size = input$plot_font_size + 2))
+        ) %>%
+          config(
+            displaylogo = FALSE,
+            toImageButtonOptions = list(
+              format = input$plot_filetype,
+              filename = paste0(input$plot_sensor, "_plot"),
+              width = round(input$plot_width_cm / 2.54 * input$plot_dpi),
+              height = round(input$plot_height_cm / 2.54 * input$plot_dpi),
+              scale = dpi_scale
             )
           )
-        }
-        
-        p <- p %>% config(
-          displaylogo = FALSE,
-          toImageButtonOptions = list(
-            format = input$plot_filetype,
-            filename = paste0(input$plot_sensor, "_plot"),
-            width = round(input$plot_width_cm / 2.54 * input$plot_dpi),
-            height = round(input$plot_height_cm / 2.54 * input$plot_dpi),
-            scale = dpi_scale
-          )
-        )
       }
       
       p$x$source <- "nadir_plot"

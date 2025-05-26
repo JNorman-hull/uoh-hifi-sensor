@@ -43,16 +43,11 @@ fileSelectionServer <- function(id, raw_data_path) {
       selected_rows = integer(0)
     )
     
-    # Helper function to parse sensor information
+    # Simplified sensor info parsing using Python function directly
     parse_sensor_info <- function(sensor_names) {
       map(sensor_names, function(name) {
         tryCatch({
-          parsed <- py$parse_filename_info(name)
-          list(
-            sensor = parsed$sensor,
-            date_deploy = parsed$date_deploy,
-            time_deploy = parsed$time_deploy
-          )
+          py$parse_filename_info(name)
         }, error = function(e) {
           list(
             sensor = if(nchar(name) >= 3) substr(name, 1, 3) else name,

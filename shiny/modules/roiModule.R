@@ -39,10 +39,9 @@ roiSidebarUI <- function(id) {
       actionButton(ns("trim_sensor"), "Trim sensor start and end", 
                    class = "btn-danger btn-block")
     )
-    
   )
-  
 }
+
 roiServer <- function(id, output_dir, summary_data, processing_complete = reactive(FALSE)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -51,79 +50,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     roi_values <- reactiveValues(
       roi_configs = NULL,
       current_config = NULL,
-      summary_updated = 0,  # Counter to trigger cache refresh when delineation happens
-      data_updated = 0      # Counter to trigger plot refresh when data changes
+      summary_updated = 0,
+      data_updated = 0
     )
-    
-    # Helper function to check if sensor is delineated
-    is_already_delineated <- function(sensor_name) {
-      index_file <- get_sensor_index_file(output_dir())
-      if (is.null(index_file)) return(FALSE)
-      
-      index_df <- read.csv(index_file)
-      sensor_row <- index_df[index_df$file == sensor_name, ]
-      
-      if (nrow(sensor_row) == 0) return(FALSE)
-      
-      # Check flag first (handle NA as 'N')
-      delineated_val <- sensor_row$delineated
-      is_flagged <- !is.na(delineated_val) && delineated_val == "Y"
-      
-      # If flagged, verify file exists
-      if (is_flagged) {
-        delineated_file <- file.path(output_dir(), "csv", "delineated", paste0(sensor_name, "_delineated.csv"))
-        if (!file.exists(delineated_file)) {
-          # File missing, update flag to N
-          index_df$delineated[index_df$file == sensor_name] <- "N"
-          write.csv(index_df, index_file, row.names = FALSE)
-          return(FALSE)
-        }
-      }
-      
-      return(is_flagged)
-    }
-    
-    # Helper function to check if sensor is trimmed
-    is_sensor_trimmed <- function(sensor_name) {
-      index_file <- get_sensor_index_file(output_dir())
-      if (is.null(index_file)) return(FALSE)
-      
-      index_df <- read.csv(index_file)
-      sensor_row <- index_df[index_df$file == sensor_name, ]
-      
-      if (nrow(sensor_row) == 0) return(FALSE)
-      
-      # Check flag first (handle NA as 'N')
-      trimmed_val <- sensor_row$trimmed
-      is_flagged <- !is.na(trimmed_val) && trimmed_val == "Y"
-      
-      # If flagged, verify file exists
-      if (is_flagged) {
-        delineated_file <- file.path(output_dir(), "csv", "delineated", paste0(sensor_name, "_delineated.csv"))
-        if (!file.exists(delineated_file)) {
-          # File missing, update both flags to N
-          index_df$delineated[index_df$file == sensor_name] <- "N"
-          index_df$trimmed[index_df$file == sensor_name] <- "N"
-          write.csv(index_df, index_file, row.names = FALSE)
-          return(FALSE)
-        }
-      }
-      
-      return(is_flagged)
-    }
-    
-    # Cached summary data - reads file when processing completes OR when delineation happens
-    summary_data_cache <- reactive({
-      processing_complete()  # Invalidate when processing completes
-      roi_values$summary_updated  # Invalidate when delineation creates/updates summary
-      
-      index_file <- get_sensor_index_file(output_dir())
-      if (!is.null(index_file)) {
-        read.csv(index_file)
-      } else {
-        NULL
-      }
-    })
     
     # Get processed sensors using shared function
     processed_sensors <- reactive({
@@ -131,22 +60,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       get_processed_sensors(output_dir())
     })
     
-    # Update sensor dropdown
+    # Update sensor dropdown using shared function
     observe({
-      choices <- processed_sensors()
-      current_choice <- input$plot_sensor
-      
-      if (length(choices) > 0) {
-        selected_value <- if (!is.null(current_choice) && current_choice %in% choices) {
-          current_choice
-        } else {
-          choices[1]
-        }
-        
-        updateSelectInput(session, "plot_sensor", 
-                          choices = choices, 
-                          selected = selected_value)
-      }
+      update_sensor_dropdown(session, "plot_sensor", processed_sensors(), input$plot_sensor)
     })
     
     # Load ROI configurations using shared function
@@ -177,7 +93,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       roi_values$current_config <- roi_values$roi_configs[[input$config_choice]]
     })
     
-    # Get nadir info using shared function
+    # Get nadir info using shared function with reactivity
     nadir_info <- reactive({
       req(input$plot_sensor)
       roi_values$summary_updated  # Add reactivity to catch nadir updates
@@ -190,19 +106,27 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     })
     outputOptions(output, ns("nadir_available"), suspendWhenHidden = FALSE)
     
-    # Delineation status display
-    output$delineation_status <- renderText({
+    # Get sensor status using shared function
+    sensor_status <- reactive({
       req(input$plot_sensor)
       roi_values$summary_updated  # Reactivity to delineation changes
       roi_values$data_updated     # Reactivity to trimming changes
       
+      get_sensor_status(input$plot_sensor, output_dir())
+    })
+    
+    # Delineation status display
+    output$delineation_status <- renderText({
+      req(input$plot_sensor)
+      
       nadir <- nadir_info()
+      status <- sensor_status()
       
       if (!nadir$available) {
         "No nadir data available"
-      } else if (!is_already_delineated(input$plot_sensor)) {
+      } else if (!status$delineated) {
         "Sensor requires delineation"
-      } else if (is_sensor_trimmed(input$plot_sensor)) {
+      } else if (status$trimmed) {
         "Sensor file delineated and trimmed"
       } else {
         "Sensor file delineated (not trimmed)"
@@ -212,66 +136,41 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # CSS styling for status text
     observe({
       req(input$plot_sensor)
-      roi_values$summary_updated  # Reactivity to delineation changes
-      roi_values$data_updated     # Reactivity to trimming changes
       
       nadir <- nadir_info()
+      status <- sensor_status()
       
-      if (!nadir$available) {
-        shinyjs::runjs(paste0("
-          $('#", ns("delineation_status"), "').css({
-            'color': 'orange', 
-            'font-weight': 'bold'
-          });
-        "))
-      } else if (!is_already_delineated(input$plot_sensor)) {
-        shinyjs::runjs(paste0("
-          $('#", ns("delineation_status"), "').css({
-            'color': 'red', 
-            'font-weight': 'bold'
-          });
-        "))
-      } else if (is_sensor_trimmed(input$plot_sensor)) {
-        shinyjs::runjs(paste0("
-          $('#", ns("delineation_status"), "').css({
-            'color': 'green', 
-            'font-weight': 'bold'
-          });
-        "))
+      status_color <- if (!nadir$available) {
+        "orange"
+      } else if (!status$delineated) {
+        "red"
+      } else if (status$trimmed) {
+        "green"
       } else {
-        shinyjs::runjs(paste0("
-          $('#", ns("delineation_status"), "').css({
-            'color': 'blue', 
-            'font-weight': 'bold'
-          });
-        "))
+        "blue"
       }
+      
+      shinyjs::runjs(paste0("
+        $('#", ns("delineation_status"), "').css({
+          'color': '", status_color, "', 
+          'font-weight': 'bold'
+        });
+      "))
     })
     
-    # Manage button states based on delineation status
+    # Manage button states using shared function
     observe({
       req(input$plot_sensor)
-      roi_values$summary_updated  # Reactivity to changes
-      roi_values$data_updated     # Reactivity to trimming changes
       
-      is_delineated <- is_already_delineated(input$plot_sensor)
-      is_trimmed <- is_sensor_trimmed(input$plot_sensor)
+      status <- sensor_status()
       
-      if (is_delineated) {
-        shinyjs::disable("create_delineated")
-        shinyjs::enable("start_over")
-        
-        # Trim button: only enabled if delineated but NOT trimmed
-        if (is_trimmed) {
-          shinyjs::disable("trim_sensor")
-        } else {
-          shinyjs::enable("trim_sensor")
-        }
-      } else {
-        shinyjs::enable("create_delineated") 
-        shinyjs::disable("start_over")
-        shinyjs::disable("trim_sensor")
-      }
+      button_states <- list(
+        "create_delineated" = !status$delineated,
+        "start_over" = status$delineated,
+        "trim_sensor" = status$delineated && !status$trimmed
+      )
+      
+      manage_button_states(session, button_states)
     })
     
     # Calculate ROI times
@@ -303,9 +202,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       roi5_end <- roi4_end + config$roi5_outgress
       
       # Read sensor data to get actual start/end times
-      file_path <- file.path(output_dir(), "csv", paste0(input$plot_sensor, "_min.csv"))
-      if (file.exists(file_path)) {
-        sensor_data <- read.csv(file_path)
+      sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "min")
+      if (!is.null(sensor_data)) {
         data_start <- min(sensor_data$time_s)
         data_end <- max(sensor_data$time_s)
         
@@ -389,8 +287,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     observeEvent(input$create_delineated, {
       req(input$plot_sensor, roi_times(), roi_values$current_config)
       
-      # Check if already delineated
-      if (is_already_delineated(input$plot_sensor)) {
+      # Check if already delineated using shared function
+      status <- get_sensor_status(input$plot_sensor, output_dir())
+      if (status$delineated) {
         showModal(modalDialog(
           title = "Confirm Replacement",
           "Sensor data already delineated. Continue and replace delineated file?",
@@ -416,22 +315,26 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     observeEvent(input$trim_sensor, {
       req(input$plot_sensor)
       
-      # Check if delineated file exists
-      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
+      # Check status using shared function
+      status <- get_sensor_status(input$plot_sensor, output_dir())
       
-      if (!file.exists(delineated_path)) {
+      if (!status$delineated) {
         showNotification("No delineated dataset found. Please delineate dataset first.", type = "warning")
         return()
       }
       
-      # Use helper function
-      if (is_sensor_trimmed(input$plot_sensor)) {
+      if (status$trimmed) {
         showNotification("Sensor data already trimmed. Delineate dataset again if you want to re-trim.", type = "warning")
         return()
       }
       
-      # Read delineated data
-      sensor_data <- read.csv(delineated_path)
+      # Read delineated data using shared function
+      sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "delineated")
+      
+      if (is.null(sensor_data)) {
+        showNotification("Failed to read delineated dataset.", type = "error")
+        return()
+      }
       
       # Check if trim levels exist
       if (!"roi" %in% names(sensor_data) || 
@@ -444,26 +347,24 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       trimmed_data <- sensor_data[!sensor_data$roi %in% c("trim_start", "trim_end"), ]
       
       # Save over existing delineated file
+      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
       write.csv(trimmed_data, delineated_path, row.names = FALSE)
       
-      # Update sensor index
-      index_file <- get_sensor_index_file(output_dir())
-      if (!is.null(index_file)) {
-        index_df <- read.csv(index_file)
-        sensor_idx <- which(index_df$file == input$plot_sensor)
-        if (length(sensor_idx) > 0) {
-          index_df$trimmed[sensor_idx] <- "Y"
-          write.csv(index_df, index_file, row.names = FALSE)
-        }
+      # Update sensor index using shared function
+      success <- safe_update_sensor_index(output_dir(), input$plot_sensor, list(trimmed = "Y"))
+      
+      if (success) {
+        # Trigger data refresh
+        roi_values$data_updated <- roi_values$data_updated + 1
+        roi_values$summary_updated <- roi_values$summary_updated + 1
+        
+        showNotification("Sensor data trimmed successfully!", type = "message")
+      } else {
+        showNotification("Failed to update sensor index", type = "error")
       }
-      
-      # Trigger data refresh
-      roi_values$data_updated <- roi_values$data_updated + 1
-      roi_values$summary_updated <- roi_values$summary_updated + 1
-      
-      showNotification("Sensor data trimmed successfully!", type = "message")
     })
     
+    # Start over button
     observeEvent(input$start_over, {
       req(input$plot_sensor)
       
@@ -473,38 +374,38 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         file.remove(delineated_path)
       }
       
-      # Reset flags in sensor index
-      index_file <- get_sensor_index_file(output_dir())
-      if (!is.null(index_file)) {
-        index_df <- read.csv(index_file)
-        sensor_idx <- which(index_df$file == input$plot_sensor)
-        if (length(sensor_idx) > 0) {
-          index_df$delineated[sensor_idx] <- "N"
-          index_df$trimmed[sensor_idx] <- "N"
-          index_df$roi_config[sensor_idx] <- "NA"
-          write.csv(index_df, index_file, row.names = FALSE)
-        }
+      # Reset flags in sensor index using shared function
+      success <- safe_update_sensor_index(
+        output_dir(), 
+        input$plot_sensor,
+        list(
+          delineated = "N",
+          trimmed = "N",
+          roi_config = "NA"
+        )
+      )
+      
+      if (success) {
+        # Trigger updates
+        roi_values$summary_updated <- roi_values$summary_updated + 1
+        roi_values$data_updated <- roi_values$data_updated + 1
+        
+        showNotification("Reset to original sensor file", type = "message")
+      } else {
+        showNotification("Failed to reset sensor status", type = "error")
       }
-      
-      # Trigger updates
-      roi_values$summary_updated <- roi_values$summary_updated + 1
-      roi_values$data_updated <- roi_values$data_updated + 1
-      
-      showNotification("Reset to original sensor file", type = "message")
     })
     
     # Function to create delineated dataset
     create_delineated_dataset <- function() {
       tryCatch({
-        # Read original data
-        file_path <- file.path(output_dir(), "csv", paste0(input$plot_sensor, "_min.csv"))
+        # Read original data using shared function
+        sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "min")
         
-        if (!file.exists(file_path)) {
-          showNotification(paste("Source file not found:", basename(file_path)), type = "error")
+        if (is.null(sensor_data)) {
+          showNotification("Source file not found", type = "error")
           return()
         }
-        
-        sensor_data <- read.csv(file_path)
         
         # Create delineated folder - always check/create fresh
         delineated_dir <- file.path(output_dir(), "csv", "delineated")
@@ -543,26 +444,26 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           return()
         }
         
-        # Update sensor index
-        index_file <- get_sensor_index_file(output_dir())
-        if (!is.null(index_file)) {
-          index_df <- read.csv(index_file)
-          
-          # Update this sensor
-          sensor_idx <- which(index_df$file == input$plot_sensor)
-          if (length(sensor_idx) > 0) {
-            index_df$delineated[sensor_idx] <- "Y"
-            index_df$roi_config[sensor_idx] <- roi_values$current_config$label
-            index_df$trimmed[sensor_idx] <- "N"  # Reset trimmed status when re-delineating
-            write.csv(index_df, index_file, row.names = FALSE)
-            
-            # Trigger cache refresh by incrementing counter
-            roi_values$summary_updated <- roi_values$summary_updated + 1
-            roi_values$data_updated <- roi_values$data_updated + 1
-          }
-        }
+        # Update sensor index using shared function
+        success <- safe_update_sensor_index(
+          output_dir(),
+          input$plot_sensor,
+          list(
+            delineated = "Y",
+            roi_config = roi_values$current_config$label,
+            trimmed = "N"  # Reset trimmed status when re-delineating
+          )
+        )
         
-        showNotification("Delineated dataset created successfully!", type = "message")
+        if (success) {
+          # Trigger cache refresh by incrementing counter
+          roi_values$summary_updated <- roi_values$summary_updated + 1
+          roi_values$data_updated <- roi_values$data_updated + 1
+          
+          showNotification("Delineated dataset created successfully!", type = "message")
+        } else {
+          showNotification("Warning: Dataset created but failed to update index", type = "warning")
+        }
         
       }, error = function(e) {
         showNotification(paste("Error creating delineated dataset:", e$message), 
@@ -570,23 +471,19 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       })
     }
     
-    # Read selected sensor data
+    # Read selected sensor data (with preference for delineated data)
     selected_sensor_data <- reactive({
       req(input$plot_sensor)
       roi_values$data_updated  # Invalidate when data changes
       
-      file_path <- file.path(output_dir(), "csv", paste0(input$plot_sensor, "_min.csv"))
-      
       # Check for delineated file first
-      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
-      
-      if (file.exists(delineated_path)) {
-        return(read.csv(delineated_path))
-      } else if (file.exists(file_path)) {
-        return(read.csv(file_path))
+      delineated_data <- read_sensor_data(output_dir(), input$plot_sensor, "delineated")
+      if (!is.null(delineated_data)) {
+        return(delineated_data)
       }
       
-      return(NULL)
+      # Fall back to regular minimal data
+      return(read_sensor_data(output_dir(), input$plot_sensor, "min"))
     })
     
     # Create ROI plot
@@ -661,7 +558,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         textfont = list(color = "orange")
       )
       
-      # Add ROI boundary lines (only if we have ROI times and trim data exists)
       # Add ROI boundary lines if we have ROI times
       if (!is.null(times)) {
         roi_labels <- c("", "ROI 1", "ROI 2", "ROI 3", "ROI 4", "ROI 5", "")

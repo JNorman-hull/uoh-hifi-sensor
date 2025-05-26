@@ -30,19 +30,24 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       session$sendCustomMessage("updateProcessLog", list(text = paste(values$log_messages, collapse = "\n")))
     }
     
-    # Get summary data from sensor index file
+    # Get summary data from sensor index file using shared function
     summary_data_from_index <- reactive({
       values$processing_complete  # Invalidate when processing completes
       
       index_file <- get_sensor_index_file(output_dir())
       if (!is.null(index_file)) {
-        index_df <- read.csv(index_file)
-        # Convert to list format for compatibility with existing code
-        summary_list <- list()
-        for (i in seq_len(nrow(index_df))) {
-          summary_list[[i]] <- as.list(index_df[i, ])
-        }
-        return(summary_list)
+        tryCatch({
+          index_df <- read.csv(index_file)
+          # Convert to list format for compatibility with existing code
+          summary_list <- list()
+          for (i in seq_len(nrow(index_df))) {
+            summary_list[[i]] <- as.list(index_df[i, ])
+          }
+          return(summary_list)
+        }, error = function(e) {
+          warning("Error reading sensor index: ", e$message)
+          return(list())
+        })
       } else {
         return(list())
       }
@@ -72,6 +77,7 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       # Send completion notification
       session$sendCustomMessage("processingComplete", list(success = TRUE))
     }
+    
     # Process sensors function
     process_sensors <- function() {
       sensors <- selected_sensors()
@@ -92,8 +98,12 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       existing_sensors <- character(0)
       index_file <- get_sensor_index_file(output_dir())
       if (!is.null(index_file)) {
-        index_df <- read.csv(index_file)
-        existing_sensors <- intersect(sensors, index_df$file)
+        tryCatch({
+          index_df <- read.csv(index_file)
+          existing_sensors <- intersect(sensors, index_df$file)
+        }, error = function(e) {
+          warning("Error checking existing sensors: ", e$message)
+        })
       }
       
       if (length(existing_sensors) > 0) {
@@ -130,7 +140,7 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
   })
 }
 
-
+# Improved processing function with better error handling
 process_sensors_step_by_step <- function(selected_sensors, raw_data_path, output_dir, session) {
   log_messages <- character(0)
   
@@ -146,10 +156,13 @@ process_sensors_step_by_step <- function(selected_sensors, raw_data_path, output
   update_log(paste("Processing", length(selected_sensors), "selected sensors"))
   
   # Initialize counters for summary statistics
-  n_files_w_time <- 0
-  n_files_w_hig <- 0
-  n_files_w_pres <- 0
-  n_processed <- 0
+  counters <- list(
+    n_files_w_time = 0,
+    n_files_w_hig = 0,
+    n_files_w_pres = 0,
+    n_processed = 0,
+    n_failed = 0
+  )
   
   # Process each sensor one at a time
   for (i in seq_along(selected_sensors)) {
@@ -169,23 +182,25 @@ process_sensors_step_by_step <- function(selected_sensors, raw_data_path, output
         
         # Count error types for summary
         if (grepl("TIME:", summary_info$messages)) {
-          n_files_w_time <- n_files_w_time + 1
+          counters$n_files_w_time <- counters$n_files_w_time + 1
         }
         if (grepl("HIG:", summary_info$messages)) {
-          n_files_w_hig <- n_files_w_hig + 1
+          counters$n_files_w_hig <- counters$n_files_w_hig + 1
         }
         if (grepl("PRES:", summary_info$messages)) {
-          n_files_w_pres <- n_files_w_pres + 1
+          counters$n_files_w_pres <- counters$n_files_w_pres + 1
         }
         
-        n_processed <- n_processed + 1
+        counters$n_processed <- counters$n_processed + 1
         update_log(paste(sensor_name, "processed successfully"))
         
       }, error = function(e) {
+        counters$n_failed <<- counters$n_failed + 1
         error_msg <- paste("Error processing", sensor_name, ":", e$message)
         update_log(error_msg)
       })
     } else {
+      counters$n_failed <- counters$n_failed + 1
       missing_msg <- paste("Missing IMP or HIG file for sensor:", sensor_name)
       update_log(missing_msg)
     }
@@ -193,14 +208,18 @@ process_sensors_step_by_step <- function(selected_sensors, raw_data_path, output
   
   # Final summary
   update_log("Batch sensor processing complete.")
-  update_log(paste(n_processed, "total sensors processed"))
-  if (n_processed > 0) {
-    update_log(paste(n_files_w_pres, "/", n_processed, "sensors contain pressure data errors"))
-    update_log(paste(n_files_w_time, "/", n_processed, "sensors contain time series errors"))
-    update_log(paste(n_files_w_hig, "/", n_processed, "sensors contain strike/collision event (HIG ≥ 400g)"))
+  update_log(paste(counters$n_processed, "total sensors processed successfully"))
+  if (counters$n_failed > 0) {
+    update_log(paste(counters$n_failed, "sensors failed to process"))
+  }
+  if (counters$n_processed > 0) {
+    update_log(paste(counters$n_files_w_pres, "/", counters$n_processed, "sensors contain pressure data errors"))
+    update_log(paste(counters$n_files_w_time, "/", counters$n_processed, "sensors contain time series errors"))
+    update_log(paste(counters$n_files_w_hig, "/", counters$n_processed, "sensors contain strike/collision event (HIG ≥ 400g)"))
   }
   
   return(list(
-    log_messages = log_messages
+    log_messages = log_messages,
+    counters = counters
   ))
 }
