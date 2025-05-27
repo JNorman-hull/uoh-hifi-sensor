@@ -43,6 +43,32 @@ roiSidebarUI <- function(id) {
     textOutput(ns("nadir_status")),
     
     hr(),
+    h4("Custom ROI Delineation"),
+    actionButton(ns("create_custom_roi"), "Create Custom Delineation", 
+                 class = "btn-info btn-sm"),
+    actionButton(ns("cancel_custom_roi"), "Cancel Custom", 
+                 class = "btn-danger btn-sm"),
+    actionButton(ns("save_custom_roi"), "Save ROI Config", 
+                 class = "btn-success btn-sm"),
+    
+    # ROI 4 nadir duration input
+    conditionalPanel(
+      condition = paste0("output.", ns("custom_edit_mode")),
+      numericInput(ns("roi4_nadir_duration"), "ROI 4 (Nadir) Duration (s):", 
+                   value = 0.4, min = 0.1, max = 2.0, step = 0.1),
+      
+      # Sequential ROI boundary buttons
+      actionButton(ns("roi1_start"), "Select ROI 1 START", class = "btn-sm btn-primary"),
+      actionButton(ns("roi2_start"), "Select ROI 2 START", class = "btn-sm btn-primary"),
+      actionButton(ns("roi3_start"), "Select ROI 3 START", class = "btn-sm btn-primary"),
+      actionButton(ns("roi5_end"), "Select ROI 5 END", class = "btn-sm btn-primary"),
+      actionButton(ns("roi6_end"), "Select ROI 6 END", class = "btn-sm btn-primary"),
+      actionButton(ns("roi7_end"), "Select ROI 7 END", class = "btn-sm btn-primary"),
+      
+      textOutput(ns("custom_roi_status"))
+    ),
+    
+    hr(),
     h4("ROI Configuration"),
     selectInput(ns("config_choice"), "Configuration:", choices = NULL),
     
@@ -89,6 +115,16 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       selected_point = NULL,
       nadir_updated = 0,
       baseline_click = NULL
+    )
+    
+    # Custom ROI editing values
+    custom_roi_values <- reactiveValues(
+      custom_edit_mode = FALSE,
+      current_roi_step = 0,  # 0-6, tracking which boundary to select
+      selected_boundaries = list(),
+      custom_nadir_duration = 0.4,
+      baseline_click = NULL,
+      pending_point = NULL
     )
     
     # Get processed sensors using shared function
@@ -154,6 +190,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     })
     outputOptions(output, ns("nadir_available"), suspendWhenHidden = FALSE)
     
+    # Output for custom edit mode conditional panel
+    output$custom_edit_mode <- reactive({
+      custom_roi_values$custom_edit_mode
+    })
+    outputOptions(output, "custom_edit_mode", suspendWhenHidden = FALSE)
+    
     # Get sensor status using shared function
     sensor_status <- reactive({
       req(input$plot_sensor)
@@ -214,12 +256,23 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       status <- sensor_status()
       
       button_states <- list(
-        "create_delineated" = nadir$available && !status$delineated,
-        "start_over" = status$delineated,
-        "trim_sensor" = status$delineated && !status$trimmed,
-        "edit_nadir_btn" = !nadir_values$edit_mode,
+        "create_delineated" = nadir$available && !status$delineated && !custom_roi_values$custom_edit_mode,
+        "start_over" = status$delineated && !custom_roi_values$custom_edit_mode,
+        "trim_sensor" = status$delineated && !status$trimmed && !custom_roi_values$custom_edit_mode,
+        "edit_nadir_btn" = !nadir_values$edit_mode && !custom_roi_values$custom_edit_mode,
         "save_nadir_btn" = nadir_values$edit_mode,
-        "cancel_nadir_btn" = nadir_values$edit_mode
+        "cancel_nadir_btn" = nadir_values$edit_mode,
+        # Custom ROI buttons
+        "create_custom_roi" = nadir$available && !custom_roi_values$custom_edit_mode,
+        "cancel_custom_roi" = custom_roi_values$custom_edit_mode,
+        "save_custom_roi" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 6,
+        # Sequential ROI boundary buttons
+        "roi1_start" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 0,
+        "roi2_start" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 1,
+        "roi3_start" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 2,
+        "roi5_end" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 3,
+        "roi6_end" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 4,
+        "roi7_end" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 5
       )
       
       manage_button_states(session, button_states)
@@ -288,6 +341,144 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         }
       } else {
         ""
+      }
+    })
+    
+    # Custom ROI functionality
+    # Create custom ROI button
+    observeEvent(input$create_custom_roi, {
+      custom_roi_values$custom_edit_mode <- TRUE
+      custom_roi_values$current_roi_step <- 0
+      custom_roi_values$selected_boundaries <- list()
+      custom_roi_values$custom_nadir_duration <- input$roi4_nadir_duration %||% 0.4
+      custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
+    })
+    
+    # Cancel custom ROI
+    observeEvent(input$cancel_custom_roi, {
+      custom_roi_values$custom_edit_mode <- FALSE
+      custom_roi_values$current_roi_step <- 0
+      custom_roi_values$selected_boundaries <- list()
+      custom_roi_values$pending_point <- NULL
+    })
+    
+    # Handle sequential ROI boundary selection
+    roi_button_handlers <- list(
+      roi1_start = 1,
+      roi2_start = 2, 
+      roi3_start = 3,
+      roi5_end = 4,
+      roi6_end = 5,
+      roi7_end = 6
+    )
+    
+    for (button_id in names(roi_button_handlers)) {
+      local({
+        btn_id <- button_id
+        step_num <- roi_button_handlers[[btn_id]]
+        
+        observeEvent(input[[btn_id]], {
+          if (!is.null(custom_roi_values$pending_point)) {
+            # Store the selected point
+            boundary_name <- btn_id
+            custom_roi_values$selected_boundaries[[boundary_name]] <- custom_roi_values$pending_point$x
+            custom_roi_values$current_roi_step <- step_num
+            custom_roi_values$pending_point <- NULL
+            
+            # Reset baseline click for next selection
+            custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
+          }
+        })
+      })
+    }
+    
+    # Handle click events for custom ROI selection
+    observe({
+      if (custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step < 6) {
+        click_data <- event_data("plotly_click", source = "roi_nadir_plot")
+        if (!is.null(click_data)) {
+          # Only respond if this click is different from baseline
+          if (is.null(custom_roi_values$baseline_click) ||
+              click_data$x != custom_roi_values$baseline_click$x) {
+            custom_roi_values$pending_point <- list(x = click_data$x)
+          }
+        }
+      }
+    })
+    
+    # Custom ROI status display
+    output$custom_roi_status <- renderText({
+      if (custom_roi_values$custom_edit_mode) {
+        if (!is.null(custom_roi_values$pending_point)) {
+          paste0("Selected time: ", round(custom_roi_values$pending_point$x, 3), "s")
+        } else if (custom_roi_values$current_roi_step == 0) {
+          "Click plot to select ROI 1 START"
+        } else if (custom_roi_values$current_roi_step < 6) {
+          step_names <- c("ROI 2 START", "ROI 3 START", "ROI 5 END", "ROI 6 END", "ROI 7 END")
+          paste0("Click plot to select ", step_names[custom_roi_values$current_roi_step])
+        } else {
+          "All boundaries selected. Click Save to create configuration."
+        }
+      } else {
+        ""
+      }
+    })
+    
+    # Save custom ROI configuration
+    observeEvent(input$save_custom_roi, {
+      req(custom_roi_values$current_roi_step == 6)
+      req(length(custom_roi_values$selected_boundaries) == 6)
+      
+      nadir <- nadir_info()
+      req(nadir$available)
+      
+      # Get nadir duration from input
+      nadir_duration <- input$roi4_nadir_duration
+      
+      # Calculate ROI 4 boundaries
+      roi4_start <- nadir$time - (nadir_duration / 2)
+      roi4_end <- nadir$time + (nadir_duration / 2)
+      
+      # Extract selected boundaries
+      roi1_start <- custom_roi_values$selected_boundaries$roi1_start
+      roi2_start <- custom_roi_values$selected_boundaries$roi2_start
+      roi3_start <- custom_roi_values$selected_boundaries$roi3_start
+      roi5_end <- custom_roi_values$selected_boundaries$roi5_end
+      roi6_end <- custom_roi_values$selected_boundaries$roi6_end
+      roi7_end <- custom_roi_values$selected_boundaries$roi7_end
+      
+      # Calculate durations
+      roi1_duration <- roi2_start - roi1_start
+      roi2_duration <- roi3_start - roi2_start
+      roi3_duration <- roi4_start - roi3_start
+      roi4_duration <- nadir_duration
+      roi5_duration <- roi5_end - roi4_end
+      roi6_duration <- roi6_end - roi5_end
+      roi7_duration <- roi7_end - roi6_end
+      
+      # Save configuration
+      success <- save_custom_roi_config(
+        output_dir(),
+        roi1_duration, roi2_duration, roi3_duration, roi4_duration,
+        roi5_duration, roi6_duration, roi7_duration
+      )
+      
+      if (success$status) {
+        # Reset custom mode
+        custom_roi_values$custom_edit_mode <- FALSE
+        custom_roi_values$current_roi_step <- 0
+        custom_roi_values$selected_boundaries <- list()
+        
+        # Reload configurations
+        roi_values$roi_configs <- load_roi_configs(output_dir())
+        
+        # Update dropdown to select new config
+        updateSelectInput(session, "config_choice", 
+                          selected = success$config_name)
+        
+        showNotification("Custom ROI configuration saved successfully!", type = "message")
+      } else {
+        showNotification("Failed to save custom ROI configuration", type = "error")
       }
     })
     
@@ -638,6 +829,45 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         NULL
       }
       
+      # Prepare custom ROI markers
+      custom_roi_markers <- NULL
+      if (custom_roi_values$custom_edit_mode) {
+        custom_roi_markers <- list()
+        
+        # Add selected boundaries
+        for (boundary_name in names(custom_roi_values$selected_boundaries)) {
+          boundary_time <- custom_roi_values$selected_boundaries[[boundary_name]]
+          boundary_label <- gsub("_", " ", toupper(boundary_name))
+          
+          custom_roi_markers[[length(custom_roi_markers) + 1]] <- list(
+            x = boundary_time,
+            y = max(sensor_data[[input$left_y_var]]) * 0.9,
+            name = boundary_label,
+            mode = "markers+text",
+            marker = list(color = "purple", size = 8, symbol = "triangle-up"),
+            text = boundary_label,
+            textposition = "top center",
+            textfont = list(color = "purple", size = 10),
+            showlegend = FALSE
+          )
+        }
+        
+        # Add pending selection point
+        if (!is.null(custom_roi_values$pending_point)) {
+          custom_roi_markers[[length(custom_roi_markers) + 1]] <- list(
+            x = custom_roi_values$pending_point$x,
+            y = max(sensor_data[[input$left_y_var]]) * 0.85,
+            name = "Pending Selection",
+            mode = "markers",
+            marker = list(color = "green", size = 10, symbol = "circle-open"),
+            text = "",
+            textposition = "top center",
+            textfont = list(),
+            showlegend = FALSE
+          )
+        }
+      }
+      
       # Create plot using shared function
       p <- create_sensor_plot(
         sensor_data = sensor_data,
@@ -650,7 +880,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         selected_nadir = selected_nadir,
         roi_boundaries = roi_boundaries,
         show_legend = FALSE,
-        plot_source = "roi_nadir_plot"
+        plot_source = "roi_nadir_plot",
+        custom_roi_markers = custom_roi_markers
       )
       
       return(p)

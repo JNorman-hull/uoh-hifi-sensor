@@ -244,6 +244,44 @@ load_roi_configs <- function(output_dir) {
   }
 }
 
+# Save custom ROI configuration
+save_custom_roi_config <- function(output_dir, roi1, roi2, roi3, roi4, roi5, roi6, roi7) {
+  config_file <- file.path(output_dir, "roi_config.txt")
+  
+  tryCatch({
+    # Read existing configs to determine next user config number
+    existing_configs <- character(0)
+    if (file.exists(config_file)) {
+      existing_configs <- readLines(config_file)
+    }
+    
+    # Find highest user config number
+    user_configs <- grep("^User_configuration", existing_configs, value = TRUE)
+    next_num <- 1
+    if (length(user_configs) > 0) {
+      # Extract numbers from User_configuration# names
+      nums <- as.numeric(gsub("User_configuration([0-9]+),.*", "\\1", user_configs))
+      nums <- nums[!is.na(nums)]
+      if (length(nums) > 0) {
+        next_num <- max(nums) + 1
+      }
+    }
+    
+    # Create new config line
+    config_name <- paste0("User_configuration", next_num)
+    config_line <- paste(config_name, roi1, roi2, roi3, roi4, roi5, roi6, roi7, sep = ", ")
+    
+    # Append to file
+    write(config_line, file = config_file, append = TRUE)
+    
+    return(list(status = TRUE, config_name = config_name))
+    
+  }, error = function(e) {
+    warning("Failed to save custom ROI config: ", e$message)
+    return(list(status = FALSE, config_name = NULL))
+  })
+}
+
 # Create a wrapper function to get unique sensor names (without extensions)
 get_sensor_names <- function(raw_data_path = "./RAW_data/RAPID") {
   # Find all IMP files
@@ -294,7 +332,8 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
                                left_var = NULL, right_var = NULL,
                                nadir_info = NULL, show_nadir = TRUE,
                                selected_nadir = NULL, roi_boundaries = NULL,
-                               show_legend = TRUE, plot_source = "sensor_plot") {
+                               show_legend = TRUE, plot_source = "sensor_plot",
+                               custom_roi_markers = NULL) {
   
   # Get configuration
   config <- get_default_plot_config(plot_config)
@@ -438,6 +477,24 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
         showlegend = FALSE,
         hoverinfo = "text",
         text = paste(roi_labels[i])
+      )
+    }
+  }
+  
+  # Add custom ROI markers if provided
+  if (!is.null(custom_roi_markers)) {
+    for (marker in custom_roi_markers) {
+      p <- p %>% add_trace(
+        x = marker$x,
+        y = marker$y,
+        name = marker$name,
+        type = "scatter",
+        mode = marker$mode,
+        marker = marker$marker,
+        text = marker$text,
+        textposition = marker$textposition,
+        textfont = marker$textfont,
+        showlegend = marker$showlegend
       )
     }
   }
