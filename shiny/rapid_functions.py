@@ -14,10 +14,10 @@ def append_to_sensor_index(sensor_info, output_dir):
     Add or replace sensor in the persistent index file.
     """
     index_file = Path(output_dir) / "uoh_sensor_index.csv"
-    sensor_config_file = Path(output_dir) / "sensor_config.txt"
+    index_config_file = Path(output_dir) / "index_config.txt"
     
     # Load sensor config
-    with open(sensor_config_file, 'r') as f:
+    with open(index_config_file, 'r') as f:
         config_lines = [line.strip() for line in f if line.strip()]
     
     # Build new row data
