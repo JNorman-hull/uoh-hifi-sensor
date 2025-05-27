@@ -26,18 +26,13 @@ plotsSidebarUI <- function(id) {
     
     hr(),
     
-    h4("Pressure Nadir Options"),
+    h4("Display Options"),
     checkboxInput(ns("show_nadir"), "Show Pressure Nadir", value = TRUE),
-    verbatimTextOutput(ns("current_nadir_display")),
-    actionButton(ns("edit_nadir_btn"), "Select Pressure Nadir", class = "btn-warning btn-sm"),
-    actionButton(ns("save_nadir_btn"), "Save Pressure Nadir", class = "btn-success btn-sm"),
-    actionButton(ns("cancel_nadir_btn"), "Cancel", class = "btn-danger btn-sm"),
-    textOutput(ns("nadir_status")),
+    checkboxInput(ns("show_legend"), "Show Legend", value = TRUE),
     
     hr(),
     
     h4("Plot Export Options"),
-    checkboxInput(ns("show_legend"), "Show Legend", value = TRUE),
     checkboxInput(ns("use_default_export"), "Use Default Export Settings", value = FALSE),
     
     conditionalPanel(
@@ -65,14 +60,6 @@ plotsSidebarUI <- function(id) {
 plotsServer <- function(id, output_dir, summary_data, processing_complete = reactive(FALSE)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
-    # Nadir editing values
-    nadir_values <- reactiveValues(
-      edit_mode = FALSE,
-      selected_point = NULL,
-      nadir_updated = 0,
-      baseline_click = NULL
-    )
     
     # Get processed sensors using shared function
     processed_sensors <- reactive({
@@ -106,219 +93,28 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
     # Nadir info using shared function with reactivity
     nadir_info <- reactive({
       req(input$plot_sensor)
-      nadir_values$nadir_updated  # Force refresh when nadir is updated
-      
       get_nadir_info(input$plot_sensor, output_dir())
     })
     
-    # Display current nadir
-    output$current_nadir_display <- renderText({
-      nadir <- nadir_info()
-      if (nadir$available) {
-        paste0("Time: ", round(nadir$time, 3), "s\nPressure: ", round(nadir$value, 2), " kPa")
-      } else {
-        "No nadir data available"
-      }
-    })
-    
-    # Button state management using shared function
-    observe({
-      button_states <- list(
-        "edit_nadir_btn" = !nadir_values$edit_mode,
-        "save_nadir_btn" = nadir_values$edit_mode,
-        "cancel_nadir_btn" = nadir_values$edit_mode
-      )
-      manage_button_states(session, button_states)
-    })
-    
-    # Edit nadir button
-    observeEvent(input$edit_nadir_btn, {
-      nadir_values$edit_mode <- TRUE
-      nadir_values$selected_point <- NULL
-      nadir_values$baseline_click <- event_data("plotly_click", source = "nadir_plot")
-    })
-    
-    # Cancel nadir button
-    observeEvent(input$cancel_nadir_btn, {
-      nadir_values$edit_mode <- FALSE
-      nadir_values$selected_point <- NULL
-    })
-    
-    # Save nadir button using shared function
-    observeEvent(input$save_nadir_btn, {
-      req(nadir_values$selected_point)
-      
-      success <- safe_update_sensor_index(
-        output_dir(), 
-        input$plot_sensor,
-        list(
-          "pres_min.time." = nadir_values$selected_point$x,
-          "pres_min.kPa." = nadir_values$selected_point$y
-        )
-      )
-      
-      if (success) {
-        nadir_values$nadir_updated <- nadir_values$nadir_updated + 1
-        nadir_values$edit_mode <- FALSE
-        nadir_values$selected_point <- NULL
-        showNotification("Nadir updated successfully!", type = "message")
-      } else {
-        showNotification("Failed to update nadir", type = "error")
-      }
-    })
-    
-    # Handle click events for nadir selection
-    observe({
-      if (nadir_values$edit_mode) {
-        click_data <- event_data("plotly_click", source = "nadir_plot")
-        if (!is.null(click_data)) {
-          # Only respond if this click is different from the baseline we stored
-          if (is.null(nadir_values$baseline_click) ||
-              click_data$x != nadir_values$baseline_click$x ||
-              click_data$y != nadir_values$baseline_click$y) {
-            nadir_values$selected_point <- list(x = click_data$x, y = click_data$y)
-          }
-        }
-      }
-    })
-    
-    # Status display
-    output$nadir_status <- renderText({
-      if (nadir_values$edit_mode) {
-        if (!is.null(nadir_values$selected_point)) {
-          paste0("Selected: ", round(nadir_values$selected_point$y, 2), " kPa at ", 
-                 round(nadir_values$selected_point$x, 3), "s")
-        } else {
-          "Edit mode: Click on plot to select nadir"
-        }
-      } else {
-        ""
-      }
-    })
-    
-    # Create the plot
+    # Create the plot using shared plotting function
     output$sensor_plot <- renderPlotly({
       sensor_data <- selected_sensor_data()
       req(sensor_data)
       
-      # Get sensor variables using shared function
-      sensor_vars <- get_sensor_variables()
+      nadir <- nadir_info()
       
-      left_var <- input$left_y_var
-      left_idx <- which(sensor_vars$names == left_var)
-      left_color <- sensor_vars$colors[left_idx]
-      left_label <- sensor_vars$labels[left_idx]
-      
-      has_right_axis <- input$right_y_var != "none"
-      right_margin <- if (has_right_axis) 80 else 30
-      
-      p <- plot_ly() %>%
-        layout(
-          title = paste("Sensor Data:", input$plot_sensor),
-          showlegend = input$show_legend,
-          margin = list(l = 80, r = right_margin, t = 50, b = 50),
-          xaxis = list(
-            title = "Time [s]",
-            showline = TRUE,
-            linecolor = "black",
-            linewidth = 1,
-            showticklabels = TRUE,
-            ticks = "outside",
-            tickcolor = "black"
-          ),
-          yaxis = list(
-            title = left_label,
-            showline = TRUE,
-            linecolor = "black",
-            linewidth = 1,
-            showticklabels = TRUE,
-            ticks = "outside",
-            tickcolor = "black"
-          )
-        )
-      
-      p <- p %>% add_trace(
-        x = sensor_data$time_s,
-        y = sensor_data[[left_var]],
-        name = left_label,
-        type = "scatter",
-        mode = "lines",
-        line = list(color = left_color)
+      # Create plot using shared function
+      p <- create_sensor_plot(
+        sensor_data = sensor_data,
+        sensor_name = input$plot_sensor,
+        plot_config = "standard",
+        left_var = input$left_y_var,
+        right_var = input$right_y_var,
+        nadir_info = nadir,
+        show_nadir = input$show_nadir,
+        show_legend = input$show_legend,
+        plot_source = "plots_nadir_plot"
       )
-      
-      if (has_right_axis) {
-        right_var <- input$right_y_var
-        right_idx <- which(sensor_vars$names == right_var)
-        right_color <- sensor_vars$colors[right_idx]
-        right_label <- sensor_vars$labels[right_idx]
-        
-        p <- p %>% layout(
-          yaxis2 = list(
-            title = right_label,
-            overlaying = "y",
-            side = "right",
-            showline = TRUE,
-            linecolor = "black",
-            linewidth = 1,
-            showticklabels = TRUE,
-            ticks = "outside",
-            tickcolor = "black"
-          )
-        )
-        
-        p <- p %>% add_trace(
-          x = sensor_data$time_s,
-          y = sensor_data[[right_var]],
-          name = right_label,
-          yaxis = "y2",
-          type = "scatter",
-          mode = "lines",
-          line = list(color = right_color)
-        )
-      }
-      
-      if (input$show_nadir) {
-        nadir <- nadir_info()
-        if (nadir$available) {
-          nadir_yaxis <- NULL
-          if (left_var == "pressure_kpa") {
-            nadir_yaxis <- "y"
-          } else if (input$right_y_var == "pressure_kpa") {
-            nadir_yaxis <- "y2"
-          }
-          
-          if (!is.null(nadir_yaxis)) {
-            p <- p %>% add_trace(
-              x = nadir$time,
-              y = nadir$value,
-              name = "Pressure Nadir",
-              type = "scatter",
-              mode = "markers+text",
-              marker = list(color = "orange", size = 10),
-              text = paste("Nadir:", round(nadir$value, 2), "kPa"),
-              textposition = "top right",
-              textfont = list(color = "orange"),
-              yaxis = nadir_yaxis
-            )
-          }
-        }
-      }
-      
-      # Add selected point if in edit mode
-      if (nadir_values$edit_mode && !is.null(nadir_values$selected_point)) {
-        p <- p %>% add_trace(
-          x = nadir_values$selected_point$x,
-          y = nadir_values$selected_point$y,
-          name = "Selected Nadir",
-          type = "scatter",
-          mode = "markers+text",
-          marker = list(color = "purple", size = 12, symbol = "diamond"),
-          text = paste("New:", round(nadir_values$selected_point$y, 2), "kPa"),
-          textposition = "top center",
-          textfont = list(color = "purple"),
-          showlegend = FALSE
-        )
-      }
       
       # Configure export settings
       if (input$use_default_export) {
@@ -341,9 +137,6 @@ plotsServer <- function(id, output_dir, summary_data, processing_complete = reac
             )
           )
       }
-      
-      p$x$source <- "nadir_plot"
-      p <- p %>% event_register("plotly_click")
       
       return(p)
     })

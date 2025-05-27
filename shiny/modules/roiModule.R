@@ -12,6 +12,10 @@ roiUI <- function(id) {
 roiSidebarUI <- function(id) {
   ns <- NS(id)
   
+  # Get sensor variables for dropdown choices
+  sensor_vars <- get_sensor_variables()
+  var_choices <- setNames(sensor_vars$names, sensor_vars$labels)
+  
   tagList(
     h4("ROI Delineation Options"),
     selectInput(ns("plot_sensor"), "Select Sensor:", choices = NULL),
@@ -19,33 +23,52 @@ roiSidebarUI <- function(id) {
     div(style = "margin-bottom: 15px;",
         textOutput(ns("delineation_status"))
     ),
-      hr(),
-      h4("ROI Configuration"),
-      selectInput(ns("config_choice"), "Configuration:", choices = NULL),
-      
-      div(style = "max-height: 180px; overflow-y: auto; margin-bottom: 15px;",
-          DT::dataTableOutput(ns("roi_table"))
-      ),
-      
-      actionButton(ns("create_delineated"), "Create delineated dataset", 
-                   class = "btn-primary btn-block"),
-      actionButton(ns("start_over"), "Start Over", 
-                   class = "btn-warning btn-block"),
-      actionButton(ns("trim_sensor"), "Trim sensor start and end", 
-                   class = "btn-danger btn-block"),
-      
-      hr(),
-      h4("Passage times"),
-      
-      actionButton(ns("passage_time"), "Calculate passage times", 
-                   class = "btn-primary btn-block"),
-      
-      hr(),
-      h4("Time normalization"),
-      
-      actionButton(ns("normalize_time"), "Normalize time series", 
-                   class = "btn-primary btn-block")
-    )
+    
+    hr(),
+    h4("Plot Axis Options"),
+    selectInput(ns("left_y_var"), "Left Y-Axis:",
+                choices = var_choices,
+                selected = "pressure_kpa"),
+    selectInput(ns("right_y_var"), "Right Y-Axis:",
+                choices = c("None" = "none", var_choices),
+                selected = "higacc_mag_g"),
+    
+    hr(),
+    h4("Pressure Nadir Options"),
+    checkboxInput(ns("show_nadir"), "Show Pressure Nadir", value = TRUE),
+    verbatimTextOutput(ns("current_nadir_display")),
+    actionButton(ns("edit_nadir_btn"), "Select Pressure Nadir", class = "btn-warning btn-sm"),
+    actionButton(ns("save_nadir_btn"), "Save Pressure Nadir", class = "btn-success btn-sm"),
+    actionButton(ns("cancel_nadir_btn"), "Cancel", class = "btn-danger btn-sm"),
+    textOutput(ns("nadir_status")),
+    
+    hr(),
+    h4("ROI Configuration"),
+    selectInput(ns("config_choice"), "Configuration:", choices = NULL),
+    
+    div(style = "max-height: 180px; overflow-y: auto; margin-bottom: 15px;",
+        DT::dataTableOutput(ns("roi_table"))
+    ),
+    
+    actionButton(ns("create_delineated"), "Create delineated dataset", 
+                 class = "btn-primary btn-block"),
+    actionButton(ns("start_over"), "Start Over", 
+                 class = "btn-warning btn-block"),
+    actionButton(ns("trim_sensor"), "Trim sensor start and end", 
+                 class = "btn-danger btn-block"),
+    
+    hr(),
+    h4("Passage times"),
+    
+    actionButton(ns("passage_time"), "Calculate passage times", 
+                 class = "btn-primary btn-block"),
+    
+    hr(),
+    h4("Time normalization"),
+    
+    actionButton(ns("normalize_time"), "Normalize time series", 
+                 class = "btn-primary btn-block")
+  )
 }
 
 roiServer <- function(id, output_dir, summary_data, processing_complete = reactive(FALSE)) {
@@ -58,6 +81,14 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       current_config = NULL,
       summary_updated = 0,
       data_updated = 0
+    )
+    
+    # Nadir editing values (moved from plots module)
+    nadir_values <- reactiveValues(
+      edit_mode = FALSE,
+      selected_point = NULL,
+      nadir_updated = 0,
+      baseline_click = NULL
     )
     
     # Get processed sensors using shared function
@@ -103,7 +134,18 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     nadir_info <- reactive({
       req(input$plot_sensor)
       roi_values$summary_updated  # Add reactivity to catch nadir updates
+      nadir_values$nadir_updated  # Force refresh when nadir is updated
       get_nadir_info(input$plot_sensor, output_dir())
+    })
+    
+    # Display current nadir (moved from plots module)
+    output$current_nadir_display <- renderText({
+      nadir <- nadir_info()
+      if (nadir$available) {
+        paste0("Time: ", round(nadir$time, 3), "s\nPressure: ", round(nadir$value, 2), " kPa")
+      } else {
+        "No nadir data available"
+      }
     })
     
     # Output for conditional panel
@@ -164,7 +206,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       "))
     })
     
-    # Manage button states using shared function
+    # Button state management using shared function (including nadir editing buttons)
     observe({
       req(input$plot_sensor)
       
@@ -174,10 +216,79 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       button_states <- list(
         "create_delineated" = nadir$available && !status$delineated,
         "start_over" = status$delineated,
-        "trim_sensor" = status$delineated && !status$trimmed
+        "trim_sensor" = status$delineated && !status$trimmed,
+        "edit_nadir_btn" = !nadir_values$edit_mode,
+        "save_nadir_btn" = nadir_values$edit_mode,
+        "cancel_nadir_btn" = nadir_values$edit_mode
       )
       
       manage_button_states(session, button_states)
+    })
+    
+    # Nadir editing functionality (moved from plots module)
+    # Edit nadir button
+    observeEvent(input$edit_nadir_btn, {
+      nadir_values$edit_mode <- TRUE
+      nadir_values$selected_point <- NULL
+      nadir_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
+    })
+    
+    # Cancel nadir button
+    observeEvent(input$cancel_nadir_btn, {
+      nadir_values$edit_mode <- FALSE
+      nadir_values$selected_point <- NULL
+    })
+    
+    # Save nadir button using shared function
+    observeEvent(input$save_nadir_btn, {
+      req(nadir_values$selected_point)
+      
+      success <- safe_update_sensor_index(
+        output_dir(), 
+        input$plot_sensor,
+        list(
+          "pres_min.time." = nadir_values$selected_point$x,
+          "pres_min.kPa." = nadir_values$selected_point$y
+        )
+      )
+      
+      if (success) {
+        nadir_values$nadir_updated <- nadir_values$nadir_updated + 1
+        nadir_values$edit_mode <- FALSE
+        nadir_values$selected_point <- NULL
+        showNotification("Nadir updated successfully!", type = "message")
+      } else {
+        showNotification("Failed to update nadir", type = "error")
+      }
+    })
+    
+    # Handle click events for nadir selection
+    observe({
+      if (nadir_values$edit_mode) {
+        click_data <- event_data("plotly_click", source = "roi_nadir_plot")
+        if (!is.null(click_data)) {
+          # Only respond if this click is different from the baseline we stored
+          if (is.null(nadir_values$baseline_click) ||
+              click_data$x != nadir_values$baseline_click$x ||
+              click_data$y != nadir_values$baseline_click$y) {
+            nadir_values$selected_point <- list(x = click_data$x, y = click_data$y)
+          }
+        }
+      }
+    })
+    
+    # Status display for nadir editing
+    output$nadir_status <- renderText({
+      if (nadir_values$edit_mode) {
+        if (!is.null(nadir_values$selected_point)) {
+          paste0("Selected: ", round(nadir_values$selected_point$y, 2), " kPa at ", 
+                 round(nadir_values$selected_point$x, 3), "s")
+        } else {
+          "Edit mode: Click on plot to select nadir"
+        }
+      } else {
+        ""
+      }
     })
     
     # Calculate ROI times
@@ -493,7 +604,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       return(read_sensor_data(output_dir(), input$plot_sensor, "min"))
     })
     
-    # Create ROI plot
+    # Create ROI plot using shared plotting function
     output$roi_plot <- renderPlotly({
       sensor_data <- selected_sensor_data()
       req(sensor_data)
@@ -503,84 +614,30 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       times <- roi_times()
       
-      # Fixed configuration: pressure (left), HIG acceleration (right)
-      p <- plot_ly() %>%
-        layout(
-          title = paste("ROI Delineated:", input$plot_sensor),
-          showlegend = FALSE,
-          margin = list(l = 80, r = 80, t = 50, b = 50),
-          xaxis = list(
-            title = "Time [s]",
-            showline = TRUE,
-            linecolor = "black",
-            linewidth = 1
-          ),
-          yaxis = list(
-            title = "Pressure [kPa]",
-            showline = TRUE,
-            linecolor = "black",
-            linewidth = 1
-          ),
-          yaxis2 = list(
-            title = "HIG Acceleration [g]",
-            overlaying = "y",
-            side = "right",
-            showline = TRUE,
-            linecolor = "black",
-            linewidth = 1
-          )
-        )
+      # Prepare ROI boundaries for plotting
+      roi_boundaries <- if (!is.null(times)) times$boundaries else NULL
       
-      # Add pressure trace
-      p <- p %>% add_trace(
-        x = sensor_data$time_s,
-        y = sensor_data$pressure_kpa,
-        name = "Pressure [kPa]",
-        type = "scatter",
-        mode = "lines",
-        line = list(color = "black")
-      )
-      
-      # Add HIG acceleration trace
-      p <- p %>% add_trace(
-        x = sensor_data$time_s,
-        y = sensor_data$higacc_mag_g,
-        name = "HIG Acceleration [g]",
-        yaxis = "y2",
-        type = "scatter",
-        mode = "lines",
-        line = list(color = "red")
-      )
-      
-      # Add pressure nadir
-      p <- p %>% add_trace(
-        x = nadir$time,
-        y = nadir$value,
-        name = "Pressure Nadir",
-        type = "scatter",
-        mode = "markers+text",
-        marker = list(color = "orange", size = 10),
-        text = paste("Nadir:", round(nadir$value, 2), "kPa"),
-        textposition = "top right",
-        textfont = list(color = "orange")
-      )
-      
-      # Add ROI boundary lines if we have ROI times
-      if (!is.null(times)) {
-        roi_labels <- c("", "ROI 1", "ROI 2", "ROI 3", "ROI 4", "ROI 5", "")
-        
-        for (i in 2:7) {  # Skip first and last boundaries (data start/end)
-          p <- p %>% add_segments(
-            x = times$boundaries[i], xend = times$boundaries[i],
-            y = min(sensor_data$pressure_kpa), 
-            yend = max(sensor_data$pressure_kpa),
-            line = list(color = "blue", width = 2, dash = "dash"),
-            showlegend = FALSE,
-            hoverinfo = "text",
-            text = paste(roi_labels[i])
-          )
-        }
+      # Prepare selected nadir point for editing mode
+      selected_nadir <- if (nadir_values$edit_mode && !is.null(nadir_values$selected_point)) {
+        nadir_values$selected_point
+      } else {
+        NULL
       }
+      
+      # Create plot using shared function
+      p <- create_sensor_plot(
+        sensor_data = sensor_data,
+        sensor_name = input$plot_sensor,
+        plot_config = "roi_delineation",
+        left_var = input$left_y_var,
+        right_var = input$right_y_var,
+        nadir_info = nadir,
+        show_nadir = input$show_nadir,
+        selected_nadir = selected_nadir,
+        roi_boundaries = roi_boundaries,
+        show_legend = FALSE,
+        plot_source = "roi_nadir_plot"
+      )
       
       return(p)
     })
