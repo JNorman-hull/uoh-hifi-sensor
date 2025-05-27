@@ -304,20 +304,26 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       config <- roi_values$current_config
       
       # Calculate ROI boundaries based on nadir time
-      roi3_start <- nadir_time - (config$roi3_nadir / 2)
-      roi3_end <- nadir_time + (config$roi3_nadir / 2)
+      roi4_start <- nadir_time - (config$roi4_nadir / 2)
+      roi4_end <- nadir_time + (config$roi4_nadir / 2)
       
-      roi2_start <- roi3_start - config$roi2_prenadir
+      roi3_start <- roi4_start - config$roi3_prenadir
+      roi3_end <- roi4_start
+      
+      roi2_start <- roi3_start - config$roi2_inflow_passage
       roi2_end <- roi3_start
       
-      roi1_start <- roi2_start - config$roi1_ingress
+      roi1_start <- roi2_start - config$roi1_sens_ingress
       roi1_end <- roi2_start
       
-      roi4_start <- roi3_end
-      roi4_end <- roi3_end + config$roi4_postnadir
-      
       roi5_start <- roi4_end
-      roi5_end <- roi4_end + config$roi5_outgress
+      roi5_end <- roi4_end + config$roi5_postnadir
+      
+      roi6_start <- roi5_end
+      roi6_end <- roi5_end + config$roi6_outflow_passage
+      
+      roi7_start <- roi6_end
+      roi7_end <- roi6_end + config$roi7_sens_outgress
       
       # Read sensor data to get actual start/end times
       sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "min")
@@ -326,36 +332,43 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         data_end <- max(sensor_data$time_s)
         
         roi_times_df <- data.frame(
-          ROI = c("Sensor start trim", "ROI 1: Ingress", "ROI 2: Pre-nadir", 
-                  "ROI 3: Nadir", "ROI 4: Post-nadir", "ROI 5: Outgress", "Sensor end trim"),
+          ROI = c("Sensor start trim", "ROI 1: Sensor ingress", "ROI 2: Inflow passage", 
+                  "ROI 3: Pre-nadir", "ROI 4: Nadir", "ROI 5: Post-nadir", 
+                  "ROI 6: Outflow passage", "ROI 7: Sensor outgress", "Sensor end trim"),
           `Start time` = c(paste(round(data_start, 3), "s"),
                            paste(round(roi1_start, 3), "s"),
                            paste(round(roi2_start, 3), "s"),
                            paste(round(roi3_start, 3), "s"),
                            paste(round(roi4_start, 3), "s"),
                            paste(round(roi5_start, 3), "s"),
-                           paste(round(roi5_end, 3), "s")),
+                           paste(round(roi6_start, 3), "s"),
+                           paste(round(roi7_start, 3), "s"),
+                           paste(round(roi7_end, 3), "s")),
           `End Time` = c(paste(round(roi1_start, 3), "s"),
                          paste(round(roi1_end, 3), "s"),
                          paste(round(roi2_end, 3), "s"),
                          paste(round(roi3_end, 3), "s"),
                          paste(round(roi4_end, 3), "s"),
                          paste(round(roi5_end, 3), "s"),
+                         paste(round(roi6_end, 3), "s"),
+                         paste(round(roi7_end, 3), "s"),
                          paste(round(data_end, 3), "s")),
           Duration = c(paste(round(roi1_start - data_start, 3), "s"),
-                       paste(round(config$roi1_ingress, 3), "s"),
-                       paste(round(config$roi2_prenadir, 3), "s"),
-                       paste(round(config$roi3_nadir, 3), "s"),
-                       paste(round(config$roi4_postnadir, 3), "s"),
-                       paste(round(config$roi5_outgress, 3), "s"),
-                       paste(round(data_end - roi5_end, 3), "s")),
+                       paste(round(config$roi1_sens_ingress, 3), "s"),
+                       paste(round(config$roi2_inflow_passage, 3), "s"),
+                       paste(round(config$roi3_prenadir, 3), "s"),
+                       paste(round(config$roi4_nadir, 3), "s"),
+                       paste(round(config$roi5_postnadir, 3), "s"),
+                       paste(round(config$roi6_outflow_passage, 3), "s"),
+                       paste(round(config$roi7_sens_outgress, 3), "s"),
+                       paste(round(data_end - roi7_end, 3), "s")),
           check.names = FALSE
         )
         
         return(list(
           table = roi_times_df,
           boundaries = c(data_start, roi1_start, roi2_start, roi3_start, 
-                         roi4_start, roi5_start, roi5_end, data_end)
+                         roi4_start, roi5_start, roi6_start, roi7_start, roi7_end, data_end)
         ))
       }
       
@@ -548,8 +561,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         
         sensor_data$roi <- cut(sensor_data$time_s, 
                                breaks = boundaries,
-                               labels = c("trim_start", "roi1_ingress", "roi2_prenadir", 
-                                          "roi3_nadir", "roi4_postnadir", "roi5_outgress", "trim_end"),
+                               labels = c("trim_start", "roi1_sens_ingress", "roi2_inflow_passage", 
+                                          "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                                          "roi6_outflow_passage", "roi7_sens_outgress", "trim_end"),
                                include.lowest = TRUE, right = FALSE)
         
         # Save delineated file

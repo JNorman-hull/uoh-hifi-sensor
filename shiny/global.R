@@ -219,17 +219,19 @@ load_roi_configs <- function(output_dir) {
     
     for (line in config_lines) {
       if (nchar(trimws(line)) > 0 && !startsWith(trimws(line), "#")) {
-        # Parse: Config_name, 1.1, 0.3, 0.2, 0.3, 1.1
+        # Parse: Config_name, 0.1, 1.1, 0.3, 0.2, 0.3, 1.1, 0.1
         parts <- trimws(strsplit(line, ",")[[1]])
-        if (length(parts) == 6) {
+        if (length(parts) == 8) {
           config_name <- parts[1]
           config_list[[config_name]] <- list(
             label = config_name,
-            roi1_ingress = as.numeric(parts[2]),
-            roi2_prenadir = as.numeric(parts[3]),
-            roi3_nadir = as.numeric(parts[4]),
-            roi4_postnadir = as.numeric(parts[5]),
-            roi5_outgress = as.numeric(parts[6])
+            roi1_sens_ingress = as.numeric(parts[2]),
+            roi2_inflow_passage = as.numeric(parts[3]),
+            roi3_prenadir = as.numeric(parts[4]),
+            roi4_nadir = as.numeric(parts[5]),
+            roi5_postnadir = as.numeric(parts[6]),
+            roi6_outflow_passage = as.numeric(parts[7]),
+            roi7_sens_outgress = as.numeric(parts[8])
           )
         }
       }
@@ -425,9 +427,9 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
   
   # Add ROI boundary lines if provided
   if (!is.null(roi_boundaries)) {
-    roi_labels <- c("", "ROI 1", "ROI 2", "ROI 3", "ROI 4", "ROI 5", "")
+    roi_labels <- c("", "ROI 1", "ROI 2", "ROI 3", "ROI 4", "ROI 5", "ROI 6", "ROI 7", "")
     
-    for (i in 2:7) {  # Skip first and last boundaries (data start/end)
+    for (i in 2:9) {  # Skip first and last boundaries (data start/end)
       p <- p %>% add_segments(
         x = roi_boundaries[i], xend = roi_boundaries[i],
         y = min(sensor_data[[left_var]]), 
