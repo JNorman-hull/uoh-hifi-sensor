@@ -6,9 +6,6 @@ from scipy.interpolate import interp1d
 from pathlib import Path
 from datetime import datetime
 
-from matplotlib import pyplot as plt
-plt.style.use("seaborn-v0_8-whitegrid")
-
 def append_to_sensor_index(sensor_info, output_dir):
     """
     Add or replace sensor in the persistent index file.
@@ -334,9 +331,6 @@ def process_imp_hig_direct(imp_filename, hig_filename, output_dir):
     # Create and save minimal CSV
     minimal_data = create_minimal_csv(combined_data, base_filename, output_path)
     
-    # Create overview plot using minimal data
-    plot_combined_overview(minimal_data, base_filename, output_path)
-    
     return combined_data, {**file_info, **summary_info}
 
 def post_process_combined(data):
@@ -429,96 +423,3 @@ def create_minimal_csv(data, filename, output_dir):
     minimal_data.to_csv(output_file, index=False)
 
     return minimal_data
-  
-def plot_combined_overview(minimal_data, filename, output_dir, save=True, show=False):
-    """
-    Create a 3-panel plot showing pressure with HIG acceleration, inertial acceleration, 
-    and rotational magnitude.
-    
-    Parameters
-    ----------
-    minimal_data : pd.DataFrame
-        The minimal dataset
-    filename : str or Path
-        Filename to use for saving the plot
-    output_dir : str or Path
-        Directory to save the plot
-    save : bool, optional
-        Whether to save the plot, by default True
-    show : bool, optional
-        Whether to show the plot, by default False
-    """
-    # Get data for plotting
-    t = minimal_data["time_s"]
-    pres = minimal_data["pressure_kpa"]
-    hig_acc = minimal_data["higacc_mag_g"]
-    inert_acc = minimal_data["inacc_mag_ms"]
-    rot_mag = minimal_data["rot_mag_degs"]
-    
-    # Create figure with 3 vertically stacked subplots
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(25, 15), sharex=True)
-    
-    # Panel 1: Pressure and HIG Acceleration
-    # Primary y-axis (pressure)
-    ax1.set_ylabel("Pressure [kPa]", color='black')
-    ax1.plot(t, pres, color='black', linewidth=1.5)
-    ax1.tick_params(axis='y', labelcolor='black')
-    ax1.ticklabel_format(useOffset=False)
-    ax1.grid(True, alpha=0.3)
-    
-    # Secondary y-axis (HIG acceleration)
-    ax1_twin = ax1.twinx()
-    ax1_twin.set_ylabel("HIG Acceleration [g]", color='red')
-    ax1_twin.plot(t, hig_acc, color='red', linewidth=1.2)
-    ax1_twin.tick_params(axis='y', labelcolor='red')
-    
-    # Panel 2: Pressure and Inertial Acceleration
-    # Primary y-axis (pressure)
-    ax2.set_ylabel("Pressure [kPa]", color='black')
-    ax2.plot(t, pres, color='black', linewidth=1.5)
-    ax2.tick_params(axis='y', labelcolor='black')
-    ax2.ticklabel_format(useOffset=False)
-    ax2.grid(True, alpha=0.3)
-    
-    # Secondary y-axis (inertial acceleration)
-    ax2_twin = ax2.twinx()
-    ax2_twin.set_ylabel("Inertial Acceleration [m/s²]", color='blue')
-    ax2_twin.plot(t, inert_acc, color='blue', linewidth=1.2)
-    ax2_twin.tick_params(axis='y', labelcolor='blue')
-    
-    # Panel 3: Pressure and Rotational Magnitude
-    # Primary y-axis (pressure)
-    ax3.set_ylabel("Pressure [kPa]", color='black')
-    ax3.plot(t, pres, color='black', linewidth=1.5)
-    ax3.tick_params(axis='y', labelcolor='black')
-    ax3.ticklabel_format(useOffset=False)
-    ax3.grid(True, alpha=0.3)
-    
-    # Secondary y-axis (rotational magnitude)
-    ax3_twin = ax3.twinx()
-    ax3_twin.set_ylabel("Rotational Magnitude [deg/s]", color='green')
-    ax3_twin.plot(t, rot_mag, color='green', linewidth=1.2)
-    ax3_twin.tick_params(axis='y', labelcolor='green')
-    
-    # Set common x-axis label
-    ax3.set_xlabel("Time [s]")
-    
-    # Add title
-    fig.suptitle(f"RAPID: {filename}", fontsize=16)
-    
-    # Adjust layout for better spacing
-    plt.tight_layout()
-    plt.subplots_adjust(top=0.95)
-    
-    # Save and/or show the plot
-    if save:
-        plots_dir = Path(output_dir) / "plots"
-        plots_dir.mkdir(parents=True, exist_ok=True)
-        
-        output_file = plots_dir / f"{filename}_overview.png"
-        plt.savefig(output_file, dpi=150)
-        
-    if show:
-        plt.show()
-        
-    plt.close()
