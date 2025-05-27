@@ -21,7 +21,7 @@ server <- function(input, output, session) {
   # Initialize modules
   file_selection <- fileSelectionServer("file_selection", raw_data_path, output_dir, processing$processing_complete)
   processing <- processingServer("processing", file_selection$selected_sensors, raw_data_path, output_dir)
-  resultsServer("results", processing$summary_data, processing$processing_complete)
+  resultsServer("results", processing$newly_processed_sensors, processing$processing_complete)
   plotsServer("plots", output_dir, processing$summary_data, processing$processing_complete)
   roiServer("roi", output_dir, processing$summary_data, processing$processing_complete)
   

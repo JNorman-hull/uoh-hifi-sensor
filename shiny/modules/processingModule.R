@@ -16,9 +16,10 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       log_messages = character(0),
       summary_data = NULL,
       is_processing = FALSE,
-      processing_complete = FALSE
+      processing_complete = FALSE,
+      sensors_before_processing = character(0),
+      sensors_actually_processed = character(0)  # Add this line
     )
-    
     # Display processing log
     output$process_log <- renderText({
       paste(values$log_messages, collapse = "\n")
@@ -53,36 +54,55 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       }
     })
     
+    # Get newly processed sensors by comparing before/after
+    newly_processed_sensors <- reactive({
+      req(values$processing_complete)
+      
+      # Return the sensors we captured at processing time
+      return(values$sensors_actually_processed)
+    })
+    
+    # Move the actual processing logic to a separate function
     start_processing <- function() {
-      # Set processing state FIRST
+      values$sensors_actually_processed <- selected_sensors()  
+      
+      # Snapshot sensors before processing
+      index_file <- get_sensor_index_file(output_dir())
+      if (!is.null(index_file) && file.exists(index_file)) {
+        tryCatch({
+          index_df <- read.csv(index_file)
+          values$sensors_before_processing <- index_df$file
+        }, error = function(e) {
+          values$sensors_before_processing <- character(0)
+        })
+      } else {
+        values$sensors_before_processing <- character(0)
+      }
+      
+      # Set processing state
       values$is_processing <- TRUE
       values$processing_complete <- FALSE
       values$summary_data <- NULL
       values$log_messages <- character(0)
       
-      # Allow UI to update by yielding control back to Shiny
-      shiny::invalidateLater(50, session)
+      # Small delay to allow UI to update
+      Sys.sleep(0.1)
       
-      # Use observe to continue processing after UI updates
-      shiny::observeEvent(shiny::reactiveTimer(100)(), {
-        if (values$is_processing && length(values$log_messages) == 0) {
-          # Process in step-by-step manner
-          result <- process_sensors_step_by_step(
-            selected_sensors(), 
-            raw_data_path(), 
-            output_dir(),
-            session
-          )
-          
-          # Update after completion
-          values$log_messages <- result$log_messages
-          values$processing_complete <- TRUE
-          values$is_processing <- FALSE
-          
-          # Send completion notification
-          session$sendCustomMessage("processingComplete", list(success = TRUE))
-        }
-      }, once = TRUE)
+      # Process in step-by-step manner
+      result <- process_sensors_step_by_step(
+        selected_sensors(), 
+        raw_data_path(), 
+        output_dir(),
+        session
+      )
+      
+      # Update after completion
+      values$log_messages <- result$log_messages
+      values$processing_complete <- TRUE
+      values$is_processing <- FALSE
+      
+      # Send completion notification
+      session$sendCustomMessage("processingComplete", list(success = TRUE))
     }
     
     # Process sensors function
@@ -142,6 +162,7 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       processing_complete = reactive(values$processing_complete),
       is_processing = reactive(values$is_processing),
       log_messages = reactive(values$log_messages),
+      newly_processed_sensors = newly_processed_sensors,
       process_sensors = process_sensors
     ))
   })

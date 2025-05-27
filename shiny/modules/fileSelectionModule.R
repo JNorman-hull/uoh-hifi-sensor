@@ -60,7 +60,6 @@ fileSelectionServer <- function(id, raw_data_path, output_dir = NULL, processing
         return(character(0))
       })
     })
-    
     # Initialize sensor data once (simplified but keep functionality)
     observe({
       req(raw_data_path())

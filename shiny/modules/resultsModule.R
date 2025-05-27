@@ -2,42 +2,79 @@ resultsUI <- function(id) {
   ns <- NS(id)
   
   tagList(
-    h3("Processing Results"),
+    h3("Recently Processed Sensors"),
     DT::dataTableOutput(ns("results_table"))
   )
 }
 
-resultsServer <- function(id, summary_data, processing_complete) {
+resultsServer <- function(id, newly_processed_sensors, processing_complete) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # Display results table
-    output$results_table <- DT::renderDataTable({
+    # Create sensor data for newly processed sensors only
+    results_data <- reactive({
       req(processing_complete())
-      req(length(summary_data()) > 0)
+      processed <- newly_processed_sensors()
       
-      # Convert the list of dictionaries to an R data frame
-      summary_df <- do.call(rbind, lapply(summary_data(), function(x) {
-        df <- as.data.frame(x, stringsAsFactors = FALSE)
-        
-        # Reorder to put 'file' first
-        col_order <- c("file", setdiff(names(df), "file"))
-        df[, col_order]
-      }))
+      if (length(processed) == 0) return(NULL)
       
-      # If conversion worked and we have data, display it
-      if (is.data.frame(summary_df) && nrow(summary_df) > 0) {
-        DT::datatable(
-          summary_df,
-          options = list(
-            pageLength = 10,
-            scrollX = TRUE
+      # Get sensor info for processed sensors
+      sensor_info <- map(processed, function(name) {
+        tryCatch({
+          py$parse_filename_info(name)
+        }, error = function(e) {
+          list(
+            sensor = if(nchar(name) >= 3) substr(name, 1, 3) else name,
+            date_deploy = "Unknown",
+            time_deploy = "Unknown"
           )
-        )
-      } else {
-        # If conversion failed, show a message
-        return(NULL)
+        })
+      })
+      
+      tibble(
+        No. = seq_along(processed),
+        Filename = processed,
+        Sensor = map_chr(sensor_info, "sensor"),
+        Date = map_chr(sensor_info, "date_deploy"),
+        Time = map_chr(sensor_info, "time_deploy")
+      )
+    })
+    
+    # Display results table with green highlighting
+    output$results_table <- DT::renderDataTable({
+      data <- results_data()
+      
+      if (is.null(data) || nrow(data) == 0) {
+        return(DT::datatable(
+          data.frame(Message = "No sensors processed in this session yet"), 
+          options = list(dom = 't', ordering = FALSE),
+          rownames = FALSE
+        ))
       }
+      
+      DT::datatable(
+        data,
+        selection = 'none',
+        options = list(
+          pageLength = 15,
+          scrollX = TRUE,
+          scrollY = "400px",
+          dom = 'tip',
+          columnDefs = list(
+            list(width = '60px', targets = 0),
+            list(width = '200px', targets = 1),
+            list(width = '80px', targets = 2:4)
+          )
+        ),
+        rownames = FALSE,
+        class = 'cell-border stripe'
+      ) %>%
+        DT::formatStyle(columns = 1:5, fontSize = '14px') %>%
+        DT::formatStyle(
+          columns = 1:5,
+          target = 'row',
+          backgroundColor = 'lightgreen'
+        )
     })
   })
 }
