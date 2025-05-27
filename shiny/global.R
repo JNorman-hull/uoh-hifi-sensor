@@ -333,7 +333,7 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
                                nadir_info = NULL, show_nadir = TRUE,
                                selected_nadir = NULL, roi_boundaries = NULL,
                                show_legend = TRUE, plot_source = "sensor_plot",
-                               custom_roi_markers = NULL) {
+                               suppress_roi_lines = FALSE) {
   
   # Get configuration
   config <- get_default_plot_config(plot_config)
@@ -465,7 +465,7 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
   }
   
   # Add ROI boundary lines if provided
-  if (!is.null(roi_boundaries)) {
+  if (!is.null(roi_boundaries) && !suppress_roi_lines) {
     roi_labels <- c("", "ROI 1", "ROI 2", "ROI 3", "ROI 4", "ROI 5", "ROI 6", "ROI 7", "")
     
     for (i in 2:9) {  # Skip first and last boundaries (data start/end)
@@ -481,24 +481,7 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
     }
   }
   
-  # Add custom ROI markers if provided
-  if (!is.null(custom_roi_markers)) {
-    for (marker in custom_roi_markers) {
-      p <- p %>% add_trace(
-        x = marker$x,
-        y = marker$y,
-        name = marker$name,
-        type = "scatter",
-        mode = marker$mode,
-        marker = marker$marker,
-        text = marker$text,
-        textposition = marker$textposition,
-        textfont = marker$textfont,
-        showlegend = marker$showlegend
-      )
-    }
-  }
-  
+
   # Set plot source for event handling
   p$x$source <- plot_source
   p <- p %>% event_register("plotly_click")

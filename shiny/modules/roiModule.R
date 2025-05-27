@@ -58,12 +58,12 @@ roiSidebarUI <- function(id) {
                    value = 0.4, min = 0.1, max = 2.0, step = 0.1),
       
       # Sequential ROI boundary buttons
-      actionButton(ns("roi1_start"), "Select ROI 1 START", class = "btn-sm btn-primary"),
-      actionButton(ns("roi2_start"), "Select ROI 2 START", class = "btn-sm btn-primary"),
-      actionButton(ns("roi3_start"), "Select ROI 3 START", class = "btn-sm btn-primary"),
-      actionButton(ns("roi5_end"), "Select ROI 5 END", class = "btn-sm btn-primary"),
-      actionButton(ns("roi6_end"), "Select ROI 6 END", class = "btn-sm btn-primary"),
-      actionButton(ns("roi7_end"), "Select ROI 7 END", class = "btn-sm btn-primary"),
+      actionButton(ns("roi1_start"), "Mark ROI 1 start", class = "btn-sm btn-primary"),
+      actionButton(ns("roi2_start"), "Mark ROI 2 start", class = "btn-sm btn-primary"),
+      actionButton(ns("roi3_start"), "Mark ROI 3 start", class = "btn-sm btn-primary"),
+      actionButton(ns("roi5_end"), "Mark ROI 5 end", class = "btn-sm btn-primary"),
+      actionButton(ns("roi6_end"), "Mark ROI 6 end", class = "btn-sm btn-primary"),
+      actionButton(ns("roi7_end"), "Mark ROI 7 end", class = "btn-sm btn-primary"),
       
       textOutput(ns("custom_roi_status"))
     ),
@@ -412,10 +412,10 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         if (!is.null(custom_roi_values$pending_point)) {
           paste0("Selected time: ", round(custom_roi_values$pending_point$x, 3), "s")
         } else if (custom_roi_values$current_roi_step == 0) {
-          "Click plot to select ROI 1 START"
+          "Click plot to mark ROI 1 start"
         } else if (custom_roi_values$current_roi_step < 6) {
-          step_names <- c("ROI 2 START", "ROI 3 START", "ROI 5 END", "ROI 6 END", "ROI 7 END")
-          paste0("Click plot to select ", step_names[custom_roi_values$current_roi_step])
+          step_names <- c("ROI 2 start", "ROI 3 start", "ROI 5 end", "ROI 6 end", "ROI 7 end")
+          paste0("Click plot to mark ", step_names[custom_roi_values$current_roi_step])
         } else {
           "All boundaries selected. Click Save to create configuration."
         }
@@ -818,57 +818,17 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       req(nadir$available)
       
       times <- roi_times()
-      
-      # Prepare ROI boundaries for plotting
       roi_boundaries <- if (!is.null(times)) times$boundaries else NULL
       
-      # Prepare selected nadir point for editing mode
       selected_nadir <- if (nadir_values$edit_mode && !is.null(nadir_values$selected_point)) {
         nadir_values$selected_point
       } else {
         NULL
       }
       
-      # Prepare custom ROI markers
-      custom_roi_markers <- NULL
-      if (custom_roi_values$custom_edit_mode) {
-        custom_roi_markers <- list()
-        
-        # Add selected boundaries
-        for (boundary_name in names(custom_roi_values$selected_boundaries)) {
-          boundary_time <- custom_roi_values$selected_boundaries[[boundary_name]]
-          boundary_label <- gsub("_", " ", toupper(boundary_name))
-          
-          custom_roi_markers[[length(custom_roi_markers) + 1]] <- list(
-            x = boundary_time,
-            y = max(sensor_data[[input$left_y_var]]) * 0.9,
-            name = boundary_label,
-            mode = "markers+text",
-            marker = list(color = "purple", size = 8, symbol = "triangle-up"),
-            text = boundary_label,
-            textposition = "top center",
-            textfont = list(color = "purple", size = 10),
-            showlegend = FALSE
-          )
-        }
-        
-        # Add pending selection point
-        if (!is.null(custom_roi_values$pending_point)) {
-          custom_roi_markers[[length(custom_roi_markers) + 1]] <- list(
-            x = custom_roi_values$pending_point$x,
-            y = max(sensor_data[[input$left_y_var]]) * 0.85,
-            name = "Pending Selection",
-            mode = "markers",
-            marker = list(color = "green", size = 10, symbol = "circle-open"),
-            text = "",
-            textposition = "top center",
-            textfont = list(),
-            showlegend = FALSE
-          )
-        }
-      }
+      suppress_roi_lines <- isTRUE(custom_roi_values$custom_edit_mode)
       
-      # Create plot using shared function
+      # Create base plot
       p <- create_sensor_plot(
         sensor_data = sensor_data,
         sensor_name = input$plot_sensor,
@@ -881,8 +841,45 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         roi_boundaries = roi_boundaries,
         show_legend = FALSE,
         plot_source = "roi_nadir_plot",
-        custom_roi_markers = custom_roi_markers
+        suppress_roi_lines = suppress_roi_lines
       )
+      
+      # Add vertical lines for ROI edit mode
+      if (custom_roi_values$custom_edit_mode &&
+          !is.null(input$left_y_var) &&
+          input$left_y_var %in% names(sensor_data)) {
+        
+        y_min <- min(sensor_data[[input$left_y_var]], na.rm = TRUE)
+        y_max <- max(sensor_data[[input$left_y_var]], na.rm = TRUE)
+        
+        # Add custom boundary lines (purple)
+        for (boundary_name in names(custom_roi_values$selected_boundaries)) {
+          boundary_time <- custom_roi_values$selected_boundaries[[boundary_name]]
+          boundary_label <- gsub("_", " ", toupper(boundary_name))
+          
+          p <- p %>% add_segments(
+            x = boundary_time, xend = boundary_time,
+            y = y_min, yend = y_max,
+            line = list(color = "purple", width = 2, dash = "dash"),
+            text = boundary_label,
+            hoverinfo = "text",
+            showlegend = FALSE
+          )
+        }
+        
+        # Add pending point line (green)
+        if (!is.null(custom_roi_values$pending_point)) {
+          x_val <- custom_roi_values$pending_point$x
+          p <- p %>% add_segments(
+            x = x_val, xend = x_val,
+            y = y_min, yend = y_max,
+            line = list(color = "green", width = 2, dash = "dot"),
+            text = "Pending Selection",
+            hoverinfo = "text",
+            showlegend = FALSE
+          )
+        }
+      }  # End of if (custom_edit_mode)
       
       return(p)
     })
