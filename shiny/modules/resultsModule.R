@@ -2,7 +2,10 @@ resultsUI <- function(id) {
   ns <- NS(id)
   
   tagList(
-    h3("Recently Processed Sensors"),
+    h4("Sensors processed"),
+    helpText('Output shows sensors processed within this session.
+    If no sensors are listed, process some.
+    Output will clear if window is reloaded'),
     DT::dataTableOutput(ns("results_table"))
   )
 }

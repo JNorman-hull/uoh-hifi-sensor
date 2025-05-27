@@ -42,4 +42,12 @@ server <- function(input, output, session) {
     processing$process_sensors()
   })
   
+  output$dynamic_sidebar <- renderUI({
+    if (input$visualizationTabset == "interactive_plots") {
+      plotsSidebarUI("plots")
+    } else if (input$visualizationTabset == "roi_delineation") {
+      roiSidebarUI("roi")
+    }
+  })
+  
 }

@@ -19,11 +19,6 @@ roiSidebarUI <- function(id) {
     div(style = "margin-bottom: 15px;",
         textOutput(ns("delineation_status"))
     ),
-    
-    # Use ns() to properly namespace the output ID in the condition
-    conditionalPanel(
-      condition = paste0("output['", ns("nadir_available"), "'] == true"),
-      
       hr(),
       h4("ROI Configuration"),
       selectInput(ns("config_choice"), "Configuration:", choices = NULL),
@@ -37,9 +32,20 @@ roiSidebarUI <- function(id) {
       actionButton(ns("start_over"), "Start Over", 
                    class = "btn-warning btn-block"),
       actionButton(ns("trim_sensor"), "Trim sensor start and end", 
-                   class = "btn-danger btn-block")
+                   class = "btn-danger btn-block"),
+      
+      hr(),
+      h4("Passage times"),
+      
+      actionButton(ns("passage_time"), "Calculate passage times", 
+                   class = "btn-primary btn-block"),
+      
+      hr(),
+      h4("Time normalization"),
+      
+      actionButton(ns("normalize_time"), "Normalize time series", 
+                   class = "btn-primary btn-block")
     )
-  )
 }
 
 roiServer <- function(id, output_dir, summary_data, processing_complete = reactive(FALSE)) {

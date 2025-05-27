@@ -2,7 +2,8 @@ processingUI <- function(id) {
   ns <- NS(id)
   
   tagList(
-    h3("Processing Log"),
+    h4("Processing messages"),
+    helpText('Processing report printed here'),
     verbatimTextOutput(ns("process_log"))
   )
 }

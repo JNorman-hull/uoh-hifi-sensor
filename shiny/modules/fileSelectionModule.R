@@ -5,25 +5,22 @@ fileSelectionUI <- function(id) {
   
   tagList(
     fluidRow(
-      column(8, h3("Sensor Selection")),
-      column(4, 
-             div(style = "text-align: right; margin-top: 15px;",
-                 textOutput(ns("selection_summary"))
-             )
-      )
+      column(8, h4("RAW Rapid data index"),
+             helpText('Index of RAW RAPID data files.
+                      IMP and HIG must be present.
+                      Sensors already in global index are highlighted in orange.'),)
     ),
     
     fluidRow(
-      column(12,
-             wellPanel(
-               fluidRow(
-                 column(6, checkboxInput(ns("select_all"), "Select All Sensors", value = FALSE)),
-                 column(6, 
-                        div(style = "text-align: right; padding-top: 5px;",
-                            actionButton(ns("clear_all"), "Clear All", class = "btn-sm")
-                        )
-                 )
-               )
+      column(8,
+             div(style = "display: flex; align-items: center; gap: 10px;",
+                 checkboxInput(ns("select_all"), "Select All Sensors", value = FALSE),
+                 actionButton(ns("clear_all"), "Clear All", class = "btn-sm")
+             )
+      ),
+      column(4,
+             div(style = "text-align: right; padding-top: 5px;",
+                 textOutput(ns("selection_summary"))
              )
       )
     ),
