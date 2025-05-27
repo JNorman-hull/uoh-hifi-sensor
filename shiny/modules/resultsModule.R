@@ -13,10 +13,14 @@ resultsServer <- function(id, newly_processed_sensors, processing_complete) {
     
     # Create sensor data for newly processed sensors only
     results_data <- reactive({
-      req(processing_complete())
+      # Don't require processing_complete - let it render always
+      if (!processing_complete()) {
+        return(data.frame())  # Return empty data frame before any processing
+      }
+      
       processed <- newly_processed_sensors()
       
-      if (length(processed) == 0) return(NULL)
+      if (length(processed) == 0) return(data.frame())  # Return empty, not NULL
       
       # Get sensor info for processed sensors
       sensor_info <- map(processed, function(name) {

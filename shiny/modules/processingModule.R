@@ -22,9 +22,11 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
     )
     # Display processing log
     output$process_log <- renderText({
+      if (length(values$log_messages) == 0) {
+        return('Select sensors and click "Process Selected Sensors" to begin processing')
+      }
       paste(values$log_messages, collapse = "\n")
     })
-    
     # Helper function to update messages
     updateLogMessage <- function(message) {
       values$log_messages <- c(values$log_messages, message)
@@ -83,7 +85,7 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       values$is_processing <- TRUE
       values$processing_complete <- FALSE
       values$summary_data <- NULL
-      values$log_messages <- character(0)
+      # DON'T clear log messages: values$log_messages <- character(0)
       
       # Small delay to allow UI to update
       Sys.sleep(0.1)
@@ -96,8 +98,8 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
         session
       )
       
-      # Update after completion
-      values$log_messages <- result$log_messages
+      # Update after completion - APPEND to existing messages, don't replace
+      values$log_messages <- c(values$log_messages, result$log_messages)
       values$processing_complete <- TRUE
       values$is_processing <- FALSE
       
@@ -108,19 +110,7 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
     # Process sensors function
     process_sensors <- function() {
       sensors <- selected_sensors()
-      
-      # Check if any sensors are selected
-      if (length(sensors) == 0) {
-        updateLogMessage("No sensors selected. Please select at least one sensor to process.")
-        return()
-      }
-      
-      # Prevent multiple processing jobs
-      if (values$is_processing) {
-        updateLogMessage("Processing already in progress. Please wait...")
-        return()
-      }
-      
+
       # Check for existing sensors BEFORE setting processing state
       existing_sensors <- character(0)
       index_file <- get_sensor_index_file(output_dir())
@@ -235,7 +225,7 @@ process_sensors_step_by_step <- function(selected_sensors, raw_data_path, output
   }
   
   # Final summary
-  update_log("Batch sensor processing complete.")
+  update_log("Sensor processing complete.")
   update_log(paste(counters$n_processed, "total sensors processed successfully"))
   if (counters$n_failed > 0) {
     update_log(paste(counters$n_failed, "sensors failed to process"))

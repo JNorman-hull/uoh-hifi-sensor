@@ -36,27 +36,10 @@ server <- function(input, output, session) {
     processing$process_sensors()
   })
   observe({
-    if (length(file_selection$selected_sensors()) == 0 || processing$is_processing()) {
+    if (processing$is_processing()) {
       shinyjs::disable("process_btn")
     } else {
       shinyjs::enable("process_btn")
-    }
-  })
-  
-  # Handle UI changes when processing state changes (keep existing code but simplify)
-  observe({
-    if (processing$is_processing()) {
-      # Force UI to update by switching to log tab with delay
-      shinyjs::delay(100, {
-        updateTabsetPanel(session, "mainTabset", selected = "processing_log")
-      })
-    }
-  })
-  
-  # Handle completion
-  observe({
-    if (processing$processing_complete()) {
-      updateTabsetPanel(session, "mainTabset", selected = "results_summary")
     }
   })
 }
