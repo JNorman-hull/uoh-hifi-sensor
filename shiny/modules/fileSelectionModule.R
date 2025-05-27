@@ -33,7 +33,7 @@ fileSelectionUI <- function(id) {
   )
 }
 
-fileSelectionServer <- function(id, raw_data_path) {
+fileSelectionServer <- function(id, raw_data_path, output_dir = NULL, processing_complete = reactive(FALSE)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -42,6 +42,24 @@ fileSelectionServer <- function(id, raw_data_path) {
       sensor_data = NULL,
       selected_indices = integer(0)
     )
+    
+    processed_sensors <- reactive({
+      if (is.null(output_dir)) return(character(0))
+      
+      processing_complete()  # Invalidate when processing completes
+      
+      index_file <- get_sensor_index_file(output_dir())
+      if (is.null(index_file) || !file.exists(index_file)) {
+        return(character(0))
+      }
+      
+      tryCatch({
+        index_df <- read.csv(index_file)
+        return(index_df$file)
+      }, error = function(e) {
+        return(character(0))
+      })
+    })
     
     # Initialize sensor data once (simplified but keep functionality)
     observe({
@@ -80,7 +98,9 @@ fileSelectionServer <- function(id, raw_data_path) {
     output$sensor_table <- DT::renderDataTable({
       req(state$sensor_data)
       
-      DT::datatable(
+      processed <- processed_sensors()
+      
+      dt <- DT::datatable(
         state$sensor_data,
         selection = list(mode = 'multiple'),
         options = list(
@@ -99,6 +119,20 @@ fileSelectionServer <- function(id, raw_data_path) {
         class = 'cell-border stripe hover'
       ) %>%
         DT::formatStyle(columns = 1:5, fontSize = '14px')
+      
+      # Highlight processed sensors in orange
+      if (length(processed) > 0) {
+        processed_rows <- which(state$sensor_data$Filename %in% processed)
+        if (length(processed_rows) > 0) {
+          dt <- dt %>% DT::formatStyle(
+            columns = 1:5,
+            target = 'row',
+            backgroundColor = DT::styleRow(processed_rows, 'orange')
+          )
+        }
+      }
+      
+      return(dt)
     })
     
     # Update selection when user clicks table rows
