@@ -27,35 +27,29 @@ server <- function(input, output, session) {
   
   # Process button click handler
   observeEvent(input$process_btn, {
-    # Check if sensors are selected
-    if (length(file_selection$selected_sensors()) == 0) {
-      showNotification("No sensors selected. Please select at least one sensor to process.", 
-                       type = "warning")
-      return()
-    }
-    
-    # Prevent multiple processing jobs
     if (processing$is_processing()) {
       showNotification("Processing already in progress. Please wait...", 
                        type = "warning")
       return()
     }
     
-    # Call processing - let it handle everything
     processing$process_sensors()
   })
+  observe({
+    if (length(file_selection$selected_sensors()) == 0 || processing$is_processing()) {
+      shinyjs::disable("process_btn")
+    } else {
+      shinyjs::enable("process_btn")
+    }
+  })
   
-  # Handle UI changes when processing state changes
+  # Handle UI changes when processing state changes (keep existing code but simplify)
   observe({
     if (processing$is_processing()) {
-      shinyjs::disable("process_btn")
-      
       # Force UI to update by switching to log tab with delay
       shinyjs::delay(100, {
         updateTabsetPanel(session, "mainTabset", selected = "processing_log")
       })
-    } else {
-      shinyjs::enable("process_btn")
     }
   })
   

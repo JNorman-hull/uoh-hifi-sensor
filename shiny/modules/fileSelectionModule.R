@@ -1,4 +1,4 @@
-# File Selection Module
+# File Selection Module - Rebuilt
 
 fileSelectionUI <- function(id) {
   ns <- NS(id)
@@ -37,57 +37,51 @@ fileSelectionServer <- function(id, raw_data_path) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # Reactive values
-    values <- reactiveValues(
+    # Single source of truth for all state
+    state <- reactiveValues(
       sensor_data = NULL,
-      selected_rows = integer(0)
+      selected_indices = integer(0)
     )
     
-    # Simplified sensor info parsing using Python function directly
-    parse_sensor_info <- function(sensor_names) {
-      map(sensor_names, function(name) {
-        tryCatch({
-          py$parse_filename_info(name)
-        }, error = function(e) {
-          list(
-            sensor = if(nchar(name) >= 3) substr(name, 1, 3) else name,
-            date_deploy = "Unknown",
-            time_deploy = "Unknown"
-          )
-        })
-      })
-    }
-    
-    # Create sensor data table when path changes
+    # Initialize sensor data once (simplified but keep functionality)
     observe({
       req(raw_data_path())
       
       sensor_names <- get_sensor_names(raw_data_path())
       
       if (length(sensor_names) > 0) {
-        sensor_info <- parse_sensor_info(sensor_names)
+        sensor_info <- map(sensor_names, function(name) {
+          tryCatch({
+            py$parse_filename_info(name)
+          }, error = function(e) {
+            list(
+              sensor = if(nchar(name) >= 3) substr(name, 1, 3) else name,
+              date_deploy = "Unknown",
+              time_deploy = "Unknown"
+            )
+          })
+        })
         
-        values$sensor_data <- tibble(
+        state$sensor_data <- tibble(
           No. = seq_along(sensor_names),
           Filename = sensor_names,
           Sensor = map_chr(sensor_info, "sensor"),
           Date = map_chr(sensor_info, "date_deploy"),
           Time = map_chr(sensor_info, "time_deploy")
         )
-      } else {
-        values$sensor_data <- NULL
+        
       }
       
-      # Reset selections when data changes
-      values$selected_rows <- integer(0)
+      # Reset selection when data changes
+      state$selected_indices <- integer(0)
     })
     
-    # Render sensor table (stable - doesn't re-render on selection changes)
+    # Render stable table (temporarily without highlighting to fix temp file error)
     output$sensor_table <- DT::renderDataTable({
-      req(values$sensor_data)
+      req(state$sensor_data)
       
       DT::datatable(
-        values$sensor_data,
+        state$sensor_data,
         selection = list(mode = 'multiple'),
         options = list(
           pageLength = 15,
@@ -107,10 +101,10 @@ fileSelectionServer <- function(id, raw_data_path) {
         DT::formatStyle(columns = 1:5, fontSize = '14px')
     })
     
-    # Update selected rows from user clicks
+    # Update selection when user clicks table rows
     observeEvent(input$sensor_table_rows_selected, {
-      values$selected_rows <- input$sensor_table_rows_selected
-    })
+      state$selected_indices <- input$sensor_table_rows_selected %||% integer(0)
+    }, ignoreNULL = FALSE)
     
     # Helper function for proxy operations
     update_table_selection <- function(rows) {
@@ -120,56 +114,76 @@ fileSelectionServer <- function(id, raw_data_path) {
     
     # Handle Select All checkbox
     observeEvent(input$select_all, {
-      req(values$sensor_data)
+      req(state$sensor_data)
       
-      new_selection <- if(input$select_all) seq_len(nrow(values$sensor_data)) else integer(0)
-      values$selected_rows <- new_selection
-      update_table_selection(new_selection)
+      if (input$select_all) {
+        state$selected_indices <- seq_len(nrow(state$sensor_data))
+        update_table_selection(state$selected_indices)
+      } else {
+        isolate({
+          if (length(state$selected_indices) == nrow(state$sensor_data)) {
+            state$selected_indices <- integer(0)
+            update_table_selection(state$selected_indices)
+          }
+        })
+      }
     })
     
     # Handle Clear All button
     observeEvent(input$clear_all, {
-      values$selected_rows <- integer(0)
+      state$selected_indices <- integer(0)
+      
+      # Update checkbox and table
       updateCheckboxInput(session, "select_all", value = FALSE)
       update_table_selection(integer(0))
     })
     
-    # Update Select All checkbox based on current selection
+    # Update Clear All button state
     observe({
-      req(values$sensor_data)
+      if (length(state$selected_indices) > 0) {
+        shinyjs::enable("clear_all")
+      } else {
+        shinyjs::disable("clear_all")
+      }
+    })
+    
+    # Auto-update Select All checkbox based on selection
+    observe({
+      req(state$sensor_data)
       
-      total_sensors <- nrow(values$sensor_data)
-      selected_count <- length(values$selected_rows)
+      total_sensors <- nrow(state$sensor_data)
+      selected_count <- length(state$selected_indices)
+      should_be_checked <- selected_count == total_sensors && total_sensors > 0
       
+      # Only update if different from current state to avoid loops
       isolate({
-        should_be_checked <- selected_count == total_sensors && total_sensors > 0
-        current_state <- input$select_all
-        
-        if (!is.null(current_state) && current_state != should_be_checked) {
+        if (!is.null(input$select_all) && input$select_all != should_be_checked) {
           updateCheckboxInput(session, "select_all", value = should_be_checked)
         }
       })
     })
     
-    # Selection summary text
+    # Selection summary
     output$selection_summary <- renderText({
-      req(values$sensor_data)
+      req(state$sensor_data)
       
-      total <- nrow(values$sensor_data)
-      selected <- length(values$selected_rows)
+      total <- nrow(state$sensor_data)
+      selected <- length(state$selected_indices)
       
       paste0(selected, " of ", total, " sensors selected")
     })
     
-    # Return selected sensor filenames
+    # Return selected sensors
     selected_sensors <- reactive({
-      req(values$sensor_data, length(values$selected_rows) > 0)
-      values$sensor_data$Filename[values$selected_rows]
+      if (is.null(state$sensor_data) || length(state$selected_indices) == 0) {
+        return(character(0))
+      }
+      state$sensor_data$Filename[state$selected_indices]
     })
     
-    # Return available sensor names
+    # Return all sensor names
     sensor_names <- reactive({
-      if (is.null(values$sensor_data)) NULL else values$sensor_data$Filename
+      if (is.null(state$sensor_data)) character(0) else state$sensor_data$Filename
     })
     
     return(list(

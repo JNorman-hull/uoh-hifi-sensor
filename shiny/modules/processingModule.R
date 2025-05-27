@@ -53,7 +53,6 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       }
     })
     
-    # Move the actual processing logic to a separate function
     start_processing <- function() {
       # Set processing state FIRST
       values$is_processing <- TRUE
@@ -61,24 +60,29 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       values$summary_data <- NULL
       values$log_messages <- character(0)
       
-      # Small delay to allow UI to update
-      Sys.sleep(0.1)
+      # Allow UI to update by yielding control back to Shiny
+      shiny::invalidateLater(50, session)
       
-      # Process in step-by-step manner
-      result <- process_sensors_step_by_step(
-        selected_sensors(), 
-        raw_data_path(), 
-        output_dir(),
-        session
-      )
-      
-      # Update after completion
-      values$log_messages <- result$log_messages
-      values$processing_complete <- TRUE
-      values$is_processing <- FALSE
-      
-      # Send completion notification
-      session$sendCustomMessage("processingComplete", list(success = TRUE))
+      # Use observe to continue processing after UI updates
+      shiny::observeEvent(shiny::reactiveTimer(100)(), {
+        if (values$is_processing && length(values$log_messages) == 0) {
+          # Process in step-by-step manner
+          result <- process_sensors_step_by_step(
+            selected_sensors(), 
+            raw_data_path(), 
+            output_dir(),
+            session
+          )
+          
+          # Update after completion
+          values$log_messages <- result$log_messages
+          values$processing_complete <- TRUE
+          values$is_processing <- FALSE
+          
+          # Send completion notification
+          session$sendCustomMessage("processingComplete", list(success = TRUE))
+        }
+      }, once = TRUE)
     }
     
     # Process sensors function
