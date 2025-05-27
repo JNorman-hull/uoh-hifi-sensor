@@ -25,21 +25,21 @@ server <- function(input, output, session) {
   plotsServer("plots", output_dir, processing$summary_data, processing$processing_complete)
   roiServer("roi", output_dir, processing$summary_data, processing$processing_complete)
   
-  # Process button click handler
-  observeEvent(input$process_btn, {
-    if (processing$is_processing()) {
-      showNotification("Processing already in progress. Please wait...", 
-                       type = "warning")
-      return()
-    }
-    
-    processing$process_sensors()
-  })
   observe({
-    if (processing$is_processing()) {
+    # Get selected sensors count
+    selected_count <- length(file_selection$selected_sensors())
+    
+    # Disable button if processing OR no sensors selected
+    if (processing$is_processing() || selected_count == 0) {
       shinyjs::disable("process_btn")
     } else {
       shinyjs::enable("process_btn")
     }
   })
+  
+  # Process button click handler
+  observeEvent(input$process_btn, {
+    processing$process_sensors()
+  })
+  
 }
