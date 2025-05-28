@@ -3,27 +3,89 @@
 roiUI <- function(id) {
   ns <- NS(id)
   
-  tagList(
-    h3("ROI Delineated Time Series"),
+  fluidPage(
     plotlyOutput(ns("roi_plot"), height = "600px"),
+    br(),
     
-    # Add dynamic button area
-    conditionalPanel(
-      condition = paste0("output.", ns("show_dynamic_button")),
-      div(id = ns("dynamic_button_container"), 
-          style = "margin-top: 10px; text-align: center;",
-          actionButton(ns("mark_roi_dynamic"), "", class = "btn-primary btn-lg"),
-          br(),
-          textOutput(ns("dynamic_instruction"))
+    fluidRow(
+      column(
+        width = 4,
+        
+        # ROI Controls box (now left-aligned by being in a column)
+        div(
+          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 15px; 
+                 border-radius: 5px; margin-bottom: 20px;",
+          
+          tags$h4("ROI Controls", style = "margin-top: 0; text-align: center;"),
+          
+          selectInput(ns("config_choice"), "Configuration:", choices = NULL, width = "100%"),
+          
+          actionButton(ns("create_custom_roi"), "Create Custom Delineation", 
+                       class = "btn btn-sm btn-info", style = "width: 100%; margin-bottom: 15px;"),
+          
+          # Inline numericInput
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label("ROI 4 Nadir Duration (s):", `for` = ns("roi4_nadir_duration"), 
+                         style = "margin-right: 8px;"),
+              numericInput(ns("roi4_nadir_duration"), NULL, value = 0.2, min = 0.1, max = 2.0, step = 0.1,
+                           width = "80px")
+          ),
+          
+          actionButton(ns("mark_roi_dynamic"), "Mark ROI 1 Start", 
+                       class = "btn btn-sm btn-primary", style = "width: 100%; margin-bottom: 10px;"),
+          
+          actionButton(ns("cancel_custom_roi"), "Cancel Custom", 
+                       class = "btn btn-sm btn-danger", style = "width: 100%; margin-bottom: 10px;"),
+          
+          textOutput(ns("dynamic_instruction")),
+          
+          hr(),
+          
+          tags$h4("Standardize ROI", style = "margin-top: 0; text-align: center;"),
+          
+          checkboxInput(ns("round_roi"), "Round ROI to nearest 0.1s", value = FALSE),
+          checkboxInput(ns("match_pre_post"), "Match pre- and post-nadir ROI", value = FALSE)
+        )
+      ),
+      
+      # ROI Table next to controls
+      column(
+        width = 8,
+        tags$h4("ROI Information"),
+        DT::dataTableOutput(ns("roi_table"))
+      )
+    ),  # Close the first fluidRow
+    
+    # Horizontal rule after the row
+    hr(),
+    
+    h4("ROI Instructions"),
+    
+    # Instructional text in a new fluidRow
+    fluidRow(
+      column(
+        width = 12,
+        tags$p("Use the table above to review detected ROIs. Each entry corresponds to a delineated region based on sensor thresholds or manual marking. Check timestamps to ensure accurate event capture."),
+        tags$ul(
+          tags$li("ROI 1 Sensor ingress: Mark region sesnsor enters system from atmospheric pressure or other landmark feature (e.g., injection pipe)"),
+          tags$li("ROI 2 Intake passage: Mark region sesnsor moves through intake structures and pipework leading towards the impeller."),
+          tags$li("ROI 3 Pre-nadir: Mark region just before the impeller, highest risk of encoruntering pressure differentials and swirl flows."),
+          tags$li("ROI 4 Nadir: Critical passage analysis zone with direct passage through the impeller. Hydraulic pinch point where maximum acceleration, rotation and minimum pressure likley to occur.
+                  Region calculated using input time box, which is centered on the nadir point. Ensure nadir is correct first."),
+          tags$li("ROI 5 Post-nadir: Mark region just after the impeller, highest risk of encoruntering guide vane or other forms of collision, residual turbulences and pressure recovery."),
+          tags$li("ROI 6 Outflow passage: Mark region sensor moves through outflow pipework and structures leading towards sensor outgress. Velcoity expected to decrease and pressure return to atmopsheric pressure."),
+          tags$li("ROI 7 Sensor outgress: Mark region sensor exists system from atmospheric pressure or other landmark features (e.g., stable flow indictiave of tailwater)."),
+          tags$li("Sensor start and end trim: Automatically calculated from start and end of data and start and end of ROI 1 and 7. Use trim tool to remove after delineatition.")
+          )
       )
     )
   )
 }
 
+
 roiSidebarUI <- function(id) {
   ns <- NS(id)
   
-  # Get sensor variables for dropdown choices
   sensor_vars <- get_sensor_variables()
   var_choices <- setNames(sensor_vars$names, sensor_vars$labels)
   
@@ -31,21 +93,13 @@ roiSidebarUI <- function(id) {
     h4("ROI Delineation Options"),
     selectInput(ns("plot_sensor"), "Select Sensor:", choices = NULL),
     
-    div(style = "margin-bottom: 15px;",
-        textOutput(ns("delineation_status"))
-    ),
+    div(style = "margin-bottom: 15px;", textOutput(ns("delineation_status"))),
     
-    hr(),
-    h4("Plot Axis Options"),
-    selectInput(ns("left_y_var"), "Left Y-Axis:",
-                choices = var_choices,
-                selected = "pressure_kpa"),
-    selectInput(ns("right_y_var"), "Right Y-Axis:",
-                choices = c("None" = "none", var_choices),
-                selected = "higacc_mag_g"),
+    hr(), h4("Plot Axis Options"),
+    selectInput(ns("left_y_var"), "Left Y-Axis:", choices = var_choices, selected = "pressure_kpa"),
+    selectInput(ns("right_y_var"), "Right Y-Axis:", choices = c("None" = "none", var_choices), selected = "higacc_mag_g"),
     
-    hr(),
-    h4("Pressure Nadir Options"),
+    hr(), h4("Pressure Nadir Options"),
     checkboxInput(ns("show_nadir"), "Show Pressure Nadir", value = TRUE),
     verbatimTextOutput(ns("current_nadir_display")),
     actionButton(ns("edit_nadir_btn"), "Select Pressure Nadir", class = "btn-warning btn-sm"),
@@ -54,45 +108,15 @@ roiSidebarUI <- function(id) {
     textOutput(ns("nadir_status")),
     
     hr(),
-    h4("Custom ROI Delineation"),
-    actionButton(ns("create_custom_roi"), "Create Custom Delineation", 
-                 class = "btn-info btn-sm"),
-    actionButton(ns("cancel_custom_roi"), "Cancel Custom", 
-                 class = "btn-danger btn-sm"),
+    actionButton(ns("create_delineated"), "Create delineated dataset", class = "btn-primary btn-block"),
+    actionButton(ns("start_over"), "Start Over", class = "btn-warning btn-block"),
+    actionButton(ns("trim_sensor"), "Trim sensor start and end", class = "btn-danger btn-block"),
     
-    # Nadir duration input - only show in custom mode
-    conditionalPanel(
-      condition = paste0("output.", ns("custom_edit_mode")),
-      numericInput(ns("roi4_nadir_duration"), "ROI 4 (Nadir) Duration (s):", 
-                   value = 0.4, min = 0.1, max = 2.0, step = 0.1)
-    ),
+    hr(), h4("Passage times"),
+    actionButton(ns("passage_time"), "Calculate passage times", class = "btn-primary btn-block"),
     
-    hr(),
-    h4("ROI Configuration"),
-    selectInput(ns("config_choice"), "Configuration:", choices = NULL),
-    
-    div(style = "max-height: 180px; overflow-y: auto; margin-bottom: 15px;",
-        DT::dataTableOutput(ns("roi_table"))
-    ),
-    
-    actionButton(ns("create_delineated"), "Create delineated dataset", 
-                 class = "btn-primary btn-block"),
-    actionButton(ns("start_over"), "Start Over", 
-                 class = "btn-warning btn-block"),
-    actionButton(ns("trim_sensor"), "Trim sensor start and end", 
-                 class = "btn-danger btn-block"),
-    
-    hr(),
-    h4("Passage times"),
-    
-    actionButton(ns("passage_time"), "Calculate passage times", 
-                 class = "btn-primary btn-block"),
-    
-    hr(),
-    h4("Time normalization"),
-    
-    actionButton(ns("normalize_time"), "Normalize time series", 
-                 class = "btn-primary btn-block")
+    hr(), h4("Time normalization"),
+    actionButton(ns("normalize_time"), "Normalize time series", class = "btn-primary btn-block")
   )
 }
 
@@ -189,12 +213,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     })
     outputOptions(output, "custom_edit_mode", suspendWhenHidden = FALSE)
     
-    # Show dynamic button when in custom mode and waiting for click
-    output$show_dynamic_button <- reactive({
-      custom_roi_values$custom_edit_mode && !is.null(custom_roi_values$pending_point)
-    })
-    outputOptions(output, "show_dynamic_button", suspendWhenHidden = FALSE)
-    
     # Get sensor status using shared function
     sensor_status <- reactive({
       req(input$plot_sensor)
@@ -261,9 +279,10 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         "edit_nadir_btn" = !nadir_values$edit_mode && !custom_roi_values$custom_edit_mode,
         "save_nadir_btn" = nadir_values$edit_mode,
         "cancel_nadir_btn" = nadir_values$edit_mode,
-        # Custom ROI buttons - simplified
-        "create_custom_roi" = nadir$available,
-        "cancel_custom_roi" = custom_roi_values$custom_edit_mode
+        # Updated custom ROI button states
+        "create_custom_roi" = nadir$available && (!custom_roi_values$custom_edit_mode || custom_roi_values$current_roi_step == 6),
+        "cancel_custom_roi" = custom_roi_values$custom_edit_mode,
+        "mark_roi_dynamic" = custom_roi_values$custom_edit_mode
       )
       
       manage_button_states(session, button_states)
@@ -361,23 +380,39 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
     })
     
-    # Update dynamic button text based on current step
     observe({
-      if (custom_roi_values$custom_edit_mode && !is.null(custom_roi_values$pending_point)) {
+      if (custom_roi_values$custom_edit_mode) {
         step_names <- c("Mark ROI 1 Start", "Mark ROI 2 Start", "Mark ROI 3 Start", 
                         "Mark ROI 5 End", "Mark ROI 6 End", "Mark ROI 7 End")
-        button_text <- if (custom_roi_values$current_roi_step < 6) {
-          step_names[custom_roi_values$current_roi_step + 1]
-        } else {
-          "Complete"
+        
+        if (custom_roi_values$current_roi_step < 6) {
+          button_text <- step_names[custom_roi_values$current_roi_step + 1]
+          updateActionButton(session, "mark_roi_dynamic", label = button_text)
         }
-        updateActionButton(session, "mark_roi_dynamic", label = button_text)
+        
+        # Update main button appearance when all boundaries marked
+        if (custom_roi_values$current_roi_step == 6) {
+          updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
+          # Change to green using shinyjs
+          shinyjs::removeClass("create_custom_roi", "btn-info")
+          shinyjs::addClass("create_custom_roi", "btn-success")
+        }
+      } else {
+        # Reset to initial state when not in edit mode
+        updateActionButton(session, "mark_roi_dynamic", label = "Mark ROI 1 Start")
+        updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
+        # Reset to blue using shinyjs
+        shinyjs::removeClass("create_custom_roi", "btn-success")
+        shinyjs::addClass("create_custom_roi", "btn-info")
       }
     })
     
     # Single dynamic ROI marking button
     observeEvent(input$mark_roi_dynamic, {
-      req(custom_roi_values$pending_point)
+      if (is.null(custom_roi_values$pending_point)) {
+        showNotification("Mark ROI on plot first", type = "warning", duration = 3)
+        return()
+      }
       
       step_names <- c("roi1_start", "roi2_start", "roi3_start", "roi5_end", "roi6_end", "roi7_end")
       boundary_name <- step_names[custom_roi_values$current_roi_step + 1]
@@ -385,11 +420,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       custom_roi_values$selected_boundaries[[boundary_name]] <- custom_roi_values$pending_point$x
       custom_roi_values$current_roi_step <- custom_roi_values$current_roi_step + 1
       custom_roi_values$pending_point <- NULL
-      
-      # Update main button text when complete
-      if (custom_roi_values$current_roi_step == 6) {
-        updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
-      }
       
       # Reset baseline click for next selection
       custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
@@ -470,6 +500,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         custom_roi_values$current_roi_step <- 0
         custom_roi_values$selected_boundaries <- list()
         updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
+        shinyjs::removeClass("create_custom_roi", "btn-success")
+        shinyjs::addClass("create_custom_roi", "btn-info")
         
         # Reload configurations
         roi_values$roi_configs <- load_roi_configs(output_dir())
@@ -481,6 +513,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         showNotification("Custom ROI configuration saved successfully!", type = "message")
       } else {
         showNotification("Failed to save custom ROI configuration", type = "error")
+      }
+      
+      if (success$status) {
+        # Set a slight delay to ensure config is loaded
+        shiny::invalidateLater(100)
+        updateSelectInput(session, "config_choice", selected = success$config_name)
       }
     }
     

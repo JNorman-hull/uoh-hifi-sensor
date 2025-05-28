@@ -5,6 +5,7 @@ library(DT)
 library(shinyjs)
 library(plotly)
 library(patchwork)
+library(shinydashboard)
 
 dir.create("./RAPID_Processed", showWarnings = FALSE, recursive = TRUE)
 
