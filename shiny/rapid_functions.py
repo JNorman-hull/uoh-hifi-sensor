@@ -5,7 +5,6 @@ import pandas as pd
 from scipy.interpolate import interp1d
 from pathlib import Path
 from datetime import datetime
-import time
 
 # Enable NumPy multi-threading
 os.environ["OMP_NUM_THREADS"] = str(os.cpu_count())
@@ -14,9 +13,6 @@ os.environ["MKL_NUM_THREADS"] = str(os.cpu_count())
 
 def read_imp_raw(filename):
     """Optimized version of read_imp_raw with performance improvements"""
-    print(f"Reading IMP file: {filename}")
-    start_time = time.time()
-    
     filename = Path(filename)
     packetSize = 29
     FS = 2000
@@ -78,10 +74,7 @@ def read_imp_raw(filename):
 
         DataRawP[0] = DataRawP[1]
     
-    print(f"Binary parsing took: {time.time() - start_time:.2f}s")
-    
     # Use numba-accelerated processing on correctly parsed data
-    processing_start = time.time()
     TimeRaw = np.array(TimeRaw, dtype=np.float64)
     ts = TimeRaw / FS
     
@@ -99,8 +92,6 @@ def read_imp_raw(filename):
     t = np.round(DataRaw[:, 9] * gain_t, T_BAT_PREC)
     b = np.round(DataRaw[:, 10] * gain_bt, T_BAT_PREC)
     
-    print(f"Processing took: {time.time() - processing_start:.2f}s")
-    
     # Create output dataframe
     column_names_raw = [
         'time_s', 'inacc_x_ms', 'inacc_y_ms', 'inacc_z_ms',
@@ -112,15 +103,10 @@ def read_imp_raw(filename):
     dataExportCSV = np.column_stack((
         ts, ax, ay, az, gx, gy, gz, mx, my, mz, p / 10.0, t, b
     ))
-    
-    print(f"Total IMP processing time: {time.time() - start_time:.2f}s")
     return pd.DataFrame(dataExportCSV, columns=column_names_raw)
 
 def read_hig_raw(filename):
     """Optimized version of read_hig_raw with performance improvements"""
-    print(f"Reading HIG file: {filename}")
-    start_time = time.time()
-    
     filename = Path(filename)
     packetSize = 11
     FS = 2000
@@ -144,10 +130,7 @@ def read_hig_raw(filename):
             DataRaw[it, 1] = struct.unpack('>h', packet[6:8])[0]  # acc Y
             DataRaw[it, 2] = struct.unpack('>h', packet[8:10])[0]  # acc Z
     
-    print(f"HIG binary parsing took: {time.time() - start_time:.2f}s")
-    
     # Use optimized numpy processing 
-    processing_start = time.time()
     TimeRaw = np.array(TimeRaw, dtype=np.float64)
     ts = TimeRaw / FS
     ax = np.round(DataRaw[:, 0] * gain_hig, HIG_PREC)
@@ -155,63 +138,42 @@ def read_hig_raw(filename):
     az = np.round(DataRaw[:, 2] * gain_hig, HIG_PREC)
     aMag = np.round(np.sqrt(ax ** 2 + ay ** 2 + az ** 2), HIG_PREC)
     
-    print(f"HIG processing took: {time.time() - processing_start:.2f}s")
-    
     column_names_raw = [
         'time_s', 'higacc_x_g', 'higacc_y_g', 'higacc_z_g', 'higacc_mag_g'
     ]
     
     dataExportCSV = np.column_stack((ts, ax, ay, az, aMag))
     
-    print(f"Total HIG processing time: {time.time() - start_time:.2f}s")
     return pd.DataFrame(dataExportCSV, columns=column_names_raw)
 
-# Update the main processing function to use the optimized versions
 def process_imp_hig_direct(imp_filename, hig_filename, output_dir):
     """
     Optimized version using the original logic but with performance improvements
     """
-    print(f"Starting optimized processing of {Path(imp_filename).stem}")
-    total_start = time.time()
-    
-    # Read raw data directly using optimized functions
     imp_data = read_imp_raw(imp_filename)
     hig_data = read_hig_raw(hig_filename)
     
-    # Get base filename
     base_filename = Path(imp_filename).stem
     
-    # Extract file info from the filename
     file_info = parse_filename_info(base_filename)
     
-    print("Starting time series interpolation...")
-    interp_start = time.time()
-    
-    # Create a uniform 2000Hz time series (EXACTLY matching original logic)
+    # Create a uniform 2000Hz time series
     start_time = imp_data["time_s"].min()
     end_time = imp_data["time_s"].max()
     time_step = 1.0 / 2000  # 0.0005 seconds
     times = np.arange(start_time, end_time + time_step, time_step)
     
-    print(f"Created time series with {len(times)} points in {time.time() - interp_start:.2f}s")
-    
     # Create combined dataset with the high-resolution time series
     combined_data = pd.DataFrame({"time_s": times})
-    print(f"Created DataFrame in {time.time() - interp_start:.2f}s")
     
-    # Add HIG data through highly optimized vectorized mapping
-    hig_start = time.time()
+    # Add HIG data - vectorized mapping
     for col in hig_data.columns:
         if col != "time_s":
             combined_data[col] = 0.0
     
-    print(f"HIG data columns initialized in {time.time() - hig_start:.2f}s")
-    
-    # Use fully vectorized approach for maximum speed
+    # vectorized approach
     hig_indices = np.searchsorted(combined_data["time_s"], hig_data["time_s"], side='left')
     hig_indices = np.clip(hig_indices, 0, len(combined_data) - 1)
-    
-    print(f"HIG searchsorted completed in {time.time() - hig_start:.2f}s")
     
     # Vectorized nearest neighbor selection
     valid_left = hig_indices > 0
@@ -222,25 +184,15 @@ def process_imp_hig_direct(imp_filename, hig_filename, output_dir):
                          np.inf)
     right_diffs = np.abs(combined_data["time_s"].iloc[hig_indices].values - hig_data["time_s"].values)
     
-    # Choose the closer index
     use_left = left_diffs < right_diffs
     final_indices = np.where(use_left, left_indices, hig_indices)
-    
-    print(f"HIG nearest neighbor calculation completed in {time.time() - hig_start:.2f}s")
-    
-    # Assign all HIG data at once using advanced indexing
+
     for col in hig_data.columns:
         if col != "time_s":
-            combined_data[col].iloc[final_indices] = hig_data[col].values
+            combined_data.loc[final_indices, col] = hig_data[col].values
     
-    print(f"HIG data assignment completed in {time.time() - hig_start:.2f}s")
-    
-    # Optimized IMP data interpolation using vectorized operations
-    imp_start = time.time()
-    print("Interpolating IMP data...")
     imp_cols = [col for col in imp_data.columns if col != "time_s"]
-    
-    # Create interpolation functions for all columns at once
+
     for col in imp_cols:
         interp_func = interp1d(
             imp_data["time_s"],
@@ -250,10 +202,6 @@ def process_imp_hig_direct(imp_filename, hig_filename, output_dir):
             fill_value="extrapolate"
         )
         combined_data[col] = interp_func(combined_data["time_s"])
-    
-    print(f"IMP data interpolation completed in {time.time() - imp_start:.2f}s")
-    
-    print(f"Interpolation took: {time.time() - interp_start:.2f}s")
     
     # Apply post-processing (pressure conversion, etc.)
     combined_data, summary_info = post_process_combined(combined_data)
@@ -275,10 +223,8 @@ def process_imp_hig_direct(imp_filename, hig_filename, output_dir):
     # Create and save minimal CSV
     minimal_data = create_minimal_csv(combined_data, base_filename, output_path)
     
-    print(f"Total processing time: {time.time() - total_start:.2f}s")
     return combined_data, {**file_info, **summary_info}
 
-# Keep all the other existing functions unchanged
 def append_to_sensor_index(sensor_info, output_dir):
     """Add or replace sensor in the persistent index file."""
     index_file = Path(output_dir) / "uoh_sensor_index.csv"
