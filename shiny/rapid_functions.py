@@ -344,13 +344,16 @@ def post_process_combined(data):
     
     warning_message = "; ".join(warnings) if warnings else "No warnings"
     
+    bad_sens = "Y" if ("TIME:" in warning_message or "PRES:" in warning_message) else "N"
+    
     summary_info = {
         "duration[mm:ss]": duration,
         "pres_min[kPa]": pres_min_value,
         "pres_min[time]": pres_min_time,
         "HIG_max[g]": max_acc_g_force,
         "HIG_max[time]": acc_max_time,
-        "messages": warning_message
+        "messages": warning_message,
+        "bad_sens": bad_sens
     }
     
     return data, summary_info
