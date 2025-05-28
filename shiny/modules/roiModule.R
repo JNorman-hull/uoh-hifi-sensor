@@ -21,7 +21,7 @@ roiUI <- function(id) {
           selectInput(ns("config_choice"), "Configuration:", choices = NULL, width = "100%"),
           
           actionButton(ns("create_custom_roi"), "Create Custom Delineation", 
-                       class = "btn btn-sm btn-info", style = "width: 100%; margin-bottom: 15px;"),
+                       class = "btn btn-sm btn-warning", style = "width: 100%; margin-bottom: 15px;"),
           
           # Inline numericInput
           div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
@@ -44,7 +44,9 @@ roiUI <- function(id) {
           tags$h4("Standardize ROI", style = "margin-top: 0; text-align: center;"),
           
           checkboxInput(ns("round_roi"), "Round ROI to nearest 0.1s", value = FALSE),
-          checkboxInput(ns("match_pre_post"), "Match pre- and post-nadir ROI", value = FALSE)
+          textOutput(ns("round_status")),
+          checkboxInput(ns("match_pre_post"), "Match pre- and post-nadir ROI", value = FALSE),
+          textOutput(ns("match_status"))
         )
       ),
       
@@ -102,21 +104,22 @@ roiSidebarUI <- function(id) {
     hr(), h4("Pressure Nadir Options"),
     checkboxInput(ns("show_nadir"), "Show Pressure Nadir", value = TRUE),
     verbatimTextOutput(ns("current_nadir_display")),
-    actionButton(ns("edit_nadir_btn"), "Select Pressure Nadir", class = "btn-warning btn-sm"),
-    actionButton(ns("save_nadir_btn"), "Save Pressure Nadir", class = "btn-success btn-sm"),
-    actionButton(ns("cancel_nadir_btn"), "Cancel", class = "btn-danger btn-sm"),
+    actionButton(ns("nadir_btn"), "Modify Pressure Nadir", class = "btn-warning btn-block"),
+    actionButton(ns("cancel_nadir_btn"), "Cancel", class = "btn-danger btn-block"),
     textOutput(ns("nadir_status")),
     
-    hr(),
+    hr(), h4("Delineate data"),
     actionButton(ns("create_delineated"), "Create delineated dataset", class = "btn-primary btn-block"),
     actionButton(ns("start_over"), "Start Over", class = "btn-warning btn-block"),
     actionButton(ns("trim_sensor"), "Trim sensor start and end", class = "btn-danger btn-block"),
     
     hr(), h4("Passage times"),
     actionButton(ns("passage_time"), "Calculate passage times", class = "btn-primary btn-block"),
+    textOutput(ns("passage_status")),
     
     hr(), h4("Time normalization"),
-    actionButton(ns("normalize_time"), "Normalize time series", class = "btn-primary btn-block")
+    actionButton(ns("normalize_time"), "Normalize time series", class = "btn-primary btn-block"),
+    textOutput(ns("normalize_status"))
   )
 }
 
@@ -276,10 +279,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         "create_delineated" = nadir$available && !status$delineated && !custom_roi_values$custom_edit_mode,
         "start_over" = status$delineated && !custom_roi_values$custom_edit_mode,
         "trim_sensor" = status$delineated && !status$trimmed && !custom_roi_values$custom_edit_mode,
-        "edit_nadir_btn" = !nadir_values$edit_mode && !custom_roi_values$custom_edit_mode,
-        "save_nadir_btn" = nadir_values$edit_mode,
+        "nadir_btn" = (!custom_roi_values$custom_edit_mode) && (!nadir_values$edit_mode || !is.null(nadir_values$selected_point)),
         "cancel_nadir_btn" = nadir_values$edit_mode,
-        # Updated custom ROI button states
         "create_custom_roi" = nadir$available && (!custom_roi_values$custom_edit_mode || custom_roi_values$current_roi_step == 6),
         "cancel_custom_roi" = custom_roi_values$custom_edit_mode,
         "mark_roi_dynamic" = custom_roi_values$custom_edit_mode
@@ -290,39 +291,38 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Nadir editing functionality (moved from plots module)
     # Edit nadir button
-    observeEvent(input$edit_nadir_btn, {
-      nadir_values$edit_mode <- TRUE
-      nadir_values$selected_point <- NULL
-      nadir_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
+    observeEvent(input$nadir_btn, {
+      if (!nadir_values$edit_mode) {
+        # Start edit mode
+        nadir_values$edit_mode <- TRUE
+        nadir_values$selected_point <- NULL
+        nadir_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
+      } else if (!is.null(nadir_values$selected_point)) {
+        # Save nadir
+        success <- safe_update_sensor_index(
+          output_dir(), 
+          input$plot_sensor,
+          list(
+            "pres_min.time." = nadir_values$selected_point$x,
+            "pres_min.kPa." = nadir_values$selected_point$y
+          )
+        )
+        
+        if (success) {
+          nadir_values$nadir_updated <- nadir_values$nadir_updated + 1
+          nadir_values$edit_mode <- FALSE
+          nadir_values$selected_point <- NULL
+          showNotification("Nadir updated successfully!", type = "message")
+        } else {
+          showNotification("Failed to update nadir", type = "error")
+        }
+      }
     })
     
-    # Cancel nadir button
+    # Keep the cancel button handler but remove the old save handler:
     observeEvent(input$cancel_nadir_btn, {
       nadir_values$edit_mode <- FALSE
       nadir_values$selected_point <- NULL
-    })
-    
-    # Save nadir button using shared function
-    observeEvent(input$save_nadir_btn, {
-      req(nadir_values$selected_point)
-      
-      success <- safe_update_sensor_index(
-        output_dir(), 
-        input$plot_sensor,
-        list(
-          "pres_min.time." = nadir_values$selected_point$x,
-          "pres_min.kPa." = nadir_values$selected_point$y
-        )
-      )
-      
-      if (success) {
-        nadir_values$nadir_updated <- nadir_values$nadir_updated + 1
-        nadir_values$edit_mode <- FALSE
-        nadir_values$selected_point <- NULL
-        showNotification("Nadir updated successfully!", type = "message")
-      } else {
-        showNotification("Failed to update nadir", type = "error")
-      }
     })
     
     # Handle click events for nadir selection
@@ -351,6 +351,25 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         }
       } else {
         ""
+      }
+    })
+    
+    observe({
+      if (nadir_values$edit_mode) {
+        if (!is.null(nadir_values$selected_point)) {
+          updateActionButton(session, "nadir_btn", label = "Save Pressure Nadir")
+          shinyjs::removeClass("nadir_btn", "btn-warning")
+          shinyjs::addClass("nadir_btn", "btn-success")
+        } else {
+          updateActionButton(session, "nadir_btn", label = "Select Pressure Nadir")
+          shinyjs::removeClass("nadir_btn", "btn-success")
+          shinyjs::addClass("nadir_btn", "btn-warning")
+        }
+      } else {
+        # Reset to initial state when not in edit mode
+        updateActionButton(session, "nadir_btn", label = "Select Pressure Nadir")
+        shinyjs::removeClass("nadir_btn", "btn-success")
+        shinyjs::addClass("nadir_btn", "btn-warning")
       }
     })
     
