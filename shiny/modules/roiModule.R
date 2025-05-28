@@ -170,14 +170,26 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       if (length(roi_values$roi_configs) > 0) {
         config_names <- names(roi_values$roi_configs)
-        # Create named vector: display names without underscores, values with underscores
         choices <- setNames(config_names, gsub("_", " ", config_names))
-        current_choice <- input$config_choice
         
-        selected_value <- if (!is.null(current_choice) && current_choice %in% config_names) {
-          current_choice
-        } else {
-          config_names[1]
+        # Determine which config to select based on sensor's current roi_config
+        selected_value <- config_names[1]  # Default fallback
+        
+        if (!is.null(input$plot_sensor) && input$plot_sensor != "") {
+          index_file <- get_sensor_index_file(output_dir())
+          if (!is.null(index_file)) {
+            tryCatch({
+              index_df <- read.csv(index_file)
+              sensor_row <- index_df[index_df$file == input$plot_sensor, ]
+              if (nrow(sensor_row) > 0 && !is.na(sensor_row$roi_config) && sensor_row$roi_config != "NA") {
+                if (sensor_row$roi_config %in% config_names) {
+                  selected_value <- sensor_row$roi_config
+                }
+              }
+            }, error = function(e) {
+              # Silently fall back to default
+            })
+          }
         }
         
         updateSelectInput(session, "config_choice", 
@@ -525,20 +537,17 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         # Reload configurations
         roi_values$roi_configs <- load_roi_configs(output_dir())
         
-        # Update dropdown to select new config
-        updateSelectInput(session, "config_choice", 
-                          selected = success$config_name)
+        # IMPORTANT: Set the new config as current BEFORE delineating
+        roi_values$current_config <- roi_values$roi_configs[[success$config_name]]
         
-        showNotification("Custom ROI configuration saved successfully!", type = "message")
+        # Automatically delineate the dataset with the new config
+        create_delineated_dataset()
+        
+        showNotification("Custom ROI configuration saved and applied successfully!", type = "message")
       } else {
         showNotification("Failed to save custom ROI configuration", type = "error")
       }
-      
-      if (success$status) {
-        # Set a slight delay to ensure config is loaded
-        shiny::invalidateLater(100)
-        updateSelectInput(session, "config_choice", selected = success$config_name)
-      }
+
     }
     
     # Calculate ROI times
