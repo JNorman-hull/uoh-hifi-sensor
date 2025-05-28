@@ -5,7 +5,18 @@ roiUI <- function(id) {
   
   tagList(
     h3("ROI Delineated Time Series"),
-    plotlyOutput(ns("roi_plot"), height = "600px")
+    plotlyOutput(ns("roi_plot"), height = "600px"),
+    
+    # Add dynamic button area
+    conditionalPanel(
+      condition = paste0("output.", ns("show_dynamic_button")),
+      div(id = ns("dynamic_button_container"), 
+          style = "margin-top: 10px; text-align: center;",
+          actionButton(ns("mark_roi_dynamic"), "", class = "btn-primary btn-lg"),
+          br(),
+          textOutput(ns("dynamic_instruction"))
+      )
+    )
   )
 }
 
@@ -48,24 +59,12 @@ roiSidebarUI <- function(id) {
                  class = "btn-info btn-sm"),
     actionButton(ns("cancel_custom_roi"), "Cancel Custom", 
                  class = "btn-danger btn-sm"),
-    actionButton(ns("save_custom_roi"), "Save ROI Config", 
-                 class = "btn-success btn-sm"),
     
-    # ROI 4 nadir duration input
+    # Nadir duration input - only show in custom mode
     conditionalPanel(
       condition = paste0("output.", ns("custom_edit_mode")),
       numericInput(ns("roi4_nadir_duration"), "ROI 4 (Nadir) Duration (s):", 
-                   value = 0.4, min = 0.1, max = 2.0, step = 0.1),
-      
-      # Sequential ROI boundary buttons
-      actionButton(ns("roi1_start"), "Mark ROI 1 start", class = "btn-sm btn-primary"),
-      actionButton(ns("roi2_start"), "Mark ROI 2 start", class = "btn-sm btn-primary"),
-      actionButton(ns("roi3_start"), "Mark ROI 3 start", class = "btn-sm btn-primary"),
-      actionButton(ns("roi5_end"), "Mark ROI 5 end", class = "btn-sm btn-primary"),
-      actionButton(ns("roi6_end"), "Mark ROI 6 end", class = "btn-sm btn-primary"),
-      actionButton(ns("roi7_end"), "Mark ROI 7 end", class = "btn-sm btn-primary"),
-      
-      textOutput(ns("custom_roi_status"))
+                   value = 0.4, min = 0.1, max = 2.0, step = 0.1)
     ),
     
     hr(),
@@ -117,7 +116,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       baseline_click = NULL
     )
     
-    # Custom ROI editing values
+    # Custom ROI editing values - simplified
     custom_roi_values <- reactiveValues(
       custom_edit_mode = FALSE,
       current_roi_step = 0,  # 0-6, tracking which boundary to select
@@ -185,16 +184,16 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     })
     
     # Output for conditional panel
-    output[[ns("nadir_available")]] <- reactive({
-      nadir_info()$available
-    })
-    outputOptions(output, ns("nadir_available"), suspendWhenHidden = FALSE)
-    
-    # Output for custom edit mode conditional panel
     output$custom_edit_mode <- reactive({
       custom_roi_values$custom_edit_mode
     })
     outputOptions(output, "custom_edit_mode", suspendWhenHidden = FALSE)
+    
+    # Show dynamic button when in custom mode and waiting for click
+    output$show_dynamic_button <- reactive({
+      custom_roi_values$custom_edit_mode && !is.null(custom_roi_values$pending_point)
+    })
+    outputOptions(output, "show_dynamic_button", suspendWhenHidden = FALSE)
     
     # Get sensor status using shared function
     sensor_status <- reactive({
@@ -262,17 +261,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         "edit_nadir_btn" = !nadir_values$edit_mode && !custom_roi_values$custom_edit_mode,
         "save_nadir_btn" = nadir_values$edit_mode,
         "cancel_nadir_btn" = nadir_values$edit_mode,
-        # Custom ROI buttons
-        "create_custom_roi" = nadir$available && !custom_roi_values$custom_edit_mode,
-        "cancel_custom_roi" = custom_roi_values$custom_edit_mode,
-        "save_custom_roi" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 6,
-        # Sequential ROI boundary buttons
-        "roi1_start" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 0,
-        "roi2_start" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 1,
-        "roi3_start" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 2,
-        "roi5_end" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 3,
-        "roi6_end" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 4,
-        "roi7_end" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 5
+        # Custom ROI buttons - simplified
+        "create_custom_roi" = nadir$available,
+        "cancel_custom_roi" = custom_roi_values$custom_edit_mode
       )
       
       manage_button_states(session, button_states)
@@ -347,11 +338,18 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Custom ROI functionality
     # Create custom ROI button
     observeEvent(input$create_custom_roi, {
-      custom_roi_values$custom_edit_mode <- TRUE
-      custom_roi_values$current_roi_step <- 0
-      custom_roi_values$selected_boundaries <- list()
-      custom_roi_values$custom_nadir_duration <- input$roi4_nadir_duration %||% 0.4
-      custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
+      if (!custom_roi_values$custom_edit_mode) {
+        # Start custom mode
+        custom_roi_values$custom_edit_mode <- TRUE
+        custom_roi_values$current_roi_step <- 0
+        custom_roi_values$selected_boundaries <- list()
+        custom_roi_values$custom_nadir_duration <- input$roi4_nadir_duration %||% 0.4
+        custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
+        updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
+      } else if (custom_roi_values$current_roi_step == 6) {
+        # Save configuration
+        save_custom_configuration()
+      }
     })
     
     # Cancel custom ROI
@@ -360,37 +358,42 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       custom_roi_values$current_roi_step <- 0
       custom_roi_values$selected_boundaries <- list()
       custom_roi_values$pending_point <- NULL
+      updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
     })
     
-    # Handle sequential ROI boundary selection
-    roi_button_handlers <- list(
-      roi1_start = 1,
-      roi2_start = 2, 
-      roi3_start = 3,
-      roi5_end = 4,
-      roi6_end = 5,
-      roi7_end = 6
-    )
+    # Update dynamic button text based on current step
+    observe({
+      if (custom_roi_values$custom_edit_mode && !is.null(custom_roi_values$pending_point)) {
+        step_names <- c("Mark ROI 1 Start", "Mark ROI 2 Start", "Mark ROI 3 Start", 
+                        "Mark ROI 5 End", "Mark ROI 6 End", "Mark ROI 7 End")
+        button_text <- if (custom_roi_values$current_roi_step < 6) {
+          step_names[custom_roi_values$current_roi_step + 1]
+        } else {
+          "Complete"
+        }
+        updateActionButton(session, "mark_roi_dynamic", label = button_text)
+      }
+    })
     
-    for (button_id in names(roi_button_handlers)) {
-      local({
-        btn_id <- button_id
-        step_num <- roi_button_handlers[[btn_id]]
-        
-        observeEvent(input[[btn_id]], {
-          if (!is.null(custom_roi_values$pending_point)) {
-            # Store the selected point
-            boundary_name <- btn_id
-            custom_roi_values$selected_boundaries[[boundary_name]] <- custom_roi_values$pending_point$x
-            custom_roi_values$current_roi_step <- step_num
-            custom_roi_values$pending_point <- NULL
-            
-            # Reset baseline click for next selection
-            custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
-          }
-        })
-      })
-    }
+    # Single dynamic ROI marking button
+    observeEvent(input$mark_roi_dynamic, {
+      req(custom_roi_values$pending_point)
+      
+      step_names <- c("roi1_start", "roi2_start", "roi3_start", "roi5_end", "roi6_end", "roi7_end")
+      boundary_name <- step_names[custom_roi_values$current_roi_step + 1]
+      
+      custom_roi_values$selected_boundaries[[boundary_name]] <- custom_roi_values$pending_point$x
+      custom_roi_values$current_roi_step <- custom_roi_values$current_roi_step + 1
+      custom_roi_values$pending_point <- NULL
+      
+      # Update main button text when complete
+      if (custom_roi_values$current_roi_step == 6) {
+        updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
+      }
+      
+      # Reset baseline click for next selection
+      custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
+    })
     
     # Handle click events for custom ROI selection
     observe({
@@ -406,26 +409,24 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    # Custom ROI status display
-    output$custom_roi_status <- renderText({
+    # Add instruction text output
+    output$dynamic_instruction <- renderText({
       if (custom_roi_values$custom_edit_mode) {
         if (!is.null(custom_roi_values$pending_point)) {
-          paste0("Selected time: ", round(custom_roi_values$pending_point$x, 3), "s")
-        } else if (custom_roi_values$current_roi_step == 0) {
-          "Click plot to mark ROI 1 start"
+          paste0("Time: ", round(custom_roi_values$pending_point$x, 3), "s - Click button to confirm")
         } else if (custom_roi_values$current_roi_step < 6) {
-          step_names <- c("ROI 2 start", "ROI 3 start", "ROI 5 end", "ROI 6 end", "ROI 7 end")
-          paste0("Click plot to mark ", step_names[custom_roi_values$current_roi_step])
+          step_instructions <- c("Click plot to mark ROI 1 start", "Click plot to mark ROI 2 start", 
+                                 "Click plot to mark ROI 3 start", "Click plot to mark ROI 5 end",
+                                 "Click plot to mark ROI 6 end", "Click plot to mark ROI 7 end")
+          step_instructions[custom_roi_values$current_roi_step + 1]
         } else {
-          "All boundaries selected. Click Save to create configuration."
+          "All boundaries selected - click Save Custom Delineation"
         }
-      } else {
-        ""
       }
     })
     
-    # Save custom ROI configuration
-    observeEvent(input$save_custom_roi, {
+    # Save custom ROI configuration function
+    save_custom_configuration <- function() {
       req(custom_roi_values$current_roi_step == 6)
       req(length(custom_roi_values$selected_boundaries) == 6)
       
@@ -468,6 +469,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         custom_roi_values$custom_edit_mode <- FALSE
         custom_roi_values$current_roi_step <- 0
         custom_roi_values$selected_boundaries <- list()
+        updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
         
         # Reload configurations
         roi_values$roi_configs <- load_roi_configs(output_dir())
@@ -480,7 +482,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       } else {
         showNotification("Failed to save custom ROI configuration", type = "error")
       }
-    })
+    }
     
     # Calculate ROI times
     roi_times <- reactive({
@@ -844,13 +846,38 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         suppress_roi_lines = suppress_roi_lines
       )
       
-      # Add vertical lines for ROI edit mode
+      # Add custom ROI lines in edit mode
       if (custom_roi_values$custom_edit_mode &&
           !is.null(input$left_y_var) &&
           input$left_y_var %in% names(sensor_data)) {
         
         y_min <- min(sensor_data[[input$left_y_var]], na.rm = TRUE)
         y_max <- max(sensor_data[[input$left_y_var]], na.rm = TRUE)
+        
+        # Add ROI 4 nadir duration lines (based on user input)
+        nadir_duration <- input$roi4_nadir_duration %||% 0.4
+        roi4_start <- nadir$time - (nadir_duration / 2)
+        roi4_end <- nadir$time + (nadir_duration / 2)
+        
+        # ROI 4 start line
+        p <- p %>% add_segments(
+          x = roi4_start, xend = roi4_start,
+          y = y_min, yend = y_max,
+          line = list(color = "orange", width = 2, dash = "solid"),
+          text = "ROI 4 Start (Nadir)",
+          hoverinfo = "text",
+          showlegend = FALSE
+        )
+        
+        # ROI 4 end line  
+        p <- p %>% add_segments(
+          x = roi4_end, xend = roi4_end,
+          y = y_min, yend = y_max,
+          line = list(color = "orange", width = 2, dash = "solid"),
+          text = "ROI 4 End (Nadir)",
+          hoverinfo = "text",
+          showlegend = FALSE
+        )
         
         # Add custom boundary lines (purple)
         for (boundary_name in names(custom_roi_values$selected_boundaries)) {
