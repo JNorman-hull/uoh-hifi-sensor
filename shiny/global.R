@@ -64,38 +64,41 @@ safe_update_sensor_index <- function(output_dir, sensor_name, updates) {
 }
 
 # Comprehensive sensor status checking
+# Add normalised status checking
 get_sensor_status <- function(sensor_name, output_dir) {
   index_file <- get_sensor_index_file(output_dir)
-  if (is.null(index_file)) return(list(delineated = FALSE, trimmed = FALSE, exists = FALSE))
+  if (is.null(index_file)) return(list(delineated = FALSE, trimmed = FALSE, normalised = FALSE, exists = FALSE))
   
   tryCatch({
     index_df <- read.csv(index_file)
     sensor_row <- index_df[index_df$file == sensor_name, ]
     
     if (nrow(sensor_row) == 0) {
-      return(list(delineated = FALSE, trimmed = FALSE, exists = FALSE))
+      return(list(delineated = FALSE, trimmed = FALSE, normalised = FALSE, exists = FALSE))
     }
     
     # Check flags and verify files exist
     delineated_flag <- !is.na(sensor_row$delineated) && sensor_row$delineated == "Y"
     trimmed_flag <- !is.na(sensor_row$trimmed) && sensor_row$trimmed == "Y"
+    normalised_flag <- !is.na(sensor_row$normalised) && sensor_row$normalised == "Y"
     
     if (delineated_flag) {
       delineated_file <- file.path(output_dir, "csv", "delineated", paste0(sensor_name, "_delineated.csv"))
       if (!file.exists(delineated_file)) {
         # Fix inconsistent state
-        safe_update_sensor_index(output_dir, sensor_name, list(delineated = "N", trimmed = "N"))
-        delineated_flag <- trimmed_flag <- FALSE
+        safe_update_sensor_index(output_dir, sensor_name, list(delineated = "N", trimmed = "N", normalised = "N"))
+        delineated_flag <- trimmed_flag <- normalised_flag <- FALSE
       }
     }
     
     return(list(
       delineated = delineated_flag,
-      trimmed = trimmed_flag, 
+      trimmed = trimmed_flag,
+      normalised = normalised_flag,
       exists = TRUE
     ))
   }, error = function(e) {
-    return(list(delineated = FALSE, trimmed = FALSE, exists = FALSE))
+    return(list(delineated = FALSE, trimmed = FALSE, normalised = FALSE, exists = FALSE))
   })
 }
 
@@ -334,7 +337,7 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
                                nadir_info = NULL, show_nadir = TRUE,
                                selected_nadir = NULL, roi_boundaries = NULL,
                                show_legend = TRUE, plot_source = "sensor_plot",
-                               suppress_roi_lines = FALSE) {
+                               suppress_roi_lines = FALSE, time_var = "time_s") {
   
   # Get configuration
   config <- get_default_plot_config(plot_config)
@@ -356,6 +359,8 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
   has_right_axis <- config$right_axis$var != "none"
   right_margin <- if (has_right_axis) 80 else 30
   
+  x_label <- if (time_var == "time_norm") "Normalized Time" else "Time [s]"
+  
   # Create base plot
   p <- plot_ly() %>%
     layout(
@@ -363,7 +368,7 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
       showlegend = config$show_legend,
       margin = list(l = 80, r = right_margin, t = 50, b = 50),
       xaxis = list(
-        title = "Time [s]",
+        title = x_label,  # Updated label
         showline = TRUE,
         linecolor = "black",
         linewidth = 1,
@@ -384,7 +389,7 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
   
   # Add left axis trace
   p <- p %>% add_trace(
-    x = sensor_data$time_s,
+    x = sensor_data[[time_var]],  # Use dynamic time variable
     y = sensor_data[[left_var]],
     name = left_label,
     type = "scatter",
@@ -414,7 +419,7 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
     )
     
     p <- p %>% add_trace(
-      x = sensor_data$time_s,
+      x = sensor_data[[time_var]],
       y = sensor_data[[right_var]],
       name = right_label,
       yaxis = "y2",

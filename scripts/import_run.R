@@ -25,7 +25,7 @@ py_install("pandas")
 py_install("quaternion")
 py_install("opencv")
 py_install("statsmodels")
-
 py_install("pillow")
+py_install("numba")
 #2. Python operation####
 
