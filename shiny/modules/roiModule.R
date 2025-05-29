@@ -141,78 +141,50 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
+    
+# ============================= #
+# /// Reactive values \\\ ####  
+# ============================= #   
+    
+
+    # ROI configuration state
     roi_values <- reactiveValues(
-      roi_configs = NULL,
-      current_config = NULL,
-      summary_updated = 0,
-      data_updated = 0
-    )
-
-    nadir_values <- reactiveValues(
-      edit_mode = FALSE,
-      selected_point = NULL,
-      nadir_updated = 0,
-      baseline_click = NULL
-    )
-
-    custom_roi_values <- reactiveValues(
-      custom_edit_mode = FALSE,
-      current_roi_step = 0, 
-      selected_boundaries = list(),
-      custom_nadir_duration = 0.4,
-      baseline_click = NULL,
-      pending_point = NULL
+      roi_configs = NULL,          # All available ROI configurations
+      current_config = NULL,       # Currently selected configuration
+      summary_updated = 0,         # Counter to trigger summary data refresh
+      data_updated = 0            # Counter to trigger data refresh
     )
     
-    # Get processed sensors using shared function
+    # Nadir editing state
+    nadir_values <- reactiveValues(
+      edit_mode = FALSE,           # Whether nadir editing is active
+      selected_point = NULL,       # Currently selected nadir point
+      nadir_updated = 0,          # Counter to trigger nadir refresh
+      baseline_click = NULL        # Baseline click for detecting new clicks
+    )
+    
+    # Custom ROI creation state
+    custom_roi_values <- reactiveValues(
+      custom_edit_mode = FALSE,    # Whether custom ROI mode is active
+      current_roi_step = 0,        # Current step in ROI marking process (0-6)
+      selected_boundaries = list(), # Selected ROI boundaries
+      baseline_click = NULL,       # Baseline click for detecting new clicks
+      pending_point = NULL         # Point marked but not yet confirmed
+    )
+
+ 
+# ============================= #
+# /// Data loading & processing  \\\ ####  
+# ============================= # 
+
+  
+# Get processed sensors using shared function
     processed_sensors <- reactive({
       processing_complete()
       get_processed_sensors(output_dir())
     })
     
-    # Update sensor dropdown using shared function
-    observe({
-      update_sensor_dropdown(session, "plot_sensor", processed_sensors(), input$plot_sensor)
-    })
-    
-    # Load ROI configurations using shared function
-    observe({
-      roi_values$roi_configs <- load_roi_configs(output_dir())
-      
-      if (length(roi_values$roi_configs) > 0) {
-        config_names <- names(roi_values$roi_configs)
-        choices <- setNames(config_names, gsub("_", " ", config_names))
-        selected_value <- config_names[1]
-        
-        if (!is.null(input$plot_sensor) && input$plot_sensor != "") {
-          index_file <- get_sensor_index_file(output_dir())
-          if (!is.null(index_file)) {
-            tryCatch({
-              index_df <- read.csv(index_file)
-              sensor_row <- index_df[index_df$file == input$plot_sensor, ]
-              if (nrow(sensor_row) > 0 && !is.na(sensor_row$roi_config) && sensor_row$roi_config != "NA") {
-                if (sensor_row$roi_config %in% config_names) {
-                  selected_value <- sensor_row$roi_config
-                }
-              }
-            },
-            error = function(e) {
-            })
-          }
-        }
-        updateSelectInput(session, "config_choice", 
-                          choices = choices, 
-                          selected = selected_value)
-      }
-    })
-    
-    # Update current config when dropdown selection changes
-    observe({
-      req(input$config_choice, roi_values$roi_configs)
-      roi_values$current_config <- roi_values$roi_configs[[input$config_choice]]
-    })
-    
-    # Get nadir info using shared function with reactivity
+# Get nadir info using shared function
     nadir_info <- reactive({
       req(input$plot_sensor)
       roi_values$summary_updated
@@ -220,22 +192,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       get_nadir_info(input$plot_sensor, output_dir())
     })
     
-    # Display current nadir
-    output$current_nadir_display <- renderText({
-      nadir <- nadir_info()
-      if (nadir$available) {
-        paste0("Time: ", round(nadir$time, 3), "s\nPressure: ", round(nadir$value, 2), " kPa")
-      } else {
-        "No nadir data available"
-      }
-    })
-    
-    output$custom_edit_mode <- reactive({
-      custom_roi_values$custom_edit_mode
-    })
-    outputOptions(output, "custom_edit_mode", suspendWhenHidden = FALSE)
-    
-    # Get sensor status using shared function
+# Get sensor status using shared function
     sensor_status <- reactive({
       req(input$plot_sensor)
       roi_values$summary_updated
@@ -244,340 +201,24 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       get_sensor_status(input$plot_sensor, output_dir())
     })
     
-    # Delineation status display
-    output$delineation_status <- renderText({
+# Read selected sensor data (with preference for delineated data)
+    selected_sensor_data <- reactive({
       req(input$plot_sensor)
+      roi_values$data_updated  # Invalidate when data changes
       
-      nadir <- nadir_info()
-      status <- sensor_status()
-      
-      base_status <- if (!nadir$available) {
-        "No nadir data available"
-      } else if (!status$delineated) {
-        "Sensor requires delineation"
-      } else if (status$trimmed) {
-        "Sensor file delineated and trimmed"
-      } else {
-        "Sensor file delineated (not trimmed)"
+      # Check for delineated file first
+      delineated_data <- read_sensor_data(output_dir(), input$plot_sensor, "delineated")
+      if (!is.null(delineated_data)) {
+        return(delineated_data)
       }
       
-      norm_status <- if (status$normalised) {
-        "Time series normalised"
-      } else {
-        "Time series requires normalisation"
-      }
-      
-      passage_status <- if (status$passage_times) {
-        "Passage times calculated"
-      } else {
-        "Passage times require calculation"
-      }
-      
-      paste(base_status, norm_status, passage_status, sep = "\n")
+      # Fall back to regular minimal data
+      return(read_sensor_data(output_dir(), input$plot_sensor, "min"))
     })
     
-    # CSS styling for status text
-    observe({
-      req(input$plot_sensor)
-      
-      nadir <- nadir_info()
-      status <- sensor_status()
-      
-      status_color <- if (!nadir$available) {
-        "orange"
-      } else if (!status$delineated) {
-        "red"
-      } else if (status$trimmed) {
-        "green"
-      } else {
-        "blue"
-      }
-      
-      shinyjs::runjs(paste0("
-        $('#", ns("delineation_status"), "').css({
-          'color': '", status_color, "', 
-          'font-weight': 'bold'
-        });
-      "))
-    })
+## Calculate ROI times ####
     
-    # Button state management using shared function (including nadir editing buttons)
-    observe({
-      req(input$plot_sensor)
-      
-      nadir <- nadir_info()
-      status <- sensor_status()
-      
-      button_states <- list(
-        "create_delineated" = nadir$available && !status$delineated && !custom_roi_values$custom_edit_mode,
-        "start_over" = status$delineated && !custom_roi_values$custom_edit_mode,
-        "trim_sensor" = status$delineated && !status$trimmed && !custom_roi_values$custom_edit_mode,
-        "normalize_time" = status$delineated && status$trimmed && !status$normalised && !custom_roi_values$custom_edit_mode,
-        "passage_time" = status$delineated && status$trimmed && !status$passage_times && !custom_roi_values$custom_edit_mode,
-        "nadir_btn" = (!custom_roi_values$custom_edit_mode) && (!nadir_values$edit_mode || !is.null(nadir_values$selected_point)),
-        "cancel_nadir_btn" = nadir_values$edit_mode,
-        "create_custom_roi" = nadir$available && (!custom_roi_values$custom_edit_mode || custom_roi_values$current_roi_step == 6),
-        "cancel_custom_roi" = custom_roi_values$custom_edit_mode,
-        "mark_roi_dynamic" = custom_roi_values$custom_edit_mode
-      )
-      
-      manage_button_states(session, button_states)
-    })
-    
-    observe({
-      req(input$plot_sensor)
-      status <- sensor_status()
-      
-      if (status$normalised) {
-        shinyjs::enable("show_normalised")
-      } else {
-        shinyjs::disable("show_normalised")
-        updateCheckboxInput(session, "show_normalised", value = FALSE)
-      }
-    })
-    
-    # Edit nadir button
-    observeEvent(input$nadir_btn, {
-      if (!nadir_values$edit_mode) {
-        # Start edit mode
-        nadir_values$edit_mode <- TRUE
-        nadir_values$selected_point <- NULL
-        nadir_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
-      } else if (!is.null(nadir_values$selected_point)) {
-        # Save nadir
-        success <- safe_update_sensor_index(
-          output_dir(), 
-          input$plot_sensor,
-          list(
-            "pres_min.time." = nadir_values$selected_point$x,
-            "pres_min.kPa." = nadir_values$selected_point$y
-          )
-        )
-        
-        if (success) {
-          nadir_values$nadir_updated <- nadir_values$nadir_updated + 1
-          nadir_values$edit_mode <- FALSE
-          nadir_values$selected_point <- NULL
-          showNotification("Nadir updated successfully!", type = "message")
-        } else {
-          showNotification("Failed to update nadir", type = "error")
-        }
-      }
-    })
-    
-    observeEvent(input$cancel_nadir_btn, {
-      nadir_values$edit_mode <- FALSE
-      nadir_values$selected_point <- NULL
-    })
-    
-    # Handle click events for nadir selection
-    observe({
-      if (nadir_values$edit_mode) {
-        click_data <- event_data("plotly_click", source = "roi_nadir_plot")
-        if (!is.null(click_data)) {
-          if (is.null(nadir_values$baseline_click) ||
-              click_data$x != nadir_values$baseline_click$x ||
-              click_data$y != nadir_values$baseline_click$y) {
-            nadir_values$selected_point <- list(x = click_data$x, y = click_data$y)
-          }
-        }
-      }
-    })
-    
-    # Status display for nadir editing
-    output$nadir_status <- renderText({
-      if (nadir_values$edit_mode) {
-        if (!is.null(nadir_values$selected_point)) {
-          paste0("Selected: ", round(nadir_values$selected_point$y, 2), " kPa at ", 
-                 round(nadir_values$selected_point$x, 3), "s")
-        } else {
-          "Edit mode: Click on plot to select nadir"
-        }
-      } else {
-        ""
-      }
-    })
-    
-    observe({
-      if (nadir_values$edit_mode) {
-        if (!is.null(nadir_values$selected_point)) {
-          updateActionButton(session, "nadir_btn", label = "Save Pressure Nadir")
-          shinyjs::removeClass("nadir_btn", "btn-warning")
-          shinyjs::addClass("nadir_btn", "btn-success")
-        } else {
-          updateActionButton(session, "nadir_btn", label = "Select Pressure Nadir")
-          shinyjs::removeClass("nadir_btn", "btn-success")
-          shinyjs::addClass("nadir_btn", "btn-warning")
-        }
-      } else {
-        # Reset to initial state when not in edit mode
-        updateActionButton(session, "nadir_btn", label = "Select Pressure Nadir")
-        shinyjs::removeClass("nadir_btn", "btn-success")
-        shinyjs::addClass("nadir_btn", "btn-warning")
-      }
-    })
-    
-    # Custom ROI functionality
-    # Create custom ROI button
-    observeEvent(input$create_custom_roi, {
-      if (!custom_roi_values$custom_edit_mode) {
-        # Start custom mode
-        custom_roi_values$custom_edit_mode <- TRUE
-        custom_roi_values$current_roi_step <- 0
-        custom_roi_values$selected_boundaries <- list()
-        custom_roi_values$custom_nadir_duration <- input$roi4_nadir_duration %||% 0.4
-        custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
-        updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
-      } else if (custom_roi_values$current_roi_step == 6) {
-        # Save configuration
-        save_custom_configuration()
-      }
-    })
-    
-    # Cancel custom ROI
-    observeEvent(input$cancel_custom_roi, {
-      custom_roi_values$custom_edit_mode <- FALSE
-      custom_roi_values$current_roi_step <- 0
-      custom_roi_values$selected_boundaries <- list()
-      custom_roi_values$pending_point <- NULL
-      updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
-    })
-    
-    observe({
-      if (custom_roi_values$custom_edit_mode) {
-        step_names <- c("Mark ROI 1 Start", "Mark ROI 2 Start", "Mark ROI 3 Start", 
-                        "Mark ROI 5 End", "Mark ROI 6 End", "Mark ROI 7 End")
-        
-        if (custom_roi_values$current_roi_step < 6) {
-          button_text <- step_names[custom_roi_values$current_roi_step + 1]
-          updateActionButton(session, "mark_roi_dynamic", label = button_text)
-        }
-        
-        # Update main button appearance when all boundaries marked
-        if (custom_roi_values$current_roi_step == 6) {
-          updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
-          # Change to green using shinyjs
-          shinyjs::removeClass("create_custom_roi", "btn-info")
-          shinyjs::addClass("create_custom_roi", "btn-success")
-        }
-      } else {
-        # Reset to initial state when not in edit mode
-        updateActionButton(session, "mark_roi_dynamic", label = "Mark ROI 1 Start")
-        updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
-        # Reset to blue using shinyjs
-        shinyjs::removeClass("create_custom_roi", "btn-success")
-        shinyjs::addClass("create_custom_roi", "btn-info")
-      }
-    })
-    
-    # Single dynamic ROI marking button
-    observeEvent(input$mark_roi_dynamic, {
-      if (is.null(custom_roi_values$pending_point)) {
-        showNotification("Mark ROI on plot first", type = "warning", duration = 3)
-        return()
-      }
-      
-      step_names <- c("roi1_start", "roi2_start", "roi3_start", "roi5_end", "roi6_end", "roi7_end")
-      boundary_name <- step_names[custom_roi_values$current_roi_step + 1]
-      
-      custom_roi_values$selected_boundaries[[boundary_name]] <- custom_roi_values$pending_point$x
-      custom_roi_values$current_roi_step <- custom_roi_values$current_roi_step + 1
-      custom_roi_values$pending_point <- NULL
-      
-      # Reset baseline click for next selection
-      custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
-    })
-    
-    # Handle click events for custom ROI selection
-    observe({
-      if (custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step < 6) {
-        click_data <- event_data("plotly_click", source = "roi_nadir_plot")
-        if (!is.null(click_data)) {
-          # Only respond if this click is different from baseline
-          if (is.null(custom_roi_values$baseline_click) ||
-              click_data$x != custom_roi_values$baseline_click$x) {
-            custom_roi_values$pending_point <- list(x = click_data$x)
-          }
-        }
-      }
-    })
-    
-    output$dynamic_instruction <- renderText({
-      if (custom_roi_values$custom_edit_mode) {
-        if (!is.null(custom_roi_values$pending_point)) {
-          paste0("Time: ", round(custom_roi_values$pending_point$x, 3), "s - Click button to confirm")
-        } else if (custom_roi_values$current_roi_step < 6) {
-          step_instructions <- c("Click plot to mark ROI 1 start", "Click plot to mark ROI 2 start", 
-                                 "Click plot to mark ROI 3 start", "Click plot to mark ROI 5 end",
-                                 "Click plot to mark ROI 6 end", "Click plot to mark ROI 7 end")
-          step_instructions[custom_roi_values$current_roi_step + 1]
-        } else {
-          "All boundaries selected - click Save Custom Delineation"
-        }
-      }
-    })
-    
-    # Save custom ROI configuration function
-    save_custom_configuration <- function() {
-      req(custom_roi_values$current_roi_step == 6)
-      req(length(custom_roi_values$selected_boundaries) == 6)
-      
-      nadir <- nadir_info()
-      req(nadir$available)
-      
-      # Get nadir duration from input
-      nadir_duration <- input$roi4_nadir_duration
-      
-      # Calculate ROI 4 boundaries
-      roi4_start <- nadir$time - (nadir_duration / 2)
-      roi4_end <- nadir$time + (nadir_duration / 2)
-      
-      # Extract selected boundaries
-      roi1_start <- custom_roi_values$selected_boundaries$roi1_start
-      roi2_start <- custom_roi_values$selected_boundaries$roi2_start
-      roi3_start <- custom_roi_values$selected_boundaries$roi3_start
-      roi5_end <- custom_roi_values$selected_boundaries$roi5_end
-      roi6_end <- custom_roi_values$selected_boundaries$roi6_end
-      roi7_end <- custom_roi_values$selected_boundaries$roi7_end
-      
-      # Calculate durations
-      roi1_duration <- roi2_start - roi1_start
-      roi2_duration <- roi3_start - roi2_start
-      roi3_duration <- roi4_start - roi3_start
-      roi4_duration <- nadir_duration
-      roi5_duration <- roi5_end - roi4_end
-      roi6_duration <- roi6_end - roi5_end
-      roi7_duration <- roi7_end - roi6_end
-      
-      # Save configuration
-      success <- save_custom_roi_config(
-        output_dir(),
-        roi1_duration, roi2_duration, roi3_duration, roi4_duration,
-        roi5_duration, roi6_duration, roi7_duration
-      )
-      
-      if (success$status) {
-        # Reset custom mode
-        custom_roi_values$custom_edit_mode <- FALSE
-        custom_roi_values$current_roi_step <- 0
-        custom_roi_values$selected_boundaries <- list()
-        updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
-        shinyjs::removeClass("create_custom_roi", "btn-success")
-        shinyjs::addClass("create_custom_roi", "btn-info")
-        
-        roi_values$roi_configs <- load_roi_configs(output_dir())
-        roi_values$current_config <- roi_values$roi_configs[[success$config_name]]
-        
-        create_delineated_dataset()
-        
-        showNotification("Custom ROI configuration saved and applied successfully!", type = "message")
-      } else {
-        showNotification("Failed to save custom ROI configuration", type = "error")
-      }
-
-    }
-    
-    # Calculate ROI times
+    # Calculate ROI times based on configuration and nadir
     roi_times <- reactive({
       req(input$plot_sensor, roi_values$current_config)
       input$config_choice
@@ -661,127 +302,234 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       return(NULL)
     })
     
-    # Normalize time series button
-    observeEvent(input$normalize_time, {
-      req(input$plot_sensor)
-      
-      # Check status
-      status <- get_sensor_status(input$plot_sensor, output_dir())
-      
-      if (!status$delineated || !status$trimmed) {
-        showNotification("Sensor must be delineated and trimmed before normalization", type = "warning")
-        return()
-      }
-      
-      if (status$normalised) {
-        showNotification("Sensor data already normalized", type = "warning")
-        return()
-      }
-      
-      # Perform normalization
-      tryCatch({
-        # Read delineated data
-        sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "delineated")
-        
-        if (is.null(sensor_data)) {
-          showNotification("Failed to read delineated dataset", type = "error")
-          return()
-        }
-        
-        # Get nadir info
-        nadir <- nadir_info()
-        if (!nadir$available) {
-          showNotification("Nadir information not available", type = "error")
-          return()
-        }
-        
-        # Calculate normalization parameters
-        start_time <- min(sensor_data$time_s)
-        end_time <- max(sensor_data$time_s)
-        mid_time <- nadir$time
-        
-        # Create normalized time column
-        sensor_data <- sensor_data %>%
-          mutate(time_norm = case_when(
-            time_s <= start_time ~ 0,
-            time_s >= end_time ~ 1,
-            time_s > start_time & time_s < mid_time ~ (time_s - start_time) / (mid_time - start_time) * 0.5,
-            time_s >= mid_time & time_s <= end_time ~ 0.5 + (time_s - mid_time) / (end_time - mid_time) * 0.5
-          ))
-        
-        # Save updated delineated file
-        delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
-        write.csv(sensor_data, delineated_path, row.names = FALSE)
-        
-        # Update sensor index
-        success <- safe_update_sensor_index(output_dir(), input$plot_sensor, list(normalised = "Y"))
-        
-        if (success) {
-          # Trigger data refresh
-          roi_values$data_updated <- roi_values$data_updated + 1
-          roi_values$summary_updated <- roi_values$summary_updated + 1
-          
-          showNotification("Time series normalized successfully!", type = "message")
-        } else {
-          showNotification("Warning: Normalization completed but failed to update index", type = "warning")
-        }
-        
-      }, error = function(e) {
-        showNotification(paste("Error normalizing time series:", e$message), type = "error")
-      })
+    
+# ============================= #
+# /// UI State management \\\ ####  
+# ============================= # 
+    
+## Sensor dropdown ####
+    
+# Update sensor dropdown using shared function
+    observe({
+      update_sensor_dropdown(session, "plot_sensor", processed_sensors(), input$plot_sensor)
     })
     
-    # Normalize status output
-    output$normalize_status <- renderText({
+# Load ROI configurations and update dropdown
+    observe({
+      roi_values$roi_configs <- load_roi_configs(output_dir())
+      
+      if (length(roi_values$roi_configs) > 0) {
+        config_names <- names(roi_values$roi_configs)
+        choices <- setNames(config_names, gsub("_", " ", config_names))
+        selected_value <- config_names[1]
+        
+        # Check if sensor has a saved configuration
+        if (!is.null(input$plot_sensor) && input$plot_sensor != "") {
+          index_file <- get_sensor_index_file(output_dir())
+          if (!is.null(index_file)) {
+            tryCatch({
+              index_df <- read.csv(index_file)
+              sensor_row <- index_df[index_df$file == input$plot_sensor, ]
+              if (nrow(sensor_row) > 0 && !is.na(sensor_row$roi_config) && sensor_row$roi_config != "NA") {
+                if (sensor_row$roi_config %in% config_names) {
+                  selected_value <- sensor_row$roi_config
+                }
+              }
+            },
+            error = function(e) {
+            })
+          }
+        }
+        updateSelectInput(session, "config_choice", 
+                          choices = choices, 
+                          selected = selected_value)
+      }
+    })
+    
+# Update current config when dropdown selection changes
+    observe({
+      req(input$config_choice, roi_values$roi_configs)
+      roi_values$current_config <- roi_values$roi_configs[[input$config_choice]]
+    })
+ 
+## Normalized checkbox ####
+    
+## Enable/disable normalized view checkbox
+    observe({
       req(input$plot_sensor)
       status <- sensor_status()
       
       if (status$normalised) {
-        "Time series normalized"
+        shinyjs::enable("show_normalised")
       } else {
-        ""
+        shinyjs::disable("show_normalised")
+        updateCheckboxInput(session, "show_normalised", value = FALSE)
       }
     })
     
-    # Display ROI table
-    output$roi_table <- DT::renderDataTable({
-      times <- roi_times()
-      if (!is.null(times)) {
-        DT::datatable(
-          times$table,
-          options = list(
-            pageLength = 7,
-            scrollX = TRUE,
-            dom = 't',
-            ordering = FALSE,
-            searching = FALSE,
-            paging = FALSE,
-            info = FALSE
-          ),
-          rownames = FALSE,
-          class = 'cell-border stripe compact'
-        ) %>%
-          DT::formatStyle(columns = 1:4, fontSize = '11px')
-      }
-    })
-    
-    last_nadir_warning <- reactiveVal("")
+## Button state management #####
     
     observe({
       req(input$plot_sensor)
-      nadir <- nadir_info()
       
-      if (!nadir$available && last_nadir_warning() != input$plot_sensor) {
-        showNotification(
-          paste("No nadir data available for", input$plot_sensor, ". Sensor must be listed in summary file."),
-          type = "warning",
-          duration = 8
-        )
-        last_nadir_warning(input$plot_sensor)
+      nadir <- nadir_info()
+      status <- sensor_status()
+      
+      button_states <- list(
+        "create_delineated" = nadir$available && !status$delineated && !custom_roi_values$custom_edit_mode,
+        "start_over" = status$delineated && !custom_roi_values$custom_edit_mode,
+        "trim_sensor" = status$delineated && !status$trimmed && !custom_roi_values$custom_edit_mode,
+        "normalize_time" = status$delineated && status$trimmed && !status$normalised && !custom_roi_values$custom_edit_mode,
+        "passage_time" = status$delineated && status$trimmed && !status$passage_times && !custom_roi_values$custom_edit_mode,
+        "nadir_btn" = (!custom_roi_values$custom_edit_mode) && (!nadir_values$edit_mode || !is.null(nadir_values$selected_point)),
+        "cancel_nadir_btn" = nadir_values$edit_mode,
+        "create_custom_roi" = !custom_roi_values$custom_edit_mode || custom_roi_values$current_roi_step == 6,
+        "cancel_custom_roi" = custom_roi_values$custom_edit_mode,
+        "mark_roi_dynamic" = custom_roi_values$custom_edit_mode
+      )
+      
+      manage_button_states(session, button_states)
+    })
+    
+## Update nadir button ####
+# Update nadir button appearance based on edit mode
+    observe({
+      if (nadir_values$edit_mode) {
+        if (!is.null(nadir_values$selected_point)) {
+          updateActionButton(session, "nadir_btn", label = "Save Pressure Nadir")
+          shinyjs::removeClass("nadir_btn", "btn-warning")
+          shinyjs::addClass("nadir_btn", "btn-success")
+        } else {
+          updateActionButton(session, "nadir_btn", label = "Select Pressure Nadir")
+          shinyjs::removeClass("nadir_btn", "btn-success")
+          shinyjs::addClass("nadir_btn", "btn-warning")
+        }
+      } else {
+        # Reset to initial state when not in edit mode
+        updateActionButton(session, "nadir_btn", label = "Select Pressure Nadir")
+        shinyjs::removeClass("nadir_btn", "btn-success")
+        shinyjs::addClass("nadir_btn", "btn-warning")
       }
     })
     
-    # Create delineated dataset
+## Update custom ROI button ####    
+# Update custom ROI buttons based on edit mode
+    observe({
+      if (custom_roi_values$custom_edit_mode) {
+        step_names <- c("Mark ROI 1 Start", "Mark ROI 2 Start", "Mark ROI 3 Start", 
+                        "Mark ROI 5 End", "Mark ROI 6 End", "Mark ROI 7 End")
+        
+        if (custom_roi_values$current_roi_step < 6) {
+          button_text <- step_names[custom_roi_values$current_roi_step + 1]
+          updateActionButton(session, "mark_roi_dynamic", label = button_text)
+        }
+        
+        # Update main button appearance when all boundaries marked
+        if (custom_roi_values$current_roi_step == 6) {
+          updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
+          shinyjs::removeClass("create_custom_roi", "btn-info")
+          shinyjs::addClass("create_custom_roi", "btn-success")
+        }
+      } else {
+        # Reset to initial state when not in edit mode
+        updateActionButton(session, "mark_roi_dynamic", label = "Mark ROI 1 Start")
+        updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
+        shinyjs::removeClass("create_custom_roi", "btn-success")
+        shinyjs::addClass("create_custom_roi", "btn-info")
+      }
+    })
+    
+    # Export custom edit mode for conditional UI
+    output$custom_edit_mode <- reactive({
+      custom_roi_values$custom_edit_mode
+    })
+    outputOptions(output, "custom_edit_mode", suspendWhenHidden = FALSE)
+
+## Status text ####
+    
+    # CSS styling for delineation status text
+    observe({
+      req(input$plot_sensor)
+      
+      nadir <- nadir_info()
+      status <- sensor_status()
+      
+      status_color <- if (!nadir$available) {
+        "orange"
+      } else if (!status$delineated) {
+        "red"
+      } else if (status$trimmed) {
+        "green"
+      } else {
+        "blue"
+      }
+      
+      shinyjs::runjs(paste0("
+        $('#", ns("delineation_status"), "').css({
+          'color': '", status_color, "', 
+          'font-weight': 'bold'
+        });
+      "))
+    })
+    
+    
+# ============================= #
+# /// Event handlers \\\ ####  
+# ============================= # 
+    
+## Edit nadir ####
+    
+    # Edit nadir button
+    observeEvent(input$nadir_btn, {
+      if (!nadir_values$edit_mode) {
+        # Start edit mode
+        nadir_values$edit_mode <- TRUE
+        nadir_values$selected_point <- NULL
+        nadir_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
+      } else if (!is.null(nadir_values$selected_point)) {
+        # Save nadir
+        success <- safe_update_sensor_index(
+          output_dir(), 
+          input$plot_sensor,
+          list(
+            "pres_min.time." = nadir_values$selected_point$x,
+            "pres_min.kPa." = nadir_values$selected_point$y
+          )
+        )
+        
+        if (success) {
+          nadir_values$nadir_updated <- nadir_values$nadir_updated + 1
+          nadir_values$edit_mode <- FALSE
+          nadir_values$selected_point <- NULL
+          showNotification("Nadir updated successfully!", type = "message")
+        } else {
+          showNotification("Failed to update nadir", type = "error")
+        }
+      }
+    })
+    
+    # Cancel nadir editing
+    observeEvent(input$cancel_nadir_btn, {
+      nadir_values$edit_mode <- FALSE
+      nadir_values$selected_point <- NULL
+    })
+    
+    # Handle click events for nadir selection
+    observe({
+      if (nadir_values$edit_mode) {
+        click_data <- event_data("plotly_click", source = "roi_nadir_plot")
+        if (!is.null(click_data)) {
+          if (is.null(nadir_values$baseline_click) ||
+              click_data$x != nadir_values$baseline_click$x ||
+              click_data$y != nadir_values$baseline_click$y) {
+            nadir_values$selected_point <- list(x = click_data$x, y = click_data$y)
+          }
+        }
+      }
+    })
+
+## Delineate and trim ####
+    
     observeEvent(input$create_delineated, {
       req(input$plot_sensor, roi_times(), roi_values$current_config)
       
@@ -861,6 +609,117 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         showNotification("Failed to update sensor index", type = "error")
       }
     })
+
+## Start over ####
+    
+    observeEvent(input$start_over, {
+      req(input$plot_sensor)
+      
+      # Remove delineated file
+      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
+      if (file.exists(delineated_path)) {
+        file.remove(delineated_path)
+      }
+      
+      # Reset flags in sensor index using shared function
+      success <- safe_update_sensor_index(
+        output_dir(), 
+        input$plot_sensor,
+        list(
+          delineated = "N",
+          trimmed = "N",
+          normalised = "N",
+          roi_config = "NA",
+          passage_times = "N",
+          passage_duration.mm.ss = "NA",
+          ingress_nadir_duration.mm.ss. = "NA",
+          nadir_outgress_duration.mm.ss = "NA"
+        )
+      )
+      
+      if (success) {
+        # Trigger updates
+        roi_values$summary_updated <- roi_values$summary_updated + 1
+        roi_values$data_updated <- roi_values$data_updated + 1
+        
+        showNotification("Reset to original sensor file", type = "message")
+      } else {
+        showNotification("Failed to reset sensor status", type = "error")
+      }
+    })
+    
+## Normalize time series ####
+    
+    observeEvent(input$normalize_time, {
+      req(input$plot_sensor)
+      
+      # Check status
+      status <- get_sensor_status(input$plot_sensor, output_dir())
+      
+      if (!status$delineated || !status$trimmed) {
+        showNotification("Sensor must be delineated and trimmed before normalization", type = "warning")
+        return()
+      }
+      
+      if (status$normalised) {
+        showNotification("Sensor data already normalized", type = "warning")
+        return()
+      }
+      
+      # Perform normalization
+      tryCatch({
+        # Read delineated data
+        sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "delineated")
+        
+        if (is.null(sensor_data)) {
+          showNotification("Failed to read delineated dataset", type = "error")
+          return()
+        }
+        
+        # Get nadir info
+        nadir <- nadir_info()
+        if (!nadir$available) {
+          showNotification("Nadir information not available", type = "error")
+          return()
+        }
+        
+        # Calculate normalization parameters
+        start_time <- min(sensor_data$time_s)
+        end_time <- max(sensor_data$time_s)
+        mid_time <- nadir$time
+        
+        # Create normalized time column
+        sensor_data <- sensor_data %>%
+          mutate(time_norm = case_when(
+            time_s <= start_time ~ 0,
+            time_s >= end_time ~ 1,
+            time_s > start_time & time_s < mid_time ~ (time_s - start_time) / (mid_time - start_time) * 0.5,
+            time_s >= mid_time & time_s <= end_time ~ 0.5 + (time_s - mid_time) / (end_time - mid_time) * 0.5
+          ))
+        
+        # Save updated delineated file
+        delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
+        write.csv(sensor_data, delineated_path, row.names = FALSE)
+        
+        # Update sensor index
+        success <- safe_update_sensor_index(output_dir(), input$plot_sensor, list(normalised = "Y"))
+        
+        if (success) {
+          # Trigger data refresh
+          roi_values$data_updated <- roi_values$data_updated + 1
+          roi_values$summary_updated <- roi_values$summary_updated + 1
+          
+          showNotification("Time series normalized successfully!", type = "message")
+        } else {
+          showNotification("Warning: Normalization completed but failed to update index", type = "warning")
+        }
+        
+      }, error = function(e) {
+        showNotification(paste("Error normalizing time series:", e$message), type = "error")
+      })
+    })
+    
+## Calculate passage times ####
     
     observeEvent(input$passage_time, {
       req(input$plot_sensor)
@@ -938,7 +797,326 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       })
     })
     
-    # Passage status output
+## Create custom ROI ####
+    
+    # Create custom ROI button
+    observeEvent(input$create_custom_roi, {
+      if (!custom_roi_values$custom_edit_mode) {
+        # Start custom mode
+        custom_roi_values$custom_edit_mode <- TRUE
+        custom_roi_values$current_roi_step <- 0
+        custom_roi_values$selected_boundaries <- list()
+        custom_roi_values$custom_nadir_duration <- input$roi4_nadir_duration
+        custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
+        updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
+      } else if (custom_roi_values$current_roi_step == 6) {
+        # Save configuration
+        save_custom_configuration()
+      }
+    })
+    
+    # Cancel custom ROI
+    observeEvent(input$cancel_custom_roi, {
+      custom_roi_values$custom_edit_mode <- FALSE
+      custom_roi_values$current_roi_step <- 0
+      custom_roi_values$selected_boundaries <- list()
+      custom_roi_values$pending_point <- NULL
+      updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
+    })
+    
+    # Dynamic ROI marking button
+    observeEvent(input$mark_roi_dynamic, {
+      if (is.null(custom_roi_values$pending_point)) {
+        showNotification("Mark ROI on plot first", type = "warning", duration = 3)
+        return()
+      }
+      
+      step_names <- c("roi1_start", "roi2_start", "roi3_start", "roi5_end", "roi6_end", "roi7_end")
+      boundary_name <- step_names[custom_roi_values$current_roi_step + 1]
+      
+      custom_roi_values$selected_boundaries[[boundary_name]] <- custom_roi_values$pending_point$x
+      custom_roi_values$current_roi_step <- custom_roi_values$current_roi_step + 1
+      custom_roi_values$pending_point <- NULL
+      
+      # Reset baseline click for next selection
+      custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
+    })
+    
+    # Handle click events for custom ROI selection
+    observe({
+      if (custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step < 6) {
+        click_data <- event_data("plotly_click", source = "roi_nadir_plot")
+        if (!is.null(click_data)) {
+          # Only respond if this click is different from baseline
+          if (is.null(custom_roi_values$baseline_click) ||
+              click_data$x != custom_roi_values$baseline_click$x) {
+            custom_roi_values$pending_point <- list(x = click_data$x)
+          }
+        }
+      }
+    })   
+    
+# ============================= #
+# /// Helper functions \\\ ####  
+# ============================= # 
+
+## Save custom ROI ####
+    
+# Save custom ROI configuration function
+    save_custom_configuration <- function() {
+      req(custom_roi_values$current_roi_step == 6)
+      req(length(custom_roi_values$selected_boundaries) == 6)
+      
+      nadir <- nadir_info()
+      req(nadir$available)
+      
+      # Get nadir duration from input
+      nadir_duration <- input$roi4_nadir_duration
+      
+      # Calculate ROI 4 boundaries
+      roi4_start <- nadir$time - (nadir_duration / 2)
+      roi4_end <- nadir$time + (nadir_duration / 2)
+      
+      # Extract selected boundaries
+      roi1_start <- custom_roi_values$selected_boundaries$roi1_start
+      roi2_start <- custom_roi_values$selected_boundaries$roi2_start
+      roi3_start <- custom_roi_values$selected_boundaries$roi3_start
+      roi5_end <- custom_roi_values$selected_boundaries$roi5_end
+      roi6_end <- custom_roi_values$selected_boundaries$roi6_end
+      roi7_end <- custom_roi_values$selected_boundaries$roi7_end
+      
+      # Calculate durations
+      roi1_duration <- roi2_start - roi1_start
+      roi2_duration <- roi3_start - roi2_start
+      roi3_duration <- roi4_start - roi3_start
+      roi4_duration <- nadir_duration
+      roi5_duration <- roi5_end - roi4_end
+      roi6_duration <- roi6_end - roi5_end
+      roi7_duration <- roi7_end - roi6_end
+      
+      # Save configuration
+      success <- save_custom_roi_config(
+        output_dir(),
+        roi1_duration, roi2_duration, roi3_duration, roi4_duration,
+        roi5_duration, roi6_duration, roi7_duration
+      )
+      
+      if (success$status) {
+        # Reset custom mode
+        custom_roi_values$custom_edit_mode <- FALSE
+        custom_roi_values$current_roi_step <- 0
+        custom_roi_values$selected_boundaries <- list()
+        updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
+        shinyjs::removeClass("create_custom_roi", "btn-success")
+        shinyjs::addClass("create_custom_roi", "btn-info")
+        
+        roi_values$roi_configs <- load_roi_configs(output_dir())
+        roi_values$current_config <- roi_values$roi_configs[[success$config_name]]
+        
+        create_delineated_dataset()
+        
+        showNotification("Custom ROI configuration saved and applied successfully!", type = "message")
+      } else {
+        showNotification("Failed to save custom ROI configuration", type = "error")
+      }
+    }
+    
+## Create delineated data ####
+    
+# Function to create delineated dataset
+    create_delineated_dataset <- function() {
+      tryCatch({
+        # Read original data using shared function
+        sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "min")
+        
+        if (is.null(sensor_data)) {
+          showNotification("Source file not found", type = "error")
+          return()
+        }
+        
+        # Create delineated folder - always check/create fresh
+        delineated_dir <- file.path(output_dir(), "csv", "delineated")
+        if (!dir.exists(delineated_dir)) {
+          dir.create(delineated_dir, showWarnings = FALSE, recursive = TRUE)
+        }
+        
+        # Verify directory was created
+        if (!dir.exists(delineated_dir)) {
+          showNotification("Failed to create delineated directory", type = "error")
+          return()
+        }
+        
+        # Add ROI column
+        times <- roi_times()
+        if (is.null(times)) {
+          showNotification("ROI times not available", type = "error")
+          return()
+        }
+        
+        boundaries <- times$boundaries
+        
+        sensor_data$roi <- cut(sensor_data$time_s, 
+                               breaks = boundaries,
+                               labels = c("trim_start", "roi1_sens_ingress", "roi2_inflow_passage", 
+                                          "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                                          "roi6_outflow_passage", "roi7_sens_outgress", "trim_end"),
+                               include.lowest = TRUE, right = FALSE)
+        
+        # Save delineated file
+        output_file <- file.path(delineated_dir, paste0(input$plot_sensor, "_delineated.csv"))
+        write.csv(sensor_data, output_file, row.names = FALSE)
+        
+        # Verify file was created
+        if (!file.exists(output_file)) {
+          showNotification("Failed to create delineated file", type = "error")
+          return()
+        }
+        
+        # Update sensor index using shared function
+        success <- safe_update_sensor_index(
+          output_dir(),
+          input$plot_sensor,
+          list(
+            delineated = "Y",
+            roi_config = roi_values$current_config$label,
+            trimmed = "N",
+            normalised = "N",
+            passage_times = "N",
+            passage_duration.mm.ss = "NA",
+            ingress_nadir_duration.mm.ss. = "NA",
+            nadir_outgress_duration.mm.ss = "NA"
+          )
+        )
+        
+        if (success) {
+          # Trigger cache refresh by incrementing counter
+          roi_values$summary_updated <- roi_values$summary_updated + 1
+          roi_values$data_updated <- roi_values$data_updated + 1
+          
+          showNotification("Delineated dataset created successfully!", type = "message")
+        } else {
+          showNotification("Warning: Dataset created but failed to update index", type = "warning")
+        }
+        
+      }, error = function(e) {
+        showNotification(paste("Error creating delineated dataset:", e$message), 
+                         type = "error")
+      })
+    }
+
+# ============================= #
+# /// Output render \\\ ####  
+# ============================= #    
+  
+# Display current nadir####
+    
+    output$current_nadir_display <- renderText({
+      nadir <- nadir_info()
+      if (nadir$available) {
+        paste0("Time: ", round(nadir$time, 3), "s\nPressure: ", round(nadir$value, 2), " kPa")
+      } else {
+        "No nadir data available"
+      }
+    })
+    
+# Delineation status display ####
+    output$delineation_status <- renderText({
+      req(input$plot_sensor)
+      
+      nadir <- nadir_info()
+      status <- sensor_status()
+      
+      base_status <- if (!nadir$available) {
+        "No nadir data available"
+      } else if (!status$delineated) {
+        "Sensor requires delineation"
+      } else if (status$trimmed) {
+        "Sensor file delineated and trimmed"
+      } else {
+        "Sensor file delineated (not trimmed)"
+      }
+      
+      norm_status <- if (status$normalised) {
+        "Time series normalised"
+      } else {
+        "Time series requires normalisation"
+      }
+      
+      passage_status <- if (status$passage_times) {
+        "Passage times calculated"
+      } else {
+        "Passage times require calculation"
+      }
+      
+      paste(base_status, norm_status, passage_status, sep = "\n")
+    })
+    
+# Nadir editing status display ####
+    
+    output$nadir_status <- renderText({
+      if (nadir_values$edit_mode) {
+        if (!is.null(nadir_values$selected_point)) {
+          paste0("Selected: ", round(nadir_values$selected_point$y, 2), " kPa at ", 
+                 round(nadir_values$selected_point$x, 3), "s")
+        } else {
+          "Edit mode: Click on plot to select nadir"
+        }
+      } else {
+        ""
+      }
+    })
+    
+# Dynamic ROI instruction ####
+    output$dynamic_instruction <- renderText({
+      if (custom_roi_values$custom_edit_mode) {
+        if (!is.null(custom_roi_values$pending_point)) {
+          paste0("Time: ", round(custom_roi_values$pending_point$x, 3), "s - Click button to confirm")
+        } else if (custom_roi_values$current_roi_step < 6) {
+          step_instructions <- c("Click plot to mark ROI 1 start", "Click plot to mark ROI 2 start", 
+                                 "Click plot to mark ROI 3 start", "Click plot to mark ROI 5 end",
+                                 "Click plot to mark ROI 6 end", "Click plot to mark ROI 7 end")
+          step_instructions[custom_roi_values$current_roi_step + 1]
+        } else {
+          "All boundaries selected - click Save Custom Delineation"
+        }
+      }
+    })
+    
+# Display ROI table ####
+    output$roi_table <- DT::renderDataTable({
+      times <- roi_times()
+      if (!is.null(times)) {
+        DT::datatable(
+          times$table,
+          options = list(
+            pageLength = 7,
+            scrollX = TRUE,
+            dom = 't',
+            ordering = FALSE,
+            searching = FALSE,
+            paging = FALSE,
+            info = FALSE
+          ),
+          rownames = FALSE,
+          class = 'cell-border stripe compact'
+        ) %>%
+          DT::formatStyle(columns = 1:4, fontSize = '11px')
+      }
+    })
+    
+# Normalize status output ####
+    output$normalize_status <- renderText({
+      req(input$plot_sensor)
+      status <- sensor_status()
+      
+      if (status$normalised) {
+        "Time series normalized"
+      } else {
+        ""
+      }
+    })
+    
+# Passage status output####
     output$passage_status <- renderText({
       req(input$plot_sensor)
       status <- sensor_status()
@@ -950,6 +1128,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
+# Passage duration outputs ####
     output$passage_duration_text <- renderText({
       req(input$plot_sensor)
       roi_values$summary_updated  # Invalidate when data changes
@@ -1016,135 +1195,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       })
     })
     
-    # Start over button
-    observeEvent(input$start_over, {
-      req(input$plot_sensor)
-      
-      # Remove delineated file
-      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
-      if (file.exists(delineated_path)) {
-        file.remove(delineated_path)
-      }
-      
-      # Reset flags in sensor index using shared function
-      success <- safe_update_sensor_index(
-        output_dir(), 
-        input$plot_sensor,
-        list(
-          delineated = "N",
-          trimmed = "N",
-          normalised = "N",
-          roi_config = "NA",
-          passage_times = "N",
-          passage_duration.mm.ss = "NA",
-          ingress_nadir_duration.mm.ss. = "NA",
-          nadir_outgress_duration.mm.ss = "NA"
-        )
-      )
-      
-      if (success) {
-        # Trigger updates
-        roi_values$summary_updated <- roi_values$summary_updated + 1
-        roi_values$data_updated <- roi_values$data_updated + 1
-        
-        showNotification("Reset to original sensor file", type = "message")
-      } else {
-        showNotification("Failed to reset sensor status", type = "error")
-      }
-    })
-    
-    # Function to create delineated dataset
-    create_delineated_dataset <- function() {
-      tryCatch({
-        # Read original data using shared function
-        sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "min")
-        
-        if (is.null(sensor_data)) {
-          showNotification("Source file not found", type = "error")
-          return()
-        }
-        
-        # Create delineated folder - always check/create fresh
-        delineated_dir <- file.path(output_dir(), "csv", "delineated")
-        if (!dir.exists(delineated_dir)) {
-          dir.create(delineated_dir, showWarnings = FALSE, recursive = TRUE)
-        }
-        
-        # Verify directory was created
-        if (!dir.exists(delineated_dir)) {
-          showNotification("Failed to create delineated directory", type = "error")
-          return()
-        }
-        
-        # Add ROI column
-        times <- roi_times()
-        if (is.null(times)) {
-          showNotification("ROI times not available", type = "error")
-          return()
-        }
-        
-        boundaries <- times$boundaries
-        
-        sensor_data$roi <- cut(sensor_data$time_s, 
-                               breaks = boundaries,
-                               labels = c("trim_start", "roi1_sens_ingress", "roi2_inflow_passage", 
-                                          "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
-                                          "roi6_outflow_passage", "roi7_sens_outgress", "trim_end"),
-                               include.lowest = TRUE, right = FALSE)
-        
-        # Save delineated file
-        output_file <- file.path(delineated_dir, paste0(input$plot_sensor, "_delineated.csv"))
-        write.csv(sensor_data, output_file, row.names = FALSE)
-        
-        # Verify file was created
-        if (!file.exists(output_file)) {
-          showNotification("Failed to create delineated file", type = "error")
-          return()
-        }
-        
-        # Update sensor index using shared function
-        success <- safe_update_sensor_index(
-          output_dir(),
-          input$plot_sensor,
-          list(
-            delineated = "Y",
-            roi_config = roi_values$current_config$label,
-            trimmed = "N"  # Reset trimmed status when re-delineating
-          )
-        )
-        
-        if (success) {
-          # Trigger cache refresh by incrementing counter
-          roi_values$summary_updated <- roi_values$summary_updated + 1
-          roi_values$data_updated <- roi_values$data_updated + 1
-          
-          showNotification("Delineated dataset created successfully!", type = "message")
-        } else {
-          showNotification("Warning: Dataset created but failed to update index", type = "warning")
-        }
-        
-      }, error = function(e) {
-        showNotification(paste("Error creating delineated dataset:", e$message), 
-                         type = "error")
-      })
-    }
-    
-    # Read selected sensor data (with preference for delineated data)
-    selected_sensor_data <- reactive({
-      req(input$plot_sensor)
-      roi_values$data_updated  # Invalidate when data changes
-      
-      # Check for delineated file first
-      delineated_data <- read_sensor_data(output_dir(), input$plot_sensor, "delineated")
-      if (!is.null(delineated_data)) {
-        return(delineated_data)
-      }
-      
-      # Fall back to regular minimal data
-      return(read_sensor_data(output_dir(), input$plot_sensor, "min"))
-    })
-    
-    # Create ROI plot using shared plotting function
+# Create main plot #####
     output$roi_plot <- renderPlotly({
       sensor_data <- selected_sensor_data()
       req(sensor_data)
@@ -1152,17 +1203,17 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       nadir <- nadir_info()
       req(nadir$available)
       
-      # Determine which time variable to use
+# Determine which time variable to use
       time_var <- if (isTRUE(input$show_normalised) && "time_norm" %in% names(sensor_data)) {
         "time_norm"
       } else {
         "time_s"
       }
       
-      # Check if we're in normalized view
+# Check if we're in normalized view
       is_normalized_view <- (time_var == "time_norm")
       
-      # Get ROI times and boundaries (only if not normalized)
+# Get ROI times and boundaries (only if not normalized)
       times <- roi_times()
       roi_boundaries <- if (!is_normalized_view && !is.null(times)) times$boundaries else NULL
       
@@ -1174,7 +1225,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       suppress_roi_lines <- isTRUE(custom_roi_values$custom_edit_mode) || is_normalized_view
       
-      # Create base plot
+# Create base plot
       p <- create_sensor_plot(
         sensor_data = sensor_data,
         sensor_name = input$plot_sensor,
@@ -1191,7 +1242,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         time_var = time_var
       )
       
-      # Add custom ROI lines in edit mode (skip if normalized view)
+# Add custom ROI lines in edit mode (skip if normalized view)
       if (custom_roi_values$custom_edit_mode &&
           !is.null(input$left_y_var) &&
           input$left_y_var %in% names(sensor_data) &&
@@ -1256,5 +1307,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       return(p)
     })
-  })
-}
+    
+  })  # End of moduleServer
+}     # End of roiServer
+    
