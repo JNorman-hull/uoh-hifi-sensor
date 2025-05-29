@@ -533,20 +533,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     observeEvent(input$create_delineated, {
       req(input$plot_sensor, roi_times(), roi_values$current_config)
       
-      # Check if already delineated using shared function
-      status <- get_sensor_status(input$plot_sensor, output_dir())
-      if (status$delineated) {
-        showModal(modalDialog(
-          title = "Confirm Replacement",
-          "Sensor data already delineated. Continue and replace delineated file?",
-          footer = tagList(
-            modalButton("Cancel"),
-            actionButton(ns("confirm_replace"), "Replace", class = "btn-warning")
-          )
-        ))
-        return()
-      }
-      
       create_delineated_dataset()
     })
     
@@ -561,31 +547,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     observeEvent(input$trim_sensor, {
       req(input$plot_sensor)
       
-      # Check status using shared function
-      status <- get_sensor_status(input$plot_sensor, output_dir())
-      
-      if (!status$delineated) {
-        showNotification("No delineated dataset found. Please delineate dataset first.", type = "warning")
-        return()
-      }
-      
-      if (status$trimmed) {
-        showNotification("Sensor data already trimmed. Delineate dataset again if you want to re-trim.", type = "warning")
-        return()
-      }
-      
       # Read delineated data using shared function
       sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "delineated")
       
       if (is.null(sensor_data)) {
         showNotification("Failed to read delineated dataset.", type = "error")
-        return()
-      }
-      
-      # Check if trim levels exist
-      if (!"roi" %in% names(sensor_data) || 
-          !any(sensor_data$roi %in% c("trim_start", "trim_end"))) {
-        showNotification("Sensor data already trimmed. Delineate dataset again if you want to re-trim.", type = "warning")
         return()
       }
       
@@ -653,19 +619,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     observeEvent(input$normalize_time, {
       req(input$plot_sensor)
       
-      # Check status
-      status <- get_sensor_status(input$plot_sensor, output_dir())
-      
-      if (!status$delineated || !status$trimmed) {
-        showNotification("Sensor must be delineated and trimmed before normalization", type = "warning")
-        return()
-      }
-      
-      if (status$normalised) {
-        showNotification("Sensor data already normalized", type = "warning")
-        return()
-      }
-      
       # Perform normalization
       tryCatch({
         # Read delineated data
@@ -678,11 +631,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         
         # Get nadir info
         nadir <- nadir_info()
-        if (!nadir$available) {
-          showNotification("Nadir information not available", type = "error")
-          return()
-        }
-        
+
         # Calculate normalization parameters
         start_time <- min(sensor_data$time_s)
         end_time <- max(sensor_data$time_s)
@@ -724,19 +673,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     observeEvent(input$passage_time, {
       req(input$plot_sensor)
       
-      # Check status
-      status <- get_sensor_status(input$plot_sensor, output_dir())
-      
-      if (!status$delineated || !status$trimmed) {
-        showNotification("Sensor must be delineated and trimmed before calculating passage times", type = "warning")
-        return()
-      }
-      
-      if (status$passage_times) {
-        showNotification("Passage times already calculated", type = "warning")
-        return()
-      }
-      
       # Calculate passage times
       tryCatch({
         # Read delineated data
@@ -749,12 +685,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         
         # Get nadir info
         nadir <- nadir_info()
-        if (!nadir$available) {
-          showNotification("Nadir information not available", type = "error")
-          return()
-        }
-        
-        # Calculate times in seconds
+
+                # Calculate times in seconds
         first_time <- min(sensor_data$time_s)
         last_time <- max(sensor_data$time_s)
         nadir_time <- nadir$time
@@ -929,11 +861,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         # Read original data using shared function
         sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "min")
         
-        if (is.null(sensor_data)) {
-          showNotification("Source file not found", type = "error")
-          return()
-        }
-        
         # Create delineated folder - always check/create fresh
         delineated_dir <- file.path(output_dir(), "csv", "delineated")
         if (!dir.exists(delineated_dir)) {
@@ -1014,8 +941,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       nadir <- nadir_info()
       if (nadir$available) {
         paste0("Time: ", round(nadir$time, 3), "s\nPressure: ", round(nadir$value, 2), " kPa")
-      } else {
-        "No nadir data available"
       }
     })
     
