@@ -67,27 +67,28 @@ safe_update_sensor_index <- function(output_dir, sensor_name, updates) {
 # Add normalised status checking
 get_sensor_status <- function(sensor_name, output_dir) {
   index_file <- get_sensor_index_file(output_dir)
-  if (is.null(index_file)) return(list(delineated = FALSE, trimmed = FALSE, normalised = FALSE, exists = FALSE))
+  if (is.null(index_file)) return(list(delineated = FALSE, trimmed = FALSE, normalised = FALSE, passage_times = FALSE, exists = FALSE))
   
   tryCatch({
     index_df <- read.csv(index_file)
     sensor_row <- index_df[index_df$file == sensor_name, ]
     
     if (nrow(sensor_row) == 0) {
-      return(list(delineated = FALSE, trimmed = FALSE, normalised = FALSE, exists = FALSE))
+      return(list(delineated = FALSE, trimmed = FALSE, normalised = FALSE, passage_times = FALSE, exists = FALSE))
     }
     
     # Check flags and verify files exist
     delineated_flag <- !is.na(sensor_row$delineated) && sensor_row$delineated == "Y"
     trimmed_flag <- !is.na(sensor_row$trimmed) && sensor_row$trimmed == "Y"
     normalised_flag <- !is.na(sensor_row$normalised) && sensor_row$normalised == "Y"
+    passage_times_flag <- !is.na(sensor_row$passage_times) && sensor_row$passage_times == "Y"
     
     if (delineated_flag) {
       delineated_file <- file.path(output_dir, "csv", "delineated", paste0(sensor_name, "_delineated.csv"))
       if (!file.exists(delineated_file)) {
         # Fix inconsistent state
-        safe_update_sensor_index(output_dir, sensor_name, list(delineated = "N", trimmed = "N", normalised = "N"))
-        delineated_flag <- trimmed_flag <- normalised_flag <- FALSE
+        safe_update_sensor_index(output_dir, sensor_name, list(delineated = "N", trimmed = "N", normalised = "N", passage_times = "N"))
+        delineated_flag <- trimmed_flag <- normalised_flag <- passage_times_flag <- FALSE
       }
     }
     
@@ -95,10 +96,11 @@ get_sensor_status <- function(sensor_name, output_dir) {
       delineated = delineated_flag,
       trimmed = trimmed_flag,
       normalised = normalised_flag,
+      passage_times = passage_times_flag,
       exists = TRUE
     ))
   }, error = function(e) {
-    return(list(delineated = FALSE, trimmed = FALSE, normalised = FALSE, exists = FALSE))
+    return(list(delineated = FALSE, trimmed = FALSE, normalised = FALSE, passage_times = FALSE, exists = FALSE))
   })
 }
 

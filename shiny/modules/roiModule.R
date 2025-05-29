@@ -67,11 +67,9 @@ roiUI <- function(id) {
             ),
             column(
               width = 8,
-
-              tags$p(style = "margin-top: 10px;",
-                     "Overall passage duration: 0 minutes 12 seconds"),
-              tags$p("Sensor ingress to nadir: 0 minutes 6 seconds"),
-              tags$p("Nadir to sensor outgress: 0 minutes 6 seconds")
+              tags$p(style = "margin-top: 10px;", textOutput(ns("passage_duration_text"))),
+              tags$p(textOutput(ns("ingress_nadir_text"))),
+              tags$p(textOutput(ns("nadir_outgress_text")))
             )
           )
         )
@@ -269,7 +267,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         "Time series requires normalisation"
       }
       
-      passage_status <- "Passage times calculated: NO"  # TODO: implement when ready
+      passage_status <- if (status$passage_times) {
+        "Passage times calculated"
+      } else {
+        "Passage times require calculation"
+      }
       
       paste(base_status, norm_status, passage_status, sep = "\n")
     })
@@ -311,6 +313,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         "start_over" = status$delineated && !custom_roi_values$custom_edit_mode,
         "trim_sensor" = status$delineated && !status$trimmed && !custom_roi_values$custom_edit_mode,
         "normalize_time" = status$delineated && status$trimmed && !status$normalised && !custom_roi_values$custom_edit_mode,
+        "passage_time" = status$delineated && status$trimmed && !status$passage_times && !custom_roi_values$custom_edit_mode,
         "nadir_btn" = (!custom_roi_values$custom_edit_mode) && (!nadir_values$edit_mode || !is.null(nadir_values$selected_point)),
         "cancel_nadir_btn" = nadir_values$edit_mode,
         "create_custom_roi" = nadir$available && (!custom_roi_values$custom_edit_mode || custom_roi_values$current_roi_step == 6),
@@ -859,6 +862,160 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
+    observeEvent(input$passage_time, {
+      req(input$plot_sensor)
+      
+      # Check status
+      status <- get_sensor_status(input$plot_sensor, output_dir())
+      
+      if (!status$delineated || !status$trimmed) {
+        showNotification("Sensor must be delineated and trimmed before calculating passage times", type = "warning")
+        return()
+      }
+      
+      if (status$passage_times) {
+        showNotification("Passage times already calculated", type = "warning")
+        return()
+      }
+      
+      # Calculate passage times
+      tryCatch({
+        # Read delineated data
+        sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "delineated")
+        
+        if (is.null(sensor_data)) {
+          showNotification("Failed to read delineated dataset", type = "error")
+          return()
+        }
+        
+        # Get nadir info
+        nadir <- nadir_info()
+        if (!nadir$available) {
+          showNotification("Nadir information not available", type = "error")
+          return()
+        }
+        
+        # Calculate times in seconds
+        first_time <- min(sensor_data$time_s)
+        last_time <- max(sensor_data$time_s)
+        nadir_time <- nadir$time
+        
+        # Calculate durations
+        passage_duration_s <- last_time - first_time
+        ingress_nadir_s <- nadir_time - first_time
+        nadir_outgress_s <- last_time - nadir_time
+        
+        # Convert to mm:ss format
+        format_mm_ss <- function(seconds) {
+          minutes <- floor(seconds / 60)
+          secs <- round(seconds %% 60)
+          sprintf("%02d:%02d", minutes, secs)
+        }
+        
+        # Update sensor index
+        success <- safe_update_sensor_index(
+          output_dir(), 
+          input$plot_sensor,
+          list(
+            passage_times = "Y",
+            passage_duration.mm.ss = format_mm_ss(passage_duration_s),
+            ingress_nadir_duration.mm.ss. = format_mm_ss(ingress_nadir_s),
+            nadir_outgress_duration.mm.ss = format_mm_ss(nadir_outgress_s)
+          )
+        )
+        
+        if (success) {
+          # Trigger data refresh
+          roi_values$summary_updated <- roi_values$summary_updated + 1
+          
+          showNotification("Passage times calculated successfully!", type = "message")
+        } else {
+          showNotification("Failed to update sensor index", type = "error")
+        }
+        
+      }, error = function(e) {
+        showNotification(paste("Error calculating passage times:", e$message), type = "error")
+      })
+    })
+    
+    # Passage status output
+    output$passage_status <- renderText({
+      req(input$plot_sensor)
+      status <- sensor_status()
+      
+      if (status$passage_times) {
+        "Passage times calculated"
+      } else {
+        ""
+      }
+    })
+    
+    output$passage_duration_text <- renderText({
+      req(input$plot_sensor)
+      roi_values$summary_updated  # Invalidate when data changes
+      
+      index_file <- get_sensor_index_file(output_dir())
+      if (is.null(index_file)) return("Overall passage duration: Not calculated")
+      
+      tryCatch({
+        index_df <- read.csv(index_file)
+        sensor_row <- index_df[index_df$file == input$plot_sensor, ]
+        
+        if (nrow(sensor_row) > 0 && !is.na(sensor_row$passage_duration.mm.ss) && sensor_row$passage_duration.mm.ss != "NA") {
+          time_parts <- strsplit(sensor_row$passage_duration.mm.ss, ":")[[1]]
+          paste0("Overall passage duration: ", as.numeric(time_parts[1]), " minutes ", as.numeric(time_parts[2]), " seconds")
+        } else {
+          "Overall passage duration: Not calculated"
+        }
+      }, error = function(e) {
+        "Overall passage duration: Not calculated"
+      })
+    })
+    
+    output$ingress_nadir_text <- renderText({
+      req(input$plot_sensor)
+      roi_values$summary_updated
+      
+      index_file <- get_sensor_index_file(output_dir())
+      if (is.null(index_file)) return("Sensor ingress to nadir: Not calculated")
+      
+      tryCatch({
+        index_df <- read.csv(index_file)
+        sensor_row <- index_df[index_df$file == input$plot_sensor, ]
+        
+        if (nrow(sensor_row) > 0 && !is.na(sensor_row$ingress_nadir_duration.mm.ss.) && sensor_row$ingress_nadir_duration.mm.ss. != "NA") {
+          time_parts <- strsplit(sensor_row$ingress_nadir_duration.mm.ss., ":")[[1]]
+          paste0("Sensor ingress to nadir: ", as.numeric(time_parts[1]), " minutes ", as.numeric(time_parts[2]), " seconds")
+        } else {
+          "Sensor ingress to nadir: Not calculated"
+        }
+      }, error = function(e) {
+        "Sensor ingress to nadir: Not calculated"
+      })
+    })
+    
+    output$nadir_outgress_text <- renderText({
+      req(input$plot_sensor)
+      roi_values$summary_updated
+      
+      index_file <- get_sensor_index_file(output_dir())
+      if (is.null(index_file)) return("Nadir to sensor outgress: Not calculated")
+      
+      tryCatch({
+        index_df <- read.csv(index_file)
+        sensor_row <- index_df[index_df$file == input$plot_sensor, ]
+        
+        if (nrow(sensor_row) > 0 && !is.na(sensor_row$nadir_outgress_duration.mm.ss) && sensor_row$nadir_outgress_duration.mm.ss != "NA") {
+          time_parts <- strsplit(sensor_row$nadir_outgress_duration.mm.ss, ":")[[1]]
+          paste0("Nadir to sensor outgress: ", as.numeric(time_parts[1]), " minutes ", as.numeric(time_parts[2]), " seconds")
+        } else {
+          "Nadir to sensor outgress: Not calculated"
+        }
+      }, error = function(e) {
+        "Nadir to sensor outgress: Not calculated"
+      })
+    })
+    
     # Start over button
     observeEvent(input$start_over, {
       req(input$plot_sensor)
@@ -878,6 +1035,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           trimmed = "N",
           normalised = "N",
           roi_config = "NA",
+          passage_times = "N",
           passage_duration.mm.ss = "NA",
           ingress_nadir_duration.mm.ss. = "NA",
           nadir_outgress_duration.mm.ss = "NA"
