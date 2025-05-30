@@ -19,15 +19,22 @@ roiUI <- function(id) {
           
           selectInput(ns("config_choice"), "Configuration:", choices = NULL, width = "100%"),
           
-          actionButton(ns("create_custom_roi"), "Create Custom Delineation", 
-                       class = "btn btn-sm btn-warning", style = "width: 100%; margin-bottom: 15px;"),
-          
           div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
               tags$label("ROI 4 Nadir Duration (s):", `for` = ns("roi4_nadir_duration"), 
                          style = "margin-right: 8px;"),
               numericInput(ns("roi4_nadir_duration"), NULL, value = 0.2, min = 0.1, max = 2.0, step = 0.1,
                            width = "80px")
           ),
+          
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+                tags$label("Configuration Label:", `for` = ns("roi_config_label"), 
+                           style = "margin-right: 8px;"),
+                textInput(ns("roi_config_label"), NULL, value = "", 
+                          width = "200px", placeholder = "e.g., Garden_Lane_PS_Sep24")
+          ),
+          
+          actionButton(ns("create_custom_roi"), "Create Custom Delineation", 
+                       class = "btn btn-sm btn-warning", style = "width: 100%; margin-bottom: 15px;"),
           
           actionButton(ns("mark_roi_dynamic"), "Mark ROI 1 Start", 
                        class = "btn btn-sm btn-primary", style = "width: 100%; margin-bottom: 10px;"),
@@ -737,6 +744,13 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         custom_roi_values$selected_boundaries <- list()
         custom_roi_values$standardization_applied <- FALSE
         custom_roi_values$baseline_boundaries <- list()
+        
+        existing_configs <- load_roi_configs(output_dir())
+        user_configs <- grep("^User_configuration", names(existing_configs))
+        next_num <- length(user_configs) + 1
+        default_label <- paste0("User_configuration", next_num)
+        updateTextInput(session, "roi_config_label", value = default_label)
+        
         custom_roi_values$custom_nadir_duration <- input$roi4_nadir_duration
         custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
         updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
@@ -834,6 +848,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     observeEvent(input$cancel_custom_roi, {
       custom_roi_values$custom_edit_mode <- FALSE
       custom_roi_values$current_roi_step <- 0
+      updateTextInput(session, "roi_config_label", value = "")
       custom_roi_values$selected_boundaries <- list()
       custom_roi_values$pending_point <- NULL
       custom_roi_values$standardization_applied <- FALSE
@@ -921,7 +936,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       success <- save_custom_roi_config(
         output_dir(),
         roi1_duration, roi2_duration, roi3_duration, roi4_duration,
-        roi5_duration, roi6_duration, roi7_duration
+        roi5_duration, roi6_duration, roi7_duration,
+        input$roi_config_label
       )
       
       if (success$status) {
