@@ -127,6 +127,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     selected_sensor_data <- reactive({
       req(input$sensor_dropdown)
       pressure_values$data_updated  
+
       
       # Check for delineated file first, fall back to minimal data
       delineated_data <- read_sensor_data(output_dir(), input$sensor_dropdown, "delineated")
@@ -197,16 +198,43 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
       
       nadir <- nadir_info()
       
+
         p <- create_sensor_plot(
           sensor_data = sensor_data,
           sensor_name = input$sensor_dropdown,
           plot_config = "standard",
           nadir_info = nadir,
+
+      # Validate required columns exist
+      if (!"pressure_kpa" %in% names(sensor_data)) {
+        showNotification("Pressure data not available for this sensor", type = "warning")
+        return(NULL)
+      }
+      
+      # Create plot using shared function
+      tryCatch({
+        p <- create_sensor_plot(
+          sensor_data = sensor_data,
+          sensor_name = input$plot_sensor,
+          plot_config = "standard",  # Changed from "pressure_only" to "standard"
+          left_var = input$left_y_var,
+          right_var = "none",
+          nadir_info = nadir,
+          show_nadir = input$show_nadir && nadir$available,  # Only show if available
+          show_legend = FALSE,
+
           plot_source = "pressure_plot"
         )
         
         return(p)
+
+      }, error = function(e) {
+        cat("Plot error:", e$message, "\n")
+        showNotification(paste("Plot error:", e$message), type = "error")
+        return(NULL)
       })
-    
+)
   })  # End of moduleServer
-}     # End of pressureServer
+})
+  
+}  # End of pressureServer
