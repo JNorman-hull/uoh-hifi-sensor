@@ -59,15 +59,7 @@ ui <- navbarPage(
       sidebarLayout(
         sidebarPanel(
           width = 3,
-          
-          h4("File Locations"),
-          verbatimTextOutput("raw_data_location"),
-          verbatimTextOutput("output_location"),
-          
-          hr(),
-          
-          actionButton("process_btn", "Process Selected Sensors", 
-                       class = "btn-primary btn-block")
+          uiOutput("dynamic_sidebar")
         ),
         
         mainPanel(
@@ -76,11 +68,9 @@ ui <- navbarPage(
           tabsetPanel(
             id = "processingTabset",
             
-            # ROI Delineation Tab
             tabPanel(
               title = "Process raw data",
               value = "process_raw_data",
-              
               fileSelectionUI("file_selection"),
               
               hr(),
@@ -100,8 +90,8 @@ ui <- navbarPage(
             tabPanel(
               title = "Add deployment information",
               value = "add_deployment_info",
-              h3("Add Deployment Information"),
-              p("This tab will allow users to add and edit deployment information for sensors.")
+              deploymentUI("deployment_info")
+              
             )
           )
         )

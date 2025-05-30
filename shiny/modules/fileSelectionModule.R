@@ -30,6 +30,22 @@ fileSelectionUI <- function(id) {
   )
 }
 
+
+fileSidebarUI <- function(id) {
+  ns <- NS(id)
+  
+  tagList(
+      h4("File Locations"),
+      verbatimTextOutput("raw_data_location"),
+      verbatimTextOutput("output_location"),
+      
+      hr(),
+      
+      actionButton("process_btn", "Process Selected Sensors", 
+                   class = "btn-primary btn-block")
+  )
+}
+
 fileSelectionServer <- function(id, raw_data_path, output_dir = NULL, processing_complete = reactive(FALSE)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns

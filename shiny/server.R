@@ -43,11 +43,23 @@ server <- function(input, output, session) {
   })
   
   output$dynamic_sidebar <- renderUI({
-    if (input$visualizationTabset == "interactive_plots") {
-      plotsSidebarUI("plots")
-    } else if (input$visualizationTabset == "roi_delineation") {
-      roiSidebarUI("roi")
-    }
+    # Top-level tab determines which nested tabset to check
+    switch(input$mainTabset,
+           
+           "visualization" = {
+             switch(input$visualizationTabset,
+                    "interactive_plots" = plotsSidebarUI("plots"),
+                    "roi_delineation" = roiSidebarUI("roi")
+             )
+           },
+           
+           "processing" = {
+             switch(input$processingTabset,
+                    "process_raw_data" = fileSidebarUI("file_selection"),
+                    "add_deployment_info" = deploymentSidebarUI("deployment_info")
+             )
+           }
+    )
   })
   
 }
