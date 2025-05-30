@@ -228,31 +228,14 @@ load_roi_configs <- function(output_dir) {
   }
 }
 
-## Save custom ROI config ####
-save_custom_roi_config <- function(output_dir, roi1, roi2, roi3, roi4, roi5, roi6, roi7) {
+save_custom_roi_config <- function(output_dir, roi1, roi2, roi3, roi4, roi5, roi6, roi7, custom_label) {
   config_file <- file.path(output_dir, "roi_config.txt")
   
   tryCatch({
-    # Read existing configs to determine next user config number
-    existing_configs <- character(0)
-    if (file.exists(config_file)) {
-      existing_configs <- readLines(config_file)
-    }
-    
-    # Find highest user config number
-    user_configs <- grep("^User_configuration", existing_configs, value = TRUE)
-    next_num <- 1
-    if (length(user_configs) > 0) {
-      # Extract numbers from User_configuration# names
-      nums <- as.numeric(gsub("User_configuration([0-9]+),.*", "\\1", user_configs))
-      nums <- nums[!is.na(nums)]
-      if (length(nums) > 0) {
-        next_num <- max(nums) + 1
-      }
-    }
+    # Use the provided custom label directly
+    config_name <- trimws(custom_label)
     
     # Create new config line
-    config_name <- paste0("User_configuration", next_num)
     config_line <- paste(config_name, roi1, roi2, roi3, roi4, roi5, roi6, roi7, sep = ", ")
     
     # Append to file

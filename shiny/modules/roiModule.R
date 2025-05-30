@@ -30,7 +30,7 @@ roiUI <- function(id) {
                 tags$label("Configuration Label:", `for` = ns("roi_config_label"), 
                            style = "margin-right: 8px;"),
                 textInput(ns("roi_config_label"), NULL, value = "", 
-                          width = "200px", placeholder = "e.g., Garden_Lane_PS_Sep24")
+                          width = "200px", placeholder = "e.g., Peter_PS_Sep24")
           ),
           
           actionButton(ns("create_custom_roi"), "Create Custom Delineation", 
@@ -412,6 +412,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         "cancel_nadir_btn" = nadir_values$edit_mode,
         "create_custom_roi" = !custom_roi_values$custom_edit_mode || custom_roi_values$current_roi_step == 6,
         "cancel_custom_roi" = custom_roi_values$custom_edit_mode,
+        "roi_config_label" = custom_roi_values$custom_edit_mode,
         "mark_roi_dynamic" = custom_roi_values$custom_edit_mode,
         "round_roi" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 6,
         "match_pre_post" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 6 && isTRUE(input$round_roi)
@@ -744,20 +745,19 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         custom_roi_values$selected_boundaries <- list()
         custom_roi_values$standardization_applied <- FALSE
         custom_roi_values$baseline_boundaries <- list()
-        
-        existing_configs <- load_roi_configs(output_dir())
-        user_configs <- grep("^User_configuration", names(existing_configs))
-        next_num <- length(user_configs) + 1
-        default_label <- paste0("User_configuration", next_num)
-        updateTextInput(session, "roi_config_label", value = default_label)
-        
         custom_roi_values$custom_nadir_duration <- input$roi4_nadir_duration
         custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
         updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
         updateCheckboxInput(session, "round_roi", value = FALSE)
         updateCheckboxInput(session, "match_pre_post", value = FALSE)
       } else if (custom_roi_values$current_roi_step == 6) {
-        # Check if ANY standardization was applied
+        # Check if label is provided
+        if (is.null(input$roi_config_label) || nchar(trimws(input$roi_config_label)) == 0) {
+          showNotification("Please enter a configuration label before saving", type = "error", duration = 4)
+          return()
+        }
+        
+        # Check standardization
         if (!custom_roi_values$standardization_applied) {
           showModal(modalDialog(
             title = "ROI Not Standardized",
@@ -844,7 +844,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         updateCheckboxInput(session, "match_pre_post", value = FALSE)
       }
     })
-    
+# Reset roi values if cancel #
     observeEvent(input$cancel_custom_roi, {
       custom_roi_values$custom_edit_mode <- FALSE
       custom_roi_values$current_roi_step <- 0
@@ -853,7 +853,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       custom_roi_values$pending_point <- NULL
       custom_roi_values$standardization_applied <- FALSE
       custom_roi_values$baseline_boundaries <- list()
-      
+      updateTextInput(session, "roi_config_label", value = "")
       # Reset checkboxes
       updateCheckboxInput(session, "round_roi", value = FALSE)
       updateCheckboxInput(session, "match_pre_post", value = FALSE)
