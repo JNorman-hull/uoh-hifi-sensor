@@ -141,7 +141,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     # Get nadir info using shared function
     nadir_info <- reactive({
       req(input$sensor_dropdown)
-      deployment_values$data_updated
+      pressure_values$data_updated 
       get_nadir_info(input$sensor_dropdown, output_dir())
     })
     
@@ -186,25 +186,17 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
       invalidation_trigger = reactive(pressure_values$data_updated)
     )
     
-    # Return any reactive values other modules might need
-    return(list(
-      selected_sensor = reactive(input$sensor_dropdown)
-    ))
-    
-# Pressure plot ###
     output$pressure_plot <- renderPlotly({
       sensor_data <- selected_sensor_data()
       req(sensor_data)
       
       nadir <- nadir_info()
       
-      # Validate required columns exist
       if (!"pressure_kpa" %in% names(sensor_data)) {
         showNotification("Pressure data not available for this sensor", type = "warning")
         return(NULL)
       }
       
-      # Create plot using shared function
       tryCatch({
         p <- create_sensor_plot(
           sensor_data = sensor_data,
@@ -215,9 +207,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
           show_legend = FALSE,
           plot_source = "pressure_plot"
         )
-        
         return(p)
-        
       }, error = function(e) {
         cat("Plot error:", e$message, "\n")
         showNotification(paste("Plot error:", e$message), type = "error")
@@ -225,10 +215,10 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
       })
     })
     
-    # Return any reactive values other modules might need
     return(list(
       selected_sensor = reactive(input$sensor_dropdown)
     ))
     
-  })  # End of moduleServer
-} 
+  })
+}  
+  
