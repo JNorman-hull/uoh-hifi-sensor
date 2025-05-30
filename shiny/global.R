@@ -9,7 +9,7 @@ library(shinydashboard)
 
 dir.create("./RAPID_Processed", showWarnings = FALSE, recursive = TRUE)
 
-# Import Python functions (with no main block)
+# Import Python functions
 source_python("rapid_functions.py")
 
 # Source all modules
@@ -19,9 +19,11 @@ source("modules/resultsModule.R")
 source("modules/plotsModule.R")
 source("modules/roiModule.R")
 
-# ========== SHARED HELPER FUNCTIONS ==========
+# ============================= #
+# /// Shared helpers \\\ ####  
+# ============================= #  
 
-# Sensor index system functions
+## Get sensor index ####
 get_sensor_index_file <- function(output_dir) {
   index_file <- file.path(output_dir, "uoh_sensor_index.csv")
   if (file.exists(index_file)) {
@@ -31,14 +33,7 @@ get_sensor_index_file <- function(output_dir) {
   }
 }
 
-get_processed_sensors <- function(output_dir) {
-  min_files <- list.files(path = file.path(output_dir, "csv"), 
-                          pattern = "_min\\.csv$", full.names = FALSE)
-  sensor_names <- gsub("_min\\.csv$", "", min_files)
-  return(sensor_names)
-}
-
-# Safe index file operations with error handling
+## Safe update index file ####
 safe_update_sensor_index <- function(output_dir, sensor_name, updates) {
   index_file <- get_sensor_index_file(output_dir)
   if (is.null(index_file)) return(FALSE)
@@ -63,8 +58,8 @@ safe_update_sensor_index <- function(output_dir, sensor_name, updates) {
   })
 }
 
-# Comprehensive sensor status checking
-# Add normalized status checking
+## Processing status flags ####
+
 get_sensor_status <- function(sensor_name, output_dir) {
   index_file <- get_sensor_index_file(output_dir)
   if (is.null(index_file)) return(list(delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE, exists = FALSE))
@@ -104,7 +99,15 @@ get_sensor_status <- function(sensor_name, output_dir) {
   })
 }
 
-# Standardized file reading with error handling
+## Get processed sensors ####
+get_processed_sensors <- function(output_dir) {
+  min_files <- list.files(path = file.path(output_dir, "csv"), 
+                          pattern = "_min\\.csv$", full.names = FALSE)
+  sensor_names <- gsub("_min\\.csv$", "", min_files)
+  return(sensor_names)
+}
+
+## File reading ####
 read_sensor_data <- function(output_dir, sensor_name, type = "min", subdir = "csv") {
   suffix <- switch(type,
                    "min" = "_min.csv",
@@ -128,43 +131,19 @@ read_sensor_data <- function(output_dir, sensor_name, type = "min", subdir = "cs
   })
 }
 
-# Sensor dropdown management
-update_sensor_dropdown <- function(session, input_id, processed_sensors, current_selection = NULL) {
-  choices <- processed_sensors
-  if (length(choices) == 0) return()
+## Get raw sensor names ####
+# Path needs to be linked to directory_config
+get_sensor_names <- function(raw_data_path = "./RAW_data/RAPID") {
+  # Find all IMP files
+  imp_files <- list.files(path = raw_data_path, pattern = "\\.IMP$", full.names = FALSE)
   
-  current_choice <- current_selection
-  selected_value <- if (!is.null(current_choice) && current_choice %in% choices) {
-    current_choice
-  } else {
-    choices[1]
-  }
+  # Extract base names without extensions
+  sensor_names <- tools::file_path_sans_ext(imp_files)
   
-  updateSelectInput(session, input_id, choices = choices, selected = selected_value)
+  return(sensor_names)
 }
 
-# Variable definitions to eliminate hardcoding
-get_sensor_variables <- function() {
-  list(
-    names = c("pressure_kpa", "higacc_mag_g", "inacc_mag_ms", "rot_mag_degs"),
-    labels = c("Pressure [kPa]", "HIG Acceleration [g]", 
-               "Inertial Acceleration [m/s²]", "Rotational Magnitude [deg/s]"),
-    colors = c("black", "red", "blue", "green")
-  )
-}
-
-# Button state management helper
-manage_button_states <- function(session, button_config) {
-  for (button_id in names(button_config)) {
-    if (button_config[[button_id]]) {
-      shinyjs::enable(button_id)
-    } else {
-      shinyjs::disable(button_id)
-    }
-  }
-}
-
-# Enhanced nadir info function
+## Nadir info #####
 get_nadir_info <- function(sensor_name, output_dir) {
   if (is.null(sensor_name) || sensor_name == "") {
     return(list(available = FALSE))
@@ -215,7 +194,47 @@ get_nadir_info <- function(sensor_name, output_dir) {
   })
 }
 
-# ROI configuration loader
+## Sensor dropdown management ####
+
+update_sensor_dropdown <- function(session, input_id, processed_sensors, current_selection = NULL) {
+  choices <- processed_sensors
+  if (length(choices) == 0) return()
+  
+  current_choice <- current_selection
+  selected_value <- if (!is.null(current_choice) && current_choice %in% choices) {
+    current_choice
+  } else {
+    choices[1]
+  }
+  
+  updateSelectInput(session, input_id, choices = choices, selected = selected_value)
+}
+
+## Variable definitions #####
+get_sensor_variables <- function() {
+  list(
+    names = c("pressure_kpa", "higacc_mag_g", "inacc_mag_ms", "rot_mag_degs"),
+    labels = c("Pressure [kPa]", "HIG Acceleration [g]", 
+               "Inertial Acceleration [m/s²]", "Rotational Magnitude [deg/s]"),
+    colors = c("black", "red", "blue", "green")
+  )
+}
+
+## Button state management ####
+manage_button_states <- function(session, button_config) {
+  for (button_id in names(button_config)) {
+    if (button_config[[button_id]]) {
+      shinyjs::enable(button_id)
+    } else {
+      shinyjs::disable(button_id)
+    }
+  }
+}
+
+
+## ROI configuration loader ####
+# Not sure why this is global, maybe generalise it for a 'config loader'
+
 load_roi_configs <- function(output_dir) {
   config_file <- file.path(output_dir, "roi_config.txt")
   
@@ -250,7 +269,7 @@ load_roi_configs <- function(output_dir) {
   }
 }
 
-# Save custom ROI configuration
+## Save custom ROI config ####
 save_custom_roi_config <- function(output_dir, roi1, roi2, roi3, roi4, roi5, roi6, roi7) {
   config_file <- file.path(output_dir, "roi_config.txt")
   
@@ -288,20 +307,14 @@ save_custom_roi_config <- function(output_dir, roi1, roi2, roi3, roi4, roi5, roi
   })
 }
 
-# Create a wrapper function to get unique sensor names (without extensions)
-get_sensor_names <- function(raw_data_path = "./RAW_data/RAPID") {
-  # Find all IMP files
-  imp_files <- list.files(path = raw_data_path, pattern = "\\.IMP$", full.names = FALSE)
-  
-  # Extract base names without extensions
-  sensor_names <- tools::file_path_sans_ext(imp_files)
-  
-  return(sensor_names)
-}
 
-# ========== SHARED PLOTTING FUNCTIONS ==========
 
-# Default plot configurations
+# ============================= #
+# /// Shared plot functions \\\ ####  
+# ============================= #  
+
+## Plot configuration ####
+
 get_default_plot_config <- function(config_name = "standard") {
   configs <- list(
     standard = list(
@@ -333,7 +346,7 @@ get_default_plot_config <- function(config_name = "standard") {
   return(configs[[config_name]])
 }
 
-# Shared sensor plotting function
+## Create plots ####
 create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard",
                                left_var = NULL, right_var = NULL,
                                nadir_info = NULL, show_nadir = TRUE,
@@ -496,3 +509,6 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
   
   return(p)
 }
+
+# End of plot functions #
+
