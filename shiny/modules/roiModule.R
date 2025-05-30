@@ -84,7 +84,7 @@ roiUI <- function(id) {
     fluidRow(
       column(
         width = 12,
-        tags$p("Use the table above to review detected ROIs. Each entry corresponds to a delineated region based on sensor thresholds or manual marking. Check timestamps to ensure accurate event capture."),
+        tags$p("Use the table above to review regions of interest. Each entry corresponds to a delineated region. Check timestamps to ensure accurate event capture."),
         tags$ul(
           tags$li("ROI 1 Sensor ingress: Mark region sesnsor enters system from atmospheric pressure or other landmark feature (e.g., injection pipe)"),
           tags$li("ROI 2 Intake passage: Mark region sesnsor moves through intake structures and pipework leading towards the impeller."),
@@ -133,7 +133,7 @@ roiSidebarUI <- function(id) {
     hr(), h4("Time normalization"),
     actionButton(ns("normalize_time"), "Normalize time series", class = "btn-primary btn-block"),
     textOutput(ns("normalize_status")),
-    checkboxInput(ns("show_normalised"), "Show Normalised time series", value = FALSE)
+    checkboxInput(ns("show_normalised"), "Show normalized time series", value = FALSE)
   )
 }
 
@@ -359,11 +359,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       req(input$plot_sensor)
       status <- sensor_status()
       
-      if (status$normalised) {
-        shinyjs::enable("show_normalised")
+      if (status$normalized) {
+        shinyjs::enable("show_normalized")
       } else {
-        shinyjs::disable("show_normalised")
-        updateCheckboxInput(session, "show_normalised", value = FALSE)
+        shinyjs::disable("show_normalized")
+        updateCheckboxInput(session, "show_normalized", value = FALSE)
       }
     })
     
@@ -379,7 +379,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         "create_delineated" = nadir$available && !status$delineated && !custom_roi_values$custom_edit_mode,
         "start_over" = status$delineated && !custom_roi_values$custom_edit_mode,
         "trim_sensor" = status$delineated && !status$trimmed && !custom_roi_values$custom_edit_mode,
-        "normalize_time" = status$delineated && status$trimmed && !status$normalised && !custom_roi_values$custom_edit_mode,
+        "normalize_time" = status$delineated && status$trimmed && !status$normalized && !custom_roi_values$custom_edit_mode,
         "passage_time" = status$delineated && status$trimmed && !status$passage_times && !custom_roi_values$custom_edit_mode,
         "nadir_btn" = (!custom_roi_values$custom_edit_mode) && (!nadir_values$edit_mode || !is.null(nadir_values$selected_point)),
         "cancel_nadir_btn" = nadir_values$edit_mode,
@@ -594,12 +594,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         list(
           delineated = "N",
           trimmed = "N",
-          normalised = "N",
+          normalized = "N",
           roi_config = "NA",
           passage_times = "N",
-          passage_duration.mm.ss = "NA",
+          passage_duration.mm.ss. = "NA",
           ingress_nadir_duration.mm.ss. = "NA",
-          nadir_outgress_duration.mm.ss = "NA"
+          nadir_outgress_duration.mm.ss. = "NA"
         )
       )
       
@@ -651,7 +651,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         write.csv(sensor_data, delineated_path, row.names = FALSE)
         
         # Update sensor index
-        success <- safe_update_sensor_index(output_dir(), input$plot_sensor, list(normalised = "Y"))
+        success <- safe_update_sensor_index(output_dir(), input$plot_sensor, list(normalized = "Y"))
         
         if (success) {
           # Trigger data refresh
@@ -709,9 +709,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           input$plot_sensor,
           list(
             passage_times = "Y",
-            passage_duration.mm.ss = format_mm_ss(passage_duration_s),
+            passage_duration.mm.ss. = format_mm_ss(passage_duration_s),
             ingress_nadir_duration.mm.ss. = format_mm_ss(ingress_nadir_s),
-            nadir_outgress_duration.mm.ss = format_mm_ss(nadir_outgress_s)
+            nadir_outgress_duration.mm.ss. = format_mm_ss(nadir_outgress_s)
           )
         )
         
@@ -907,11 +907,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
             delineated = "Y",
             roi_config = roi_values$current_config$label,
             trimmed = "N",
-            normalised = "N",
+            normalized = "N",
             passage_times = "N",
-            passage_duration.mm.ss = "NA",
+            passage_duration.mm.ss. = "NA",
             ingress_nadir_duration.mm.ss. = "NA",
-            nadir_outgress_duration.mm.ss = "NA"
+            nadir_outgress_duration.mm.ss. = "NA"
           )
         )
         
@@ -961,10 +961,10 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         "Sensor file delineated (not trimmed)"
       }
       
-      norm_status <- if (status$normalised) {
-        "Time series normalised"
+      norm_status <- if (status$normalized) {
+        "Time series normalized"
       } else {
-        "Time series requires normalisation"
+        "Time series requires normalization"
       }
       
       passage_status <- if (status$passage_times) {
@@ -1034,7 +1034,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       req(input$plot_sensor)
       status <- sensor_status()
       
-      if (status$normalised) {
+      if (status$normalized) {
         "Time series normalized"
       } else {
         ""
@@ -1053,71 +1053,41 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-# Passage duration outputs ####
-    output$passage_duration_text <- renderText({
+# Passage duration output #### 
+    
+# Helper function to generate duration text
+    generate_duration_text <- function(duration_col, prefix_text) {
       req(input$plot_sensor)
-      roi_values$summary_updated  # Invalidate when data changes
+      roi_values$summary_updated
       
       index_file <- get_sensor_index_file(output_dir())
-      if (is.null(index_file)) return("Overall passage duration: Not calculated")
+      if (is.null(index_file)) return(paste0(prefix_text, ": Not calculated"))
       
       tryCatch({
         index_df <- read.csv(index_file)
         sensor_row <- index_df[index_df$file == input$plot_sensor, ]
         
-        if (nrow(sensor_row) > 0 && !is.na(sensor_row$passage_duration.mm.ss) && sensor_row$passage_duration.mm.ss != "NA") {
-          time_parts <- strsplit(sensor_row$passage_duration.mm.ss, ":")[[1]]
-          paste0("Overall passage duration: ", as.numeric(time_parts[1]), " minutes ", as.numeric(time_parts[2]), " seconds")
+        if (nrow(sensor_row) > 0 && !is.na(sensor_row[[duration_col]]) && sensor_row[[duration_col]] != "NA") {
+          time_parts <- strsplit(sensor_row[[duration_col]], ":")[[1]]
+          paste0(prefix_text, ": ", as.numeric(time_parts[1]), " minutes ", as.numeric(time_parts[2]), " seconds")
         } else {
-          "Overall passage duration: Not calculated"
+          paste0(prefix_text, ": Not calculated")
         }
       }, error = function(e) {
-        "Overall passage duration: Not calculated"
+        paste0(prefix_text, ": Not calculated")
       })
+    }
+    
+    output$passage_duration_text <- renderText({
+      generate_duration_text("passage_duration.mm.ss.", "Overall passage duration")
     })
     
     output$ingress_nadir_text <- renderText({
-      req(input$plot_sensor)
-      roi_values$summary_updated
-      
-      index_file <- get_sensor_index_file(output_dir())
-      if (is.null(index_file)) return("Sensor ingress to nadir: Not calculated")
-      
-      tryCatch({
-        index_df <- read.csv(index_file)
-        sensor_row <- index_df[index_df$file == input$plot_sensor, ]
-        
-        if (nrow(sensor_row) > 0 && !is.na(sensor_row$ingress_nadir_duration.mm.ss.) && sensor_row$ingress_nadir_duration.mm.ss. != "NA") {
-          time_parts <- strsplit(sensor_row$ingress_nadir_duration.mm.ss., ":")[[1]]
-          paste0("Sensor ingress to nadir: ", as.numeric(time_parts[1]), " minutes ", as.numeric(time_parts[2]), " seconds")
-        } else {
-          "Sensor ingress to nadir: Not calculated"
-        }
-      }, error = function(e) {
-        "Sensor ingress to nadir: Not calculated"
-      })
+      generate_duration_text("ingress_nadir_duration.mm.ss.", "Sensor ingress to nadir")
     })
     
     output$nadir_outgress_text <- renderText({
-      req(input$plot_sensor)
-      roi_values$summary_updated
-      
-      index_file <- get_sensor_index_file(output_dir())
-      if (is.null(index_file)) return("Nadir to sensor outgress: Not calculated")
-      
-      tryCatch({
-        index_df <- read.csv(index_file)
-        sensor_row <- index_df[index_df$file == input$plot_sensor, ]
-        
-        if (nrow(sensor_row) > 0 && !is.na(sensor_row$nadir_outgress_duration.mm.ss) && sensor_row$nadir_outgress_duration.mm.ss != "NA") {
-          time_parts <- strsplit(sensor_row$nadir_outgress_duration.mm.ss, ":")[[1]]
-          paste0("Nadir to sensor outgress: ", as.numeric(time_parts[1]), " minutes ", as.numeric(time_parts[2]), " seconds")
-        } else {
-          "Nadir to sensor outgress: Not calculated"
-        }
-      }, error = function(e) {
-        "Nadir to sensor outgress: Not calculated"
-      })
+      generate_duration_text("nadir_outgress_duration.mm.ss.", "Nadir to sensor outgress")
     })
     
 # Create main plot #####
@@ -1129,7 +1099,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       req(nadir$available)
       
 # Determine which time variable to use
-      time_var <- if (isTRUE(input$show_normalised) && "time_norm" %in% names(sensor_data)) {
+      time_var <- if (isTRUE(input$show_normalized) && "time_norm" %in% names(sensor_data)) {
         "time_norm"
       } else {
         "time_s"
