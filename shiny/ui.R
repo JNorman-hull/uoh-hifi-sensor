@@ -135,7 +135,7 @@ ui <- navbarPage(
     sidebarLayout(
       sidebarPanel(
         width = 3,
-        pressureSidebarUI()
+        pressureSidebarUI("pressure")
         
       ),
       
@@ -149,8 +149,7 @@ ui <- navbarPage(
           tabPanel(
             title = "Pressure analysis",
             value = "pres_analysis",
-            h3("This page is reserved for pressure analysis")
-            #roiUI("roi")
+            pressureUI("pressure")
           ),
           
           # Plots Tab
