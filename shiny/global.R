@@ -538,7 +538,7 @@ get_status_check_definitions <- function() {
         list(condition = function(status) !status$delineated, 
              level = 1, message = "Sensor requires delineation"),
         list(condition = function(status) status$delineated && !status$trimmed, 
-             level = 3, message = "Sensor file delineated (not trimmed)"),
+             level = 2, message = "Sensor file delineated (not trimmed)"),
         list(condition = function(status) status$trimmed, 
              level = 4, message = "Sensor file delineated and trimmed")
       )
@@ -549,10 +549,8 @@ get_status_check_definitions <- function() {
       checks = list(
         list(condition = function(status) status$normalized,
              level = 4, message = "Time series normalized"),
-        list(condition = function(status) status$delineated && status$trimmed && !status$normalized,
-             level = 3, message = "Time series requires normalization"),
-        list(condition = function(status) !status$delineated || !status$trimmed,
-             level = 0, message = "")
+        list(condition = function(status) !status$normalized,
+             level = 1, message = "Time series requires normalization")
       )
     ),
     
@@ -561,10 +559,8 @@ get_status_check_definitions <- function() {
       checks = list(
         list(condition = function(status) status$passage_times,
              level = 4, message = "Passage times calculated"),
-        list(condition = function(status) status$delineated && status$trimmed && !status$passage_times,
-             level = 3, message = "Passage times require calculation"),
-        list(condition = function(status) !status$delineated || !status$trimmed,
-             level = 0, message = "")
+        list(condition = function(status) !status$passage_times,
+             level = 1, message = "Passage times require calculation")
       )
     ),
     
