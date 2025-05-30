@@ -19,6 +19,7 @@ source("modules/resultsModule.R")
 source("modules/plotsModule.R")
 source("modules/roiModule.R")
 source("modules/deploymentModule.R")
+source("modules/pressureModule.R")
 
 # ============================= #
 # /// Shared helpers \\\ ####  

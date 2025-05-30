@@ -1,11 +1,11 @@
 ui <- navbarPage(
   title = tags$div(
-    tags$span("rap", style = "color: red; font-weight: bold;"), 
-    tags$span("PRO", style = "color: blue; font-style: italic;")
+    tags$span( style = "color: red; vertical-align: sub; font-weight: bold; margin: 0; padding: 0;", "RAP",
+              tags$sub(style = "color: blue;  vertical-align: sup; font-style: italic; ; margin: 0; padding: 0;", "pro"))
   ),
   id = "mainTabset",
   footer = tags$div(
-    "University of Hull (2025)", 
+    "Hull International Fisheries Institute (2025)", 
     style = "font-size: 12px; color: #666; text-align: center;"
   ),
   
@@ -135,6 +135,8 @@ ui <- navbarPage(
     sidebarLayout(
       sidebarPanel(
         width = 3,
+        pressureSidebarUI()
+        
       ),
       
       mainPanel(
