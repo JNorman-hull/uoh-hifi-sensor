@@ -112,7 +112,11 @@ roiSidebarUI <- function(id) {
     h4("Sensor selection"),
     selectInput(ns("plot_sensor"), "Select Sensor:", choices = NULL),
     
-    div(style = "margin-bottom: 15px;", textOutput(ns("delineation_status"))),
+    div(style = "margin-bottom: 15px;", 
+        textOutput(ns("delineation_status")),
+        textOutput(ns("normalization_status")), 
+        textOutput(ns("passage_times_status"))
+    ),
     
     hr(), h4("Axis Options"),
     selectInput(ns("left_y_var"), "Left Y-Axis:", choices = var_choices, selected = "pressure_kpa"),
@@ -445,34 +449,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     })
     outputOptions(output, "custom_edit_mode", suspendWhenHidden = FALSE)
 
-## Status text ####
-    
-    # CSS styling for delineation status text
-    observe({
-      req(input$plot_sensor)
-      
-      nadir <- nadir_info()
-      status <- sensor_status()
-      
-      status_color <- if (!nadir$available) {
-        "orange"
-      } else if (!status$delineated) {
-        "red"
-      } else if (status$trimmed) {
-        "green"
-      } else {
-        "blue"
-      }
-      
-      shinyjs::runjs(paste0("
-        $('#", ns("delineation_status"), "').css({
-          'color': '", status_color, "', 
-          'font-weight': 'bold'
-        });
-      "))
-    })
-    
-    
 # ============================= #
 # /// Event handlers \\\ ####  
 # ============================= # 
@@ -944,37 +920,30 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-# Delineation status display ####
-    output$delineation_status <- renderText({
-      req(input$plot_sensor)
-      
-      nadir <- nadir_info()
-      status <- sensor_status()
-      
-      base_status <- if (!nadir$available) {
-        "No nadir data available"
-      } else if (!status$delineated) {
-        "Sensor requires delineation"
-      } else if (status$trimmed) {
-        "Sensor file delineated and trimmed"
-      } else {
-        "Sensor file delineated (not trimmed)"
-      }
-      
-      norm_status <- if (status$normalized) {
-        "Time series normalized"
-      } else {
-        "Time series requires normalization"
-      }
-      
-      passage_status <- if (status$passage_times) {
-        "Passage times calculated"
-      } else {
-        "Passage times require calculation"
-      }
-      
-      paste(base_status, norm_status, passage_status, sep = "\n")
-    })
+# Delineation, normalization, passage status ####
+    delineation_status <- create_individual_status_display(
+      "delineation_status", 
+      reactive(input$plot_sensor), 
+      reactive(output_dir()),
+      output, session, "delineation",
+      invalidation_trigger = reactive(roi_values$summary_updated)  # Triggers refresh
+    )
+    
+    normalization_status <- create_individual_status_display(
+      "normalization_status",
+      reactive(input$plot_sensor), 
+      reactive(output_dir()),
+      output, session, "normalization",
+      invalidation_trigger = reactive(roi_values$summary_updated)
+    )
+    
+    passage_times_status <- create_individual_status_display(
+      "passage_times_status",
+      reactive(input$plot_sensor), 
+      reactive(output_dir()),
+      output, session, "passage_times", 
+      invalidation_trigger = reactive(roi_values$summary_updated)
+    )
     
 # Nadir editing status display ####
     

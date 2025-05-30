@@ -58,47 +58,6 @@ safe_update_sensor_index <- function(output_dir, sensor_name, updates) {
   })
 }
 
-## Processing status flags ####
-
-get_sensor_status <- function(sensor_name, output_dir) {
-  index_file <- get_sensor_index_file(output_dir)
-  if (is.null(index_file)) return(list(delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE, exists = FALSE))
-  
-  tryCatch({
-    index_df <- read.csv(index_file)
-    sensor_row <- index_df[index_df$file == sensor_name, ]
-    
-    if (nrow(sensor_row) == 0) {
-      return(list(delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE, exists = FALSE))
-    }
-    
-    # Check flags and verify files exist
-    delineated_flag <- !is.na(sensor_row$delineated) && sensor_row$delineated == "Y"
-    trimmed_flag <- !is.na(sensor_row$trimmed) && sensor_row$trimmed == "Y"
-    normalized_flag <- !is.na(sensor_row$normalized) && sensor_row$normalized == "Y"
-    passage_times_flag <- !is.na(sensor_row$passage_times) && sensor_row$passage_times == "Y"
-    
-    if (delineated_flag) {
-      delineated_file <- file.path(output_dir, "csv", "delineated", paste0(sensor_name, "_delineated.csv"))
-      if (!file.exists(delineated_file)) {
-        # Fix inconsistent state
-        safe_update_sensor_index(output_dir, sensor_name, list(delineated = "N", trimmed = "N", normalized = "N", passage_times = "N"))
-        delineated_flag <- trimmed_flag <- normalized_flag <- passage_times_flag <- FALSE
-      }
-    }
-    
-    return(list(
-      delineated = delineated_flag,
-      trimmed = trimmed_flag,
-      normalized = normalized_flag,
-      passage_times = passage_times_flag,
-      exists = TRUE
-    ))
-  }, error = function(e) {
-    return(list(delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE, exists = FALSE))
-  })
-}
-
 ## Get processed sensors ####
 get_processed_sensors <- function(output_dir) {
   min_files <- list.files(path = file.path(output_dir, "csv"), 
@@ -307,8 +266,6 @@ save_custom_roi_config <- function(output_dir, roi1, roi2, roi3, roi4, roi5, roi
   })
 }
 
-
-
 # ============================= #
 # /// Shared plot functions \\\ ####  
 # ============================= #  
@@ -512,3 +469,272 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
 
 # End of plot functions #
 
+# ============================= #
+# /// Shared status functions \\\ ####  
+# ============================= #  
+
+## Processing status flags ####
+
+get_sensor_status <- function(sensor_name, output_dir) {
+  index_file <- get_sensor_index_file(output_dir)
+  if (is.null(index_file)) return(list(delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE, exists = FALSE))
+  
+  tryCatch({
+    index_df <- read.csv(index_file)
+    sensor_row <- index_df[index_df$file == sensor_name, ]
+    
+    if (nrow(sensor_row) == 0) {
+      return(list(delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE, exists = FALSE))
+    }
+    
+    # Check flags and verify files exist
+    delineated_flag <- !is.na(sensor_row$delineated) && sensor_row$delineated == "Y"
+    trimmed_flag <- !is.na(sensor_row$trimmed) && sensor_row$trimmed == "Y"
+    normalized_flag <- !is.na(sensor_row$normalized) && sensor_row$normalized == "Y"
+    passage_times_flag <- !is.na(sensor_row$passage_times) && sensor_row$passage_times == "Y"
+    
+    if (delineated_flag) {
+      delineated_file <- file.path(output_dir, "csv", "delineated", paste0(sensor_name, "_delineated.csv"))
+      if (!file.exists(delineated_file)) {
+        # Fix inconsistent state
+        safe_update_sensor_index(output_dir, sensor_name, list(delineated = "N", trimmed = "N", normalized = "N", passage_times = "N"))
+        delineated_flag <- trimmed_flag <- normalized_flag <- passage_times_flag <- FALSE
+      }
+    }
+    
+    return(list(
+      delineated = delineated_flag,
+      trimmed = trimmed_flag,
+      normalized = normalized_flag,
+      passage_times = passage_times_flag,
+      exists = TRUE
+    ))
+  }, error = function(e) {
+    return(list(delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE, exists = FALSE))
+  })
+}
+
+
+
+## Define status levels ####
+get_status_level_config <- function() {
+  list(
+    levels = list(
+      "0" = list(color = "gray", label = "None", priority = 0),
+      "1" = list(color = "red", label = "Error", priority = 1),
+      "2" = list(color = "orange", label = "Warning", priority = 2), 
+      "3" = list(color = "blue", label = "Info", priority = 3),
+      "4" = list(color = "green", label = "Success", priority = 4)
+    )
+  )
+}
+
+## Define  status check types ####
+get_status_check_definitions <- function() {
+  list(
+    delineation = list(
+      name = "Delineation Status",
+      checks = list(
+        list(condition = function(status) !status$delineated, 
+             level = 1, message = "Sensor requires delineation"),
+        list(condition = function(status) status$delineated && !status$trimmed, 
+             level = 3, message = "Sensor file delineated (not trimmed)"),
+        list(condition = function(status) status$trimmed, 
+             level = 4, message = "Sensor file delineated and trimmed")
+      )
+    ),
+    
+    normalization = list(
+      name = "Normalization Status", 
+      checks = list(
+        list(condition = function(status) status$normalized,
+             level = 4, message = "Time series normalized"),
+        list(condition = function(status) status$delineated && status$trimmed && !status$normalized,
+             level = 3, message = "Time series requires normalization"),
+        list(condition = function(status) !status$delineated || !status$trimmed,
+             level = 0, message = "")
+      )
+    ),
+    
+    passage_times = list(
+      name = "Passage Times",
+      checks = list(
+        list(condition = function(status) status$passage_times,
+             level = 4, message = "Passage times calculated"),
+        list(condition = function(status) status$delineated && status$trimmed && !status$passage_times,
+             level = 3, message = "Passage times require calculation"),
+        list(condition = function(status) !status$delineated || !status$trimmed,
+             level = 0, message = "")
+      )
+    ),
+    
+    pressure_processing = list(
+      name = "Pressure Analysis",
+      checks = list(
+        list(condition = function(status) status$all_pres_processed,
+             level = 4, message = "All pressure analysis complete"),
+        list(condition = function(status) status$pres_sum_processed,
+             level = 3, message = "Basic pressure analysis complete"),
+        list(condition = function(status) status$delineated && status$trimmed,
+             level = 1, message = "Pressure analysis required"),
+        list(condition = function(status) !status$delineated || !status$trimmed,
+             level = 0, message = "")
+      )
+    ),
+    
+    acceleration_processing = list(
+      name = "Acceleration Analysis", 
+      checks = list(
+        list(condition = function(status) status$all_acc_processed,
+             level = 4, message = "All acceleration analysis complete"),
+        list(condition = function(status) status$acc_sum_processed,
+             level = 3, message = "Basic acceleration analysis complete"),
+        list(condition = function(status) status$delineated && status$trimmed,
+             level = 1, message = "Acceleration analysis required"),
+        list(condition = function(status) !status$delineated || !status$trimmed,
+             level = 0, message = "")
+      )
+    ),
+    
+    rotation_processing = list(
+      name = "Rotation Analysis",
+      checks = list(
+        list(condition = function(status) status$all_rot_processed,
+             level = 4, message = "All rotation analysis complete"),
+        list(condition = function(status) status$rot_sum_processed,
+             level = 3, message = "Basic rotation analysis complete"),
+        list(condition = function(status) status$delineated && status$trimmed,
+             level = 1, message = "Rotation analysis required"),
+        list(condition = function(status) !status$delineated || !status$trimmed,
+             level = 0, message = "")
+      )
+    )
+  )
+}
+
+## Evaluate status checks ####
+evaluate_status_checks <- function(sensor_name, output_dir, check_types = c("delineation", "normalization", "passage_times")) {
+  if (is.null(sensor_name) || sensor_name == "") {
+    return(list(
+      level = 0,
+      messages = "No sensor selected",
+      color = "gray",
+      label = "None"
+    ))
+  }
+  
+  # Get sensor status
+  status <- get_sensor_status(sensor_name, output_dir)
+  
+  # Get check definitions and level config
+  check_definitions <- get_status_check_definitions()
+  level_config <- get_status_level_config()
+  
+  # Evaluate all requested check types
+  results <- list()
+  highest_level <- 0
+  
+  for (check_type in check_types) {
+    if (check_type %in% names(check_definitions)) {
+      check_def <- check_definitions[[check_type]]
+      
+      # Find first matching condition
+      for (check in check_def$checks) {
+        if (check$condition(status)) {
+          results[[check_type]] <- list(
+            level = check$level,
+            message = check$message,
+            name = check_def$name
+          )
+          highest_level <- max(highest_level, check$level)
+          break
+        }
+      }
+    }
+  }
+  
+  # Get styling for highest level
+  highest_config <- level_config$levels[[as.character(highest_level)]]
+  
+  # Combine messages
+  messages <- sapply(results, function(x) x$message)
+  messages <- messages[messages != ""]  # Remove empty messages
+  
+  return(list(
+    level = highest_level,
+    messages = paste(messages, collapse = "\n"),
+    color = highest_config$color,
+    label = highest_config$label,
+    details = results
+  ))
+}
+
+## Apply styling to UI #### 
+apply_status_styling <- function(session, element_id, color, ns = NULL) {
+  full_id <- if (!is.null(ns)) paste0("#", ns(element_id)) else paste0("#", element_id)
+  
+  shinyjs::runjs(paste0("
+    $('", full_id, "').css({
+      'color': '", color, "', 
+      'font-weight': 'bold'
+    });
+  "))
+}
+
+## Create status display output ####
+
+# use this in modules
+# Create individual status display for a single check type
+create_individual_status_display <- function(id, sensor_reactive, output_dir_reactive, output, session, check_type, invalidation_trigger = NULL) {
+  ns <- session$ns
+  
+  # Reactive for individual status information  
+  status_info <- reactive({
+    # Include invalidation trigger if provided
+    if (!is.null(invalidation_trigger)) {
+      invalidation_trigger()
+    }
+    
+    sensor_name <- sensor_reactive()
+    output_dir <- output_dir_reactive()
+    
+    if (is.null(sensor_name) || sensor_name == "") {
+      return(list(level = 0, messages = "", color = "gray"))
+    }
+    
+    # Evaluate only this specific check type
+    result <- evaluate_status_checks(sensor_name, output_dir, check_types = c(check_type))
+    
+    # Return just the message for this check type
+    if (check_type %in% names(result$details)) {
+      detail <- result$details[[check_type]]
+      level_config <- get_status_level_config()
+      color <- level_config$levels[[as.character(detail$level)]]$color
+      
+      return(list(
+        level = detail$level,
+        message = detail$message,
+        color = color
+      ))
+    } else {
+      return(list(level = 0, message = "", color = "gray"))
+    }
+  })
+  
+  # Text output
+  output[[id]] <- renderText({
+    status_info()$message
+  })
+  
+  # Styling observer
+  observe({
+    info <- status_info()
+    if (info$message != "") {  # Only apply styling if there's a message
+      apply_status_styling(session, id, info$color, ns)
+    }
+  })
+  
+  return(status_info)
+}
+
+# End of status functions #
