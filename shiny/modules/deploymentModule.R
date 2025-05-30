@@ -38,12 +38,18 @@ deploymentSidebarUI <- function(id) {
 
 
 
-deploymentServer <- function(id, raw_data_path, output_dir = NULL, processing_complete = reactive(FALSE)) {
+deploymentServer <- function(id, raw_data_path, output_dir, processing_complete) {
   moduleServer(id, function(input, output, session) {
-    
     ns <- session$ns
     
+    # Add actual deployment logic here
+    observeEvent(input$add_deploy_btn, {
+      # Handle deployment info addition
+      showNotification("Deployment info functionality coming soon!", type = "message")
+    })
     
+    # Return any reactive values other modules might need
+    return(list())
   })
 }
 

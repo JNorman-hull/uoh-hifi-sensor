@@ -64,7 +64,7 @@ ui <- navbarPage(
     sidebarLayout(
       sidebarPanel(
         width = 3,
-        uiOutput("dynamic_sidebar")
+        uiOutput("processing_sidebar")
       ),
       
       mainPanel(
@@ -102,7 +102,7 @@ ui <- navbarPage(
     sidebarLayout(
       sidebarPanel(
         width = 3,
-        uiOutput("dynamic_sidebar")
+        uiOutput("time_sidebar")
       ),
       
       mainPanel(

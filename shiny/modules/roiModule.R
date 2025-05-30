@@ -104,6 +104,7 @@ roiUI <- function(id) {
           tags$li("Sensor start and end trim: Automatically calculated from start and end of data and start and end of ROI 1 and 7. Use trim tool to remove after delineatition.")
         )
       )
+      
     )
   )
 }

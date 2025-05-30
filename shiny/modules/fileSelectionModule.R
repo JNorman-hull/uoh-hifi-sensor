@@ -36,8 +36,8 @@ fileSidebarUI <- function(id) {
   
   tagList(
       h4("File Locations"),
-      verbatimTextOutput(ns("raw_data_location")),
-      verbatimTextOutput(ns("output_location")),
+      verbatimTextOutput("raw_data_location"),
+      verbatimTextOutput("output_location"),
       
       hr(),
       
@@ -46,11 +46,20 @@ fileSidebarUI <- function(id) {
   )
 }
 
-fileSelectionServer <- function(id, raw_data_path, output_dir = NULL, processing_complete = reactive(FALSE)) {
+fileSelectionServer <- function(id, raw_data_path, output_dir, processing_complete = reactive(FALSE)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # Single source of truth for all state
+    # Move file location outputs here
+    output$raw_data_location <- renderText({
+      paste("Raw Data Path:", raw_data_path())
+    })
+    
+    output$output_location <- renderText({
+      paste("Output Path:", output_dir())
+    })
+    
+    # All your existing sensor table logic...
     state <- reactiveValues(
       sensor_data = NULL,
       selected_indices = integer(0)
@@ -59,7 +68,12 @@ fileSelectionServer <- function(id, raw_data_path, output_dir = NULL, processing
     processed_sensors <- reactive({
       if (is.null(output_dir)) return(character(0))
       
-      processing_complete()  # Invalidate when processing completes
+      # Safely call processing_complete
+      tryCatch({
+        processing_complete()  # This should now work
+      }, error = function(e) {
+        # If processing_complete fails, just continue without invalidation
+      }) # Invalidate when processing completes
       
       index_file <- get_sensor_index_file(output_dir())
       if (is.null(index_file) || !file.exists(index_file)) {
@@ -233,8 +247,17 @@ fileSelectionServer <- function(id, raw_data_path, output_dir = NULL, processing
     })
     
     return(list(
-      selected_sensors = selected_sensors,
-      sensor_names = sensor_names
+      selected_sensors = reactive({
+        if (is.null(state$sensor_data) || length(state$selected_indices) == 0) {
+          return(character(0))
+        }
+        state$sensor_data$Filename[state$selected_indices]
+      }),
+      sensor_names = reactive({
+        if (is.null(state$sensor_data)) character(0) else state$sensor_data$Filename
+      }),
+      # Expose process trigger for other modules to use
+      process_trigger = reactive(input$process_btn)
     ))
   })
 }
