@@ -43,17 +43,21 @@ server <- function(input, output, session) {
   })
   
   output$dynamic_sidebar <- renderUI({
-    # Top-level tab determines which nested tabset to check
+    # Debug: print the current tab values
+    cat("Main tab:", input$mainTabset, "\n")
+    cat("Processing tab:", input$processingTabset, "\n")
+    cat("Visualization tab:", input$visualizationTabset, "\n")
+    
     switch(input$mainTabset,
            
-           "visualization" = {
+           "time_series_analysis" = {
              switch(input$visualizationTabset,
                     "interactive_plots" = plotsSidebarUI("plots"),
                     "roi_delineation" = roiSidebarUI("roi")
              )
            },
            
-           "processing" = {
+           "sensor_processing" = {
              switch(input$processingTabset,
                     "process_raw_data" = fileSidebarUI("file_selection"),
                     "add_deployment_info" = deploymentSidebarUI("deployment_info")

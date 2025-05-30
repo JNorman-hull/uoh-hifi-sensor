@@ -30,8 +30,9 @@ deploymentSidebarUI <- function(id) {
     h4("Deployment controls"),
     hr(),
     
-    actionButton("add_deploy_btn", "Add deployment Information", 
+    actionButton(ns("add_deploy_btn"), "Add deployment Information", 
                  class = "btn-primary btn-block")
+                 
   )
 }
 

@@ -1,5 +1,13 @@
 ui <- navbarPage(
-  title = "UoH RAPID processing",
+  title = tags$div(
+    tags$span("rap", style = "color: red; font-weight: bold;"), 
+    tags$span("PRO", style = "color: blue; font-style: italic;")
+  ),
+  id = "mainTabset",
+  footer = tags$div(
+    "University of Hull (2025)", 
+    style = "font-size: 12px; color: #666; text-align: center;"
+  ),
   
   # Combine shinyjs and JavaScript in the header
   header = tags$head(
@@ -50,58 +58,46 @@ ui <- navbarPage(
   
   ## Sensor processing page##
   tabPanel(
-    "Sensor processing",
+    title = "Sensor processing",
+    value = "sensor_processing",
     
-    tabPanel(
-      title = "Process raw data",
-      value = "process_raw_data",
+    sidebarLayout(
+      sidebarPanel(
+        width = 3,
+        uiOutput("dynamic_sidebar")
+      ),
       
-      sidebarLayout(
-        sidebarPanel(
-          width = 3,
-          uiOutput("dynamic_sidebar")
-        ),
+      mainPanel(
+        width = 9,
         
-        mainPanel(
-          width = 9,
+        tabsetPanel(
+          id = "processingTabset",
           
-          tabsetPanel(
-            id = "processingTabset",
-            
-            tabPanel(
-              title = "Process raw data",
-              value = "process_raw_data",
-              fileSelectionUI("file_selection"),
-              
-              hr(),
-              
-              # Processing Log in middle  
-              processingUI("processing"),
-              
-              hr(),
-              
-              # Results Summary at bottom
-              resultsUI("results"),
-              
-              hr()
-            ),
-            
-            # Plots Tab
-            tabPanel(
-              title = "Add deployment information",
-              value = "add_deployment_info",
-              deploymentUI("deployment_info")
-              
-            )
+          tabPanel(
+            title = "Process raw data",
+            value = "process_raw_data",
+            fileSelectionUI("file_selection"),
+            hr(),
+            processingUI("processing"),
+            hr(),
+            resultsUI("results"),
+            hr()
+          ),
+          
+          tabPanel(
+            title = "Add deployment information",
+            value = "add_deployment_info",
+            deploymentUI("deployment_info")
           )
         )
-       )
       )
-    ),
+    )
+  ),
 
   ## Time series page ##
   tabPanel(
-    "Time series analysis",
+    title = "Time series analysis",
+    value = "time_series_analysis",
     
     sidebarLayout(
       sidebarPanel(

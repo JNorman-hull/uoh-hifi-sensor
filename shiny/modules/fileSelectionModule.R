@@ -36,12 +36,12 @@ fileSidebarUI <- function(id) {
   
   tagList(
       h4("File Locations"),
-      verbatimTextOutput("raw_data_location"),
-      verbatimTextOutput("output_location"),
+      verbatimTextOutput(ns("raw_data_location")),
+      verbatimTextOutput(ns("output_location")),
       
       hr(),
       
-      actionButton("process_btn", "Process Selected Sensors", 
+      actionButton(ns("process_btn"), "Process Selected Sensors", 
                    class = "btn-primary btn-block")
   )
 }
