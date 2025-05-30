@@ -137,7 +137,7 @@ roiSidebarUI <- function(id) {
     hr(), h4("Time normalization"),
     actionButton(ns("normalize_time"), "Normalize time series", class = "btn-primary btn-block"),
     textOutput(ns("normalize_status")),
-    checkboxInput(ns("show_normalised"), "Show normalized time series", value = FALSE)
+    checkboxInput(ns("show_normalized"), "Show normalized time series", value = FALSE)
   )
 }
 
