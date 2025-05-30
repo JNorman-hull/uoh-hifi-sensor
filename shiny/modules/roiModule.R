@@ -173,7 +173,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       current_roi_step = 0,        # Current step in ROI marking process (0-6)
       selected_boundaries = list(), # Selected ROI boundaries
       baseline_click = NULL,       # Baseline click for detecting new clicks
-      pending_point = NULL         # Point marked but not yet confirmed
+      pending_point = NULL,         # Point marked but not yet confirmed
+      standardization_applied = FALSE,  # Track if any standardization was used
+      baseline_boundaries = list()      # Store original boundaries for reset
     )
 
  
@@ -355,6 +357,20 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       req(input$config_choice, roi_values$roi_configs)
       roi_values$current_config <- roi_values$roi_configs[[input$config_choice]]
     })
+    
+# Reset checkboxes when sensor changes
+    observeEvent(input$plot_sensor, {
+      # Reset standardization checkboxes when switching sensors
+      updateCheckboxInput(session, "round_roi", value = FALSE)
+      updateCheckboxInput(session, "match_pre_post", value = FALSE)
+      
+      # Reset custom ROI state when switching sensors
+      custom_roi_values$custom_edit_mode <- FALSE
+      custom_roi_values$current_roi_step <- 0
+      custom_roi_values$selected_boundaries <- list()
+      custom_roi_values$standardization_applied <- FALSE
+      custom_roi_values$baseline_boundaries <- list()
+    })
  
 ## Normalized checkbox ####
     
@@ -389,7 +405,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         "cancel_nadir_btn" = nadir_values$edit_mode,
         "create_custom_roi" = !custom_roi_values$custom_edit_mode || custom_roi_values$current_roi_step == 6,
         "cancel_custom_roi" = custom_roi_values$custom_edit_mode,
-        "mark_roi_dynamic" = custom_roi_values$custom_edit_mode
+        "mark_roi_dynamic" = custom_roi_values$custom_edit_mode,
+        "round_roi" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 6,
+        "match_pre_post" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 6 && isTRUE(input$round_roi)
       )
       
       manage_button_states(session, button_states)
@@ -584,6 +602,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         roi_values$summary_updated <- roi_values$summary_updated + 1
         roi_values$data_updated <- roi_values$data_updated + 1
         
+        updateCheckboxInput(session, "round_roi", value = FALSE)
+        updateCheckboxInput(session, "match_pre_post", value = FALSE)
+        
         showNotification("Reset to original sensor file", type = "message")
       } else {
         showNotification("Failed to reset sensor status", type = "error")
@@ -705,7 +726,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       })
     })
     
-## Create custom ROI ####
+## Create custom ROI incl. modal####
     
     # Create custom ROI button
     observeEvent(input$create_custom_roi, {
@@ -714,21 +735,114 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         custom_roi_values$custom_edit_mode <- TRUE
         custom_roi_values$current_roi_step <- 0
         custom_roi_values$selected_boundaries <- list()
+        custom_roi_values$standardization_applied <- FALSE
+        custom_roi_values$baseline_boundaries <- list()
         custom_roi_values$custom_nadir_duration <- input$roi4_nadir_duration
         custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
         updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
+        updateCheckboxInput(session, "round_roi", value = FALSE)
+        updateCheckboxInput(session, "match_pre_post", value = FALSE)
       } else if (custom_roi_values$current_roi_step == 6) {
-        # Save configuration
-        save_custom_configuration()
+        # Check if ANY standardization was applied
+        if (!custom_roi_values$standardization_applied) {
+          showModal(modalDialog(
+            title = "ROI Not Standardized",
+            "ROI boundaries have not been standardized. Continue without standardization?",
+            footer = tagList(
+              modalButton("No, go back"),
+              actionButton(ns("confirm_save_without_standardization"), "Yes, continue", class = "btn-warning")
+            ),
+            size = "m"
+          ))
+        } else {
+          save_custom_configuration()
+        }
       }
     })
     
-    # Cancel custom ROI
+    # If user clicks continue, then remove the message and continue to save
+    
+    observeEvent(input$confirm_save_without_standardization, {
+      removeModal()
+      save_custom_configuration() 
+    })
+    
+### Round ROI 0.1s ####
+    observeEvent(input$round_roi, {
+      if (input$round_roi && length(custom_roi_values$selected_boundaries) == 6) {
+        # Store original boundaries if first standardization
+        if (!custom_roi_values$standardization_applied) {
+          custom_roi_values$baseline_boundaries <- custom_roi_values$selected_boundaries
+        }
+        
+        # Round all boundaries to nearest 0.1s
+        for (boundary_name in names(custom_roi_values$selected_boundaries)) {
+          rounded_time <- round(custom_roi_values$selected_boundaries[[boundary_name]] * 10) / 10
+          custom_roi_values$selected_boundaries[[boundary_name]] <- rounded_time
+        }
+        
+        custom_roi_values$standardization_applied <- TRUE
+        showNotification("ROI times rounded to nearest 0.1s", type = "message", duration = 3)
+      }
+    })
+    
+### Match pre/post nadir ROI ####  
+    observeEvent(input$match_pre_post, {
+      if (input$match_pre_post && length(custom_roi_values$selected_boundaries) == 6) {
+        # Check if rounding was done first
+        if (!isTRUE(input$round_roi)) {
+          updateCheckboxInput(session, "match_pre_post", value = FALSE)
+          showNotification("Please round ROI times first before matching durations", type = "warning", duration = 4)
+          return()
+        }
+        
+        nadir <- nadir_info()
+        nadir_duration <- input$roi4_nadir_duration
+        
+        if (!custom_roi_values$standardization_applied) {
+          custom_roi_values$baseline_boundaries <- custom_roi_values$selected_boundaries
+        }
+        
+        # Calculate current ROI 3 and 5 durations
+        roi4_start <- nadir$time - (nadir_duration / 2)
+        roi4_end <- nadir$time + (nadir_duration / 2)
+        
+        roi3_duration <- roi4_start - custom_roi_values$selected_boundaries$roi3_start
+        roi5_duration <- custom_roi_values$selected_boundaries$roi5_end - roi4_end
+        
+        # Use the average duration for both
+        avg_duration <- (roi3_duration + roi5_duration) / 2
+        
+        # Recalculate ROI 3 start and ROI 5 end
+        custom_roi_values$selected_boundaries$roi3_start <- roi4_start - avg_duration
+        custom_roi_values$selected_boundaries$roi5_end <- roi4_end + avg_duration
+        
+        custom_roi_values$standardization_applied <- TRUE
+        showNotification(paste0("Pre/post-nadir ROI matched to ", round(avg_duration, 3), "s duration"), 
+                         type = "message", duration = 3)
+      }
+    })
+    
+# Reset match checkbox if round is unchecked
+    
+    observeEvent(input$round_roi, {
+      if (!isTRUE(input$round_roi)) {
+        updateCheckboxInput(session, "match_pre_post", value = FALSE)
+      }
+    })
+    
     observeEvent(input$cancel_custom_roi, {
       custom_roi_values$custom_edit_mode <- FALSE
       custom_roi_values$current_roi_step <- 0
       custom_roi_values$selected_boundaries <- list()
       custom_roi_values$pending_point <- NULL
+      custom_roi_values$standardization_applied <- FALSE
+      custom_roi_values$baseline_boundaries <- list()
+      
+      # Reset checkboxes
+      updateCheckboxInput(session, "round_roi", value = FALSE)
+      updateCheckboxInput(session, "match_pre_post", value = FALSE)
+      
       updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
     })
     
@@ -762,8 +876,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           }
         }
       }
-    })   
+    })
     
+
 # ============================= #
 # /// Helper functions \\\ ####  
 # ============================= # 
@@ -973,6 +1088,23 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         } else {
           "All boundaries selected - click Save Custom Delineation"
         }
+      }
+    })
+
+##Round status ####
+    output$round_status <- renderText({
+      if (input$round_roi && custom_roi_values$standardization_applied) {
+        "ROI times rounded to 0.1s precision"
+      } else {
+        ""
+      }
+    })
+##Match pre/post ####
+    output$match_status <- renderText({
+      if (input$match_pre_post && custom_roi_values$standardization_applied) {
+        "Pre/post-nadir ROI durations matched"  
+      } else {
+        ""
       }
     })
     
