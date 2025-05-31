@@ -251,6 +251,106 @@ save_custom_roi_config <- function(output_dir, roi1, roi2, roi3, roi4, roi5, roi
   })
 }
 
+
+# Get ROI boundaries for plots ####
+
+## Get ROI boundaries ####
+## Get ROI boundaries ####
+get_roi_boundaries <- function(sensor_name, output_dir, show_roi = FALSE) {
+  if (!show_roi || is.null(sensor_name) || sensor_name == "") {
+    return(NULL)
+  }
+  
+  # Check if sensor is delineated and trimmed
+  status <- get_sensor_status(sensor_name, output_dir)
+  if (!status$delineated || !status$trimmed) {
+    return(NULL)
+  }
+  
+  # Read delineated data
+  sensor_data <- read_sensor_data(output_dir, sensor_name, "delineated")
+  if (is.null(sensor_data) || !"roi" %in% names(sensor_data)) {
+    return(NULL)
+  }
+  
+  # ROI levels for trimmed data
+  roi_levels <- c("roi1_sens_ingress", "roi2_inflow_passage", 
+                  "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                  "roi6_outflow_passage", "roi7_sens_outgress")
+  
+  # Create boundaries array to match plot function expectations (10 elements)
+  boundaries <- numeric(10)
+  boundaries[1] <- min(sensor_data$time_s)  # Data start
+  boundaries[10] <- max(sensor_data$time_s)  # Data end
+  
+  # Find ROI start times
+  for (i in seq_along(roi_levels)) {
+    roi_data <- sensor_data[sensor_data$roi == roi_levels[i], ]
+    if (nrow(roi_data) > 0) {
+      boundaries[i + 1] <- min(roi_data$time_s)  # boundaries[2] through boundaries[8]
+    }
+  }
+  
+  # ROI 7 end time (boundary[9])
+  roi7_data <- sensor_data[sensor_data$roi == "roi7_sens_outgress", ]
+  if (nrow(roi7_data) > 0) {
+    boundaries[9] <- max(roi7_data$time_s)
+  }
+  
+  return(boundaries)
+}
+
+
+#DATA ANALYSIS#####
+
+#Calculate summary statistics ####
+
+calc_summary_stats <- function(sensor_name, output_dir, isntrument = NULL){
+  # Function to calculate summary statistics to be used across instrument analysis types
+  
+  roi_times <- get_roi_boundaries(sensor_name, output_dir)
+  
+  isntrument <- list(
+    pres = "pressure_kpa",
+    acc = list("higacc_mag_g",
+                        "inacc_mag_ms"
+    ),
+    rot = "rot_mag_degs"
+  )
+  
+  # for each roi defined by start and end of boundary), calculate summary statistics
+  
+  # Create an 'overall' summary too, which does summary on all data
+
+  instrument_summary <- bind_rows(
+      data %>%
+    group_by(roi) %>%
+      summarise(
+        med = median(isntrument),
+        min = min(isntrument),
+        max = max(isntrument),
+        IQR = IQR(isntrument),
+        .groups = "drop"
+      ), data %>%
+      mutate(roi = "overall") %>%
+      group_by(roi) %>%
+      summarise(
+        med = median(isntrument),
+        min = min(isntrument),
+        max = max(isntrument),
+        IQR = IQR(isntrument),
+        .groups = "drop"
+      )
+    )
+    
+  # Write the summary statistics to instrument_index.csv, where 'instrument' the variable name appends the column names e.g., pres_min.kPa. acc_hig_min.g., rot_min.degs.
+
+  
+  
+  return(instrument_summary)
+  #to be used to display the summary in a tidy DT Table in respective instrument module 
+}
+
 # ============================= #
 # /// Shared plot functions \\\ ####  
 # ============================= #  

@@ -90,9 +90,9 @@ pressureSidebarUI <- function(id) {
     # Checkboxes
     div(style = "margin: 15px 0;",
         checkboxInput(ns("checkbox1"), "Checkbox", value = FALSE),
-        checkboxInput(ns("checkbox2"), "Checkbox", value = FALSE)
+        checkboxInput(ns("checkbox2"), "Checkbox", value = FALSE),
+        checkboxInput(ns("show_roi_markers"), "Show ROI markers", value = FALSE)
     ),
-    
     hr(),
     
     actionButton(ns("add_deploy_btn"), "Add pressure Information", 
@@ -107,11 +107,16 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     # ============================= #
     # /// Reactive values \\\ ####  
     # ============================= #   
-    
-    # pressure state
+
+# pressure state ####
     pressure_values <- reactiveValues(
       data_updated = 0            # Counter to trigger data refresh
     )
+    
+# Get roi boundaries ####
+    roi_boundaries <- reactive({
+    get_roi_boundaries(input$sensor_dropdown, output_dir(), input$show_roi_markers)
+  }) 
     
     # ============================= #
     # /// Data loading & processing  \\\ ####  
@@ -149,9 +154,21 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     # /// UI State management \\\ ####  
     # ============================= # 
     
-    # Update sensor dropdown using shared function
+# Update sensor dropdown ####
     observe({
       update_sensor_dropdown(session, "sensor_dropdown", processed_sensors(), input$sensor_dropdown)
+    })
+# Enable/disable ROI checkbox ####
+    observe({
+      req(input$sensor_dropdown)
+      status <- get_sensor_status(input$sensor_dropdown, output_dir())
+      
+      if (status$delineated && status$trimmed) {
+        shinyjs::enable("show_roi_markers")
+      } else {
+        shinyjs::disable("show_roi_markers")
+        updateCheckboxInput(session, "show_roi_markers", value = FALSE)
+      }
     })
     
     # ============================= #
@@ -205,7 +222,8 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
           nadir_info = nadir,
           show_nadir = TRUE,
           show_legend = FALSE,
-          plot_source = "pressure_plot"
+          plot_source = "pressure_plot",
+          roi_boundaries = roi_boundaries()
         )
         return(p)
       }, error = function(e) {
