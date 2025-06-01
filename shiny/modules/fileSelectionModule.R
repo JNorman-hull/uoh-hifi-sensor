@@ -1,41 +1,39 @@
-# File Selection Module - Rebuilt
+# File Selection Module - Using shared components
 
 fileSelectionUI <- function(id) {
   ns <- NS(id)
   
-  tagList(
-    fluidRow(
-      column(8, h4("RAW Rapid data index"),
-             helpText('Index of RAW RAPID data files.
-                      IMP and HIG must be present.
-                      Sensors already in global index are highlighted in orange.'),)
-    ),
-    
-    # Sensor selection table
-    DT::dataTableOutput(ns("sensor_table"))
+  fileSelectionTableUI(
+    ns("sensor_table"),
+    title = "RAW Rapid data index",
+    help_text = "Index of RAW RAPID data files. IMP and HIG must be present. 
+                 Sensors already in global index are highlighted in orange."
   )
 }
-
 
 fileSidebarUI <- function(id) {
   ns <- NS(id)
   
   tagList(
-      h4("File Locations"),
-      verbatimTextOutput("raw_data_location"),
-      verbatimTextOutput("output_location"),
-      
-      hr(),
-      
-      checkboxInput(ns("select_all"), "Select All Sensors", value = FALSE),
-      actionButton(ns("clear_all"), "Clear All", class = "btn-sm"),
-      
-      textOutput(ns("selection_summary")),
-      
-      br(),
-      
-      actionButton(ns("process_btn"), "Process Selected Sensors", 
-                   class = "btn-primary btn-block")
+    h4("Raw data prcoessing controls"),
+
+    div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
+        "Select sensor(s) to process binary RAPID data."),
+    
+    hr(),
+    
+    # Use shared controls
+    fileSelectionControlsUI(
+      ns("sensor_table"),
+      show_select_all = TRUE,
+      show_clear_all = TRUE,
+      show_summary = TRUE
+    ),
+    
+    br(),
+    
+    actionButton(ns("process_btn"), "Process Selected Sensors", 
+                 class = "btn-primary btn-block")
   )
 }
 
@@ -43,7 +41,7 @@ fileSelectionServer <- function(id, raw_data_path, output_dir, processing_comple
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # Move file location outputs here
+    # File location outputs
     output$raw_data_location <- renderText({
       paste("Raw Data Path:", raw_data_path())
     })
@@ -52,21 +50,42 @@ fileSelectionServer <- function(id, raw_data_path, output_dir, processing_comple
       paste("Output Path:", output_dir())
     })
     
-    # All your existing sensor table logic...
-    state <- reactiveValues(
-      sensor_data = NULL,
-      selected_indices = integer(0)
-    )
+    # Prepare sensor data
+    sensor_data <- reactive({
+      req(raw_data_path())
+      
+      sensor_names <- get_sensor_names(raw_data_path())
+      
+      if (length(sensor_names) == 0) return(NULL)
+      
+      sensor_info <- map(sensor_names, function(name) {
+        tryCatch({
+          py$parse_filename_info(name)
+        }, error = function(e) {
+          list(
+            sensor = if(nchar(name) >= 3) substr(name, 1, 3) else name,
+            date_deploy = "Unknown",
+            time_deploy = "Unknown"
+          )
+        })
+      })
+      
+      tibble(
+        No. = seq_along(sensor_names),
+        Filename = sensor_names,
+        Sensor = map_chr(sensor_info, "sensor"),
+        Date = map_chr(sensor_info, "date_deploy"),
+        Time = map_chr(sensor_info, "time_deploy")
+      )
+    })
     
+    # Get processed sensors
     processed_sensors <- reactive({
       if (is.null(output_dir)) return(character(0))
       
-      # Safely call processing_complete
       tryCatch({
-        processing_complete()  # This should now work
-      }, error = function(e) {
-        # If processing_complete fails, just continue without invalidation
-      }) # Invalidate when processing completes
+        processing_complete()
+      }, error = function(e) {})
       
       index_file <- get_sensor_index_file(output_dir())
       if (is.null(index_file) || !file.exists(index_file)) {
@@ -80,176 +99,23 @@ fileSelectionServer <- function(id, raw_data_path, output_dir, processing_comple
         return(character(0))
       })
     })
-    # Initialize sensor data once (simplified but keep functionality)
-    observe({
-      req(raw_data_path())
-      
-      sensor_names <- get_sensor_names(raw_data_path())
-      
-      if (length(sensor_names) > 0) {
-        sensor_info <- map(sensor_names, function(name) {
-          tryCatch({
-            py$parse_filename_info(name)
-          }, error = function(e) {
-            list(
-              sensor = if(nchar(name) >= 3) substr(name, 1, 3) else name,
-              date_deploy = "Unknown",
-              time_deploy = "Unknown"
-            )
-          })
-        })
-        
-        state$sensor_data <- tibble(
-          No. = seq_along(sensor_names),
-          Filename = sensor_names,
-          Sensor = map_chr(sensor_info, "sensor"),
-          Date = map_chr(sensor_info, "date_deploy"),
-          Time = map_chr(sensor_info, "time_deploy")
-        )
-        
-      }
-      
-      # Reset selection when data changes
-      state$selected_indices <- integer(0)
-    })
     
-    # Render stable table (temporarily without highlighting to fix temp file error)
-    output$sensor_table <- DT::renderDataTable({
-      req(state$sensor_data)
-      
-      processed <- processed_sensors()
-      
-      dt <- DT::datatable(
-        state$sensor_data,
-        selection = list(mode = 'multiple'),
-        options = list(
-          pageLength = 15,
-          scrollX = TRUE,
-          scrollY = "400px",
-          dom = 'tip',
-          stateSave = TRUE,
-          columnDefs = list(
-            list(width = '60px', targets = 0),
-            list(width = '200px', targets = 1),
-            list(width = '80px', targets = 2:4)
-          )
-        ),
-        rownames = FALSE,
-        class = 'cell-border stripe hover'
-      ) %>%
-        DT::formatStyle(columns = 1:5, fontSize = '14px')
-      
-      # Highlight processed sensors in orange
-      if (length(processed) > 0) {
-        processed_rows <- which(state$sensor_data$Filename %in% processed)
-        if (length(processed_rows) > 0) {
-          dt <- dt %>% DT::formatStyle(
-            columns = 1:5,
-            target = 'row',
-            backgroundColor = DT::styleRow(processed_rows, 'orange')
-          )
-        }
-      }
-      
-      return(dt)
-    })
+    # Use the shared table module
+    table_results <- fileSelectionTableServer(
+      "sensor_table",
+      sensor_data_reactive = sensor_data,
+      highlight_sensors_reactive = processed_sensors,
+      enable_selection = TRUE,
+      selection_mode = 'multiple'
+    )
     
-    # Update selection when user clicks table rows
-    observeEvent(input$sensor_table_rows_selected, {
-      state$selected_indices <- input$sensor_table_rows_selected %||% integer(0)
-    }, ignoreNULL = FALSE)
-    
-    # Helper function for proxy operations
-    update_table_selection <- function(rows) {
-      DT::dataTableProxy('sensor_table', session = session) %>%
-        DT::selectRows(rows)
-    }
-    
-    # Handle Select All checkbox
-    observeEvent(input$select_all, {
-      req(state$sensor_data)
-      
-      if (input$select_all) {
-        state$selected_indices <- seq_len(nrow(state$sensor_data))
-        update_table_selection(state$selected_indices)
-      } else {
-        isolate({
-          if (length(state$selected_indices) == nrow(state$sensor_data)) {
-            state$selected_indices <- integer(0)
-            update_table_selection(state$selected_indices)
-          }
-        })
-      }
-    })
-    
-    # Handle Clear All button
-    observeEvent(input$clear_all, {
-      state$selected_indices <- integer(0)
-      
-      # Update checkbox and table
-      updateCheckboxInput(session, "select_all", value = FALSE)
-      update_table_selection(integer(0))
-    })
-    
-    # Update Clear All button state
-    observe({
-      if (length(state$selected_indices) > 0) {
-        shinyjs::enable("clear_all")
-      } else {
-        shinyjs::disable("clear_all")
-      }
-    })
-    
-    # Auto-update Select All checkbox based on selection
-    observe({
-      req(state$sensor_data)
-      
-      total_sensors <- nrow(state$sensor_data)
-      selected_count <- length(state$selected_indices)
-      should_be_checked <- selected_count == total_sensors && total_sensors > 0
-      
-      # Only update if different from current state to avoid loops
-      isolate({
-        if (!is.null(input$select_all) && input$select_all != should_be_checked) {
-          updateCheckboxInput(session, "select_all", value = should_be_checked)
-        }
-      })
-    })
-    
-    # Selection summary
-    output$selection_summary <- renderText({
-      req(state$sensor_data)
-      
-      total <- nrow(state$sensor_data)
-      selected <- length(state$selected_indices)
-      
-      paste0(selected, " of ", total, " sensors selected")
-    })
-    
-    # Return selected sensors
-    selected_sensors <- reactive({
-      if (is.null(state$sensor_data) || length(state$selected_indices) == 0) {
-        return(character(0))
-      }
-      state$sensor_data$Filename[state$selected_indices]
-    })
-    
-    # Return all sensor names
-    sensor_names <- reactive({
-      if (is.null(state$sensor_data)) character(0) else state$sensor_data$Filename
-    })
-    
+    # Return values
     return(list(
-      selected_sensors = reactive({
-        if (is.null(state$sensor_data) || length(state$selected_indices) == 0) {
-          return(character(0))
-        }
-        state$sensor_data$Filename[state$selected_indices]
-      }),
+      selected_sensors = table_results$selected_items,
       sensor_names = reactive({
-        if (is.null(state$sensor_data)) character(0) else state$sensor_data$Filename
+        data <- sensor_data()
+        if (is.null(data)) character(0) else data$Filename
       }),
-      # Expose process trigger for other modules to use
       process_trigger = reactive(input$process_btn)
     ))
   })

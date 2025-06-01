@@ -2,26 +2,15 @@ deploymentUI <- function(id) {
   ns <- NS(id)
   
   tagList(
-    # Introductory text at the top
-    h3("Deployment Information Management"),
-    helpText("This panel allows you to view and edit deployment information for processed sensors."),
-    
-    # Main large box spanning full width
-    fluidRow(
-      column(
-        width = 12,
-        div(
-          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
-                   border-radius: 5px; margin-bottom: 20px;",
-          tags$h4("Deployment Overview", style = "margin-top: 0; color: #333;"),
-          p("View and manage deployment metadata for your sensor data here."),
-          hr(),
-          p("Additional content will be displayed based on selected sensor.")
-        )
-      )
+    # Replace the main box with the selection table
+    fileSelectionTableUI(
+      ns("deployment_table"),
+      title = "Processed sensor index",
+      help_text = "All processed sensors are shown here. Select sensors to add or edit deployment information. Sensors with deployment information are coloured green. Sensors without are coloured orange.",
+      show_title = TRUE
     ),
     
-    # Two smaller boxes side by side
+    # Keep the two smaller boxes below
     fluidRow(
       column(
         width = 6,
@@ -39,6 +28,9 @@ deploymentUI <- function(id) {
                    border-radius: 5px; margin-bottom: 20px;",
           tags$h4("Box header", style = "margin-top: 0; color: #333;"),
           p("Right panel content area.")
+          
+          # Boxes will be replaced by 
+          
         )
       )
     )
@@ -49,45 +41,38 @@ deploymentSidebarUI <- function(id) {
   ns <- NS(id)
   
   tagList(
-    h4("Deployment controls"),
+    h4("Deployment Information Controls"),
     
-    #Method 1: helpText() - styled for instructions
-    helpText("This sidebar controls the deployment configuration for sensor data."),
+    #helpText("This sidebar controls the deployment configuration for sensor data."),
     
-    # Method 2: p() - regular paragraph
-    p("Configure deployment parameters below:"),
+    #p("Configure deployment parameters below:"),
     
-    # Method 3: Custom styled text
     div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
-        "Select a sensor to begin deployment configuration."),
+        "Select sensor(s) to view and manage deployment configuration."),
     
     # Delineation status display
     div(style = "margin-bottom: 15px;", 
         textOutput(ns("delineation_status"))),
-    
-    selectInput(ns("sensor_dropdown"), NULL, choices = NULL, width = "100%"),
-    
-    # Text input
-    div(
-      tags$label("LABEL:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-      textInput(ns("input_text"), NULL, value = "INPUT TEXT HERE", width = "100%")
-    ),
-    
-    # Checkboxes
-    div(style = "margin: 15px 0;",
-        checkboxInput(ns("checkbox1"), "Checkbox", value = FALSE),
-        checkboxInput(ns("checkbox2"), "Checkbox", value = FALSE)
-    ),
+    # This no longer shows, as removed selected sensor dropdown. 
+    # Will update this to reflect sensors in file selection
+    # "Sensor requires deployment information", "One or more sensor requires deployment information", "All selected sensors have deployment information"
     
     hr(),
+    
+    # Add selection controls
+    fileSelectionControlsUI(
+      ns("deployment_table"),
+      show_select_all = TRUE,
+      show_clear_all = TRUE,
+      show_summary = TRUE
+    ),
+    
+    br(),
     
     actionButton(ns("add_deploy_btn"), "Add deployment Information", 
                  class = "btn-primary btn-block")
   )
 }
-
-
-
 
 deploymentServer <- function(id, raw_data_path, output_dir, processing_complete) {
   moduleServer(id, function(input, output, session) {
@@ -112,33 +97,91 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       get_processed_sensors(output_dir())
     })
     
+    # Prepare table data for processed sensors only
+    processed_sensor_data <- reactive({
+      processing_complete()  # Trigger when processing completes
+      deployment_values$data_updated  # Trigger on updates
+      
+      sensors <- processed_sensors()
+      
+      # Return NULL if no processed sensors
+      if (length(sensors) == 0) {
+        return(NULL)
+      }
+      
+      # Get sensor info for each processed sensor
+      sensor_info <- map(sensors, function(name) {
+        tryCatch({
+          py$parse_filename_info(name)
+        }, error = function(e) {
+          list(
+            sensor = if(nchar(name) >= 3) substr(name, 1, 3) else name,
+            date_deploy = "Unknown",
+            time_deploy = "Unknown"
+          )
+        })
+      })
+      
+      # Create the data frame
+      tibble(
+        No. = seq_along(sensors),
+        Filename = sensors,
+        Sensor = map_chr(sensor_info, "sensor"),
+        Date = map_chr(sensor_info, "date_deploy"),
+        Time = map_chr(sensor_info, "time_deploy")
+      )
+    })
+    
+    # Custom formatting function to handle empty state
+    custom_table_formatting <- function(dt, table_data) {
+      if (is.null(table_data) || nrow(table_data) == 0) {
+        # Return a datatable with the message
+        return(DT::datatable(
+          data.frame(Message = "No sensors processed. Process sensors first to add deployment information"),
+          options = list(dom = 't', ordering = FALSE),
+          rownames = FALSE,
+          selection = 'none'
+        ))
+      }
+      return(dt)
+    }
+    
+    # Use the shared table module
+    table_results <- fileSelectionTableServer(
+      "deployment_table",
+      sensor_data_reactive = reactive({
+        data <- processed_sensor_data()
+        if (is.null(data)) {
+          # Return empty data frame with message
+          data.frame(Message = "No sensors processed. Process sensors first to add deployment information")
+        } else {
+          data
+        }
+      }),
+      highlight_sensors_reactive = reactive(NULL),  # No highlighting needed
+      enable_selection = TRUE,
+      selection_mode = 'single',  # Single selection for deployment
+      custom_formatting = custom_table_formatting
+    )
+    
     # ============================= #
     # /// UI State management \\\ ####  
     # ============================= # 
     
-    # Update sensor dropdown using shared function
-    observe({
-      update_sensor_dropdown(session, "sensor_dropdown", processed_sensors(), input$sensor_dropdown)
-    })
-    
+
     # ============================= #
     # /// Event handlers \\\ ####  
     # ============================= # 
     
     # Handle deployment info addition
     observeEvent(input$add_deploy_btn, {
-      if (!is.null(input$sensor_dropdown) && input$sensor_dropdown != "") {
-        showNotification(paste("Adding deployment info for:", input$sensor_dropdown), type = "message")
+      if (!is.null(input$selected_sensor) && input$selected_sensor != "") {
+        showNotification(paste("Adding deployment info for:", input$selected_sensor), type = "message")
+        # Add actual deployment logic here
       } else {
         showNotification("Please select a sensor first", type = "warning")
       }
     })
-    
-    # ============================= #
-    # /// Helper functions \\\ ####  
-    # ============================= # 
-    
-    # Add helper functions here as needed
     
     # ============================= #
     # /// Output render \\\ ####  
@@ -147,7 +190,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     # Delineation status display using shared function
     delineation_status <- create_individual_status_display(
       "delineation_status", 
-      reactive(input$sensor_dropdown), 
+      reactive(input$selected_sensor), 
       reactive(output_dir()),
       output, session, "delineation",
       invalidation_trigger = reactive(deployment_values$data_updated)
@@ -155,7 +198,8 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     
     # Return any reactive values other modules might need
     return(list(
-      selected_sensor = reactive(input$sensor_dropdown)
+      selected_sensor = reactive(input$selected_sensor),
+      selected_sensors_from_table = table_results$selected_items
     ))
     
   })  # End of moduleServer
