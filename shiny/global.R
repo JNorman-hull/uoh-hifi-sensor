@@ -194,10 +194,6 @@ manage_button_states <- function(session, button_config) {
 
 
 ## ROI configuration loader ####
-# Not sure why this is global, maybe generalise it for a 'config loader'
-#==============================================
-# SINGLE UNIFIED CONFIG LOADER
-#==============================================
 
 
 load_config_file <- function(output_dir, config_type) {
@@ -212,9 +208,7 @@ load_config_file <- function(output_dir, config_type) {
   lines <- lines[!grepl("^\\s*#", lines)]  # Remove comments
   lines <- lines[nchar(trimws(lines)) > 0]  # Remove empties
   
-  #----------------------------------------------
-  # SPECIAL HANDLING FOR ROI CONFIGS
-  #----------------------------------------------
+
   if (config_type == "roi") {
     config_list <- list()
     for (line in lines) {
@@ -235,36 +229,102 @@ load_config_file <- function(output_dir, config_type) {
     }
     return(config_list)
   }
-  #----------------------------------------------
-  # DEFAULT HANDLING (Key-Value or CSV)
-  #----------------------------------------------
-  else {
+
+  else if (config_type == "deployment") {
+    config_list <- list()
+    for (line in lines) {
+      if (grepl("=", line)) {
+        parts <- strsplit(line, "=")[[1]]
+        key <- trimws(parts[1])
+        value_string <- trimws(paste(parts[-1], collapse = "="))
+        
+        value_parts <- strsplit(value_string, ",")[[1]]
+        value_parts <- trimws(value_parts)
+        
+        if (length(value_parts) >= 9) {
+          config_list[[key]] <- list(
+            label = key,
+            deployment_id = value_parts[1],
+            pump_turbine = value_parts[2],
+            type = value_parts[3],
+            rpm = type_convert(value_parts[4]),
+            head = type_convert(value_parts[5]),
+            flow = type_convert(value_parts[6]),
+            point_bep = type_convert(value_parts[7]),
+            treatment = value_parts[8],
+            run = type_convert(value_parts[9])
+          )
+        }
+      }
+    }
+    return(config_list)
+  }
+
+  else if (config_type %in% c("acc", "rot")) {
+    config_list <- list()
+    
+    for (line in lines) {
+      if (grepl("=", line)) {
+        # Handle threshold lines (key = value)
+        parts <- strsplit(line, "=")[[1]]
+        key <- trimws(parts[1])
+        value <- trimws(paste(parts[-1], collapse = "="))
+        config_list[[key]] <- type_convert(value)
+      }
+      else if (grepl(",", line)) {
+        # Handle configuration lines (name, val1, val2, val3)
+        parts <- strsplit(line, ",")[[1]]
+        parts <- trimws(parts)
+        if (length(parts) == 4 && grepl("configuration", parts[1])) {
+          config_list[[parts[1]]] <- list(
+            label = parts[1],
+            param1 = as.numeric(parts[2]),
+            param2 = as.numeric(parts[3]), 
+            param3 = as.numeric(parts[4])
+          )
+        }
+      }
+    }
+    return(config_list)
+  }
+
+  else if (config_type == "pres") {
     config <- list()
     for (line in lines) {
-      if (grepl("=", line)) {  # Key-value
+      if (grepl("=", line)) {
         parts <- strsplit(line, "=")[[1]]
         key <- trimws(parts[1])
         value <- trimws(paste(parts[-1], collapse = "="))
         config[[key]] <- type_convert(value)
-      } 
-      else if (grepl(",", line)) {  # CSV
-        parts <- strsplit(line, ",")[[1]]
-        parts <- trimws(parts)
-        if (length(parts) > 1) {
-          name <- parts[1]
-          values <- lapply(parts[-1], function(x) type_convert(trimws(x)))
-          config[[name]] <- if (all(sapply(values, is.numeric))) unlist(values) else values
+      }
+    }
+    return(config)
+  }
+
+  else if (config_type == "directory") {
+    config <- list()
+    for (line in lines) {
+      if (grepl("=", line)) {
+        parts <- strsplit(line, "=")[[1]]
+        key <- trimws(parts[1])
+        value_string <- trimws(paste(parts[-1], collapse = "="))
+        
+        # Handle multi-part paths
+        if (grepl(",", value_string)) {
+          path_parts <- strsplit(value_string, ",")[[1]]
+          path_parts <- trimws(path_parts)
+          # Remove quotes from path parts
+          path_parts <- gsub('"', '', path_parts)
+          config[[key]] <- path_parts
+        } else {
+          # Single path value
+          config[[key]] <- gsub('"', '', value_string)
         }
       }
     }
     return(config)
   }
 }
-
-#==============================================
-# SINGLE UNIFIED CONFIG SAVER
-#==============================================
-
 
 save_config_value <- function(output_dir, config_type, key, value, append = TRUE) {
   config_file <- file.path(output_dir, "config", paste0(config_type, "_config.txt"))
@@ -279,23 +339,122 @@ save_config_value <- function(output_dir, config_type, key, value, append = TRUE
       write(line, file = config_file, append = append)
     }
     #------------------------------------------
-    # DEFAULT HANDLING (Key-Value)
+    # SPECIAL HANDLING FOR DEPLOYMENT CONFIGS
     #------------------------------------------
-    else {
+    else if (config_type == "deployment") {
+      if (is.list(value)) {
+        # If value is a list with deployment fields
+        deployment_string <- paste(
+          value$deployment_id, value$pump_turbine, value$type,
+          value$rpm, value$head, value$flow, value$point_bep,
+          value$treatment, value$run,
+          sep = ", "
+        )
+        line <- paste(key, "=", deployment_string)
+      } else if (is.vector(value) && length(value) >= 9) {
+        # If value is a vector with 9+ elements
+        line <- paste(key, "=", paste(value, collapse = ", "))
+      } else {
+        stop("Deployment config requires 9 values or a structured list")
+      }
+      
       if (append && file.exists(config_file)) {
         lines <- readLines(config_file)
         key_line <- grep(paste0("^\\s*", key, "\\s*="), lines)
-        
-        if (length(key_line) > 0) {  # Update existing
-          lines[key_line[1]] <- paste(key, "=", value)
-        } else {  # Add new
-          lines <- c(lines, paste(key, "=", value))
+        if (length(key_line) > 0) {
+          lines[key_line[1]] <- line
+        } else {
+          lines <- c(lines, line)
         }
         writeLines(lines, config_file)
       } else {
-        writeLines(paste(key, "=", value), config_file)
+        writeLines(line, config_file)
       }
     }
+    #------------------------------------------
+    # ACCELERATION AND ROTATION CONFIGS
+    #------------------------------------------
+    else if (config_type %in% c("acc", "rot")) {
+      if (grepl("configuration", key)) {
+        # Configuration line format: name, val1, val2, val3
+        if (is.list(value)) {
+          line <- paste(key, value$param1, value$param2, value$param3, sep = ", ")
+        } else if (length(value) == 3) {
+          line <- paste(key, paste(value, collapse = ", "), sep = ", ")
+        } else {
+          stop("Configuration requires exactly 3 numeric values")
+        }
+      } else {
+        # Threshold line format: key = value
+        line <- paste(key, "=", value)
+      }
+      
+      if (append && file.exists(config_file)) {
+        lines <- readLines(config_file)
+        if (grepl("configuration", key)) {
+          # Look for configuration line
+          key_line <- grep(paste0("^\\s*", key, "\\s*,"), lines)
+        } else {
+          # Look for threshold line
+          key_line <- grep(paste0("^\\s*", key, "\\s*="), lines)
+        }
+        
+        if (length(key_line) > 0) {
+          lines[key_line[1]] <- line
+        } else {
+          lines <- c(lines, line)
+        }
+        writeLines(lines, config_file)
+      } else {
+        writeLines(line, config_file)
+      }
+    }
+    #------------------------------------------
+    # PRESSURE CONFIG (Simple key-value)
+    #------------------------------------------
+    else if (config_type == "pres") {
+      line <- paste(key, "=", value)
+      
+      if (append && file.exists(config_file)) {
+        lines <- readLines(config_file)
+        key_line <- grep(paste0("^\\s*", key, "\\s*="), lines)
+        if (length(key_line) > 0) {
+          lines[key_line[1]] <- line
+        } else {
+          lines <- c(lines, line)
+        }
+        writeLines(lines, config_file)
+      } else {
+        writeLines(line, config_file)
+      }
+    }
+    #------------------------------------------
+    # DIRECTORY CONFIG (Path handling)
+    #------------------------------------------
+    else if (config_type == "directory") {
+      if (is.vector(value) && length(value) > 1) {
+        # Multi-part path: join with commas and add quotes if needed
+        path_string <- paste(paste0('"', value, '"'), collapse = ", ")
+        line <- paste(key, "=", path_string)
+      } else {
+        # Single path value
+        line <- paste(key, "=", value)
+      }
+      
+      if (append && file.exists(config_file)) {
+        lines <- readLines(config_file)
+        key_line <- grep(paste0("^\\s*", key, "\\s*="), lines)
+        if (length(key_line) > 0) {
+          lines[key_line[1]] <- line
+        } else {
+          lines <- c(lines, line)
+        }
+        writeLines(lines, config_file)
+      } else {
+        writeLines(line, config_file)
+      }
+    }
+
     return(TRUE)
   }, error = function(e) {
     warning("Failed to save config: ", e$message)
@@ -303,9 +462,6 @@ save_config_value <- function(output_dir, config_type, key, value, append = TRUE
   })
 }
 
-#==============================================
-# HELPER (PRIVATE)
-#==============================================
 
 type_convert <- function(x) {
   x <- trimws(x)
@@ -315,10 +471,8 @@ type_convert <- function(x) {
   return(x)
 }
 
-
 # Get ROI boundaries for plots ####
 
-## Get ROI boundaries ####
 ## Get ROI boundaries ####
 get_roi_boundaries <- function(sensor_name, output_dir, show_roi = FALSE) {
   if (!show_roi || is.null(sensor_name) || sensor_name == "") {

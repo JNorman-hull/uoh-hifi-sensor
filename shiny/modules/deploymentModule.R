@@ -58,8 +58,12 @@ deploymentSidebarUI <- function(id) {
     # "Sensor requires deployment information", "One or more sensor requires deployment information", "All selected sensors have deployment information"
     
     hr(),
+
+    selectInput(ns("deployment_config"), "Deployment Configuration:", 
+                choices = NULL, width = "100%"),
     
-    # Add selection controls
+    hr(),
+    
     fileSelectionControlsUI(
       ns("deployment_table"),
       show_select_all = TRUE,
@@ -84,7 +88,9 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     
     # Deployment state
     deployment_values <- reactiveValues(
-      data_updated = 0            # Counter to trigger data refresh
+      data_updated = 0,            # Counter to trigger data refresh
+      deployment_configs = NULL,   # All available deployment configurations  
+      current_config = NULL        # Currently selected configuration
     )
     
     # ============================= #
@@ -128,11 +134,19 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
         Filename = sensors,
         Sensor = map_chr(sensor_info, "sensor"),
         Date = map_chr(sensor_info, "date_deploy"),
-        Time = map_chr(sensor_info, "time_deploy")
+        Time = map_chr(sensor_info, "time_deploy"),
+        
       )
     })
     
-    # Custom formatting function to handle empty state
+    
+
+    # ============================= #
+    # /// UI State management \\\ ####  
+    # ============================= # 
+    
+# Custom table format ####
+#formatting function to handle empty state
     custom_table_formatting <- function(dt, table_data) {
       if (is.null(table_data) || nrow(table_data) == 0) {
         # Return a datatable with the message
@@ -145,6 +159,56 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       }
       return(dt)
     }
+    
+    
+    
+    # ============================= #
+    # /// Event handlers \\\ ####  
+    # ============================= # 
+    
+    # Handle deployment info addition
+    observeEvent(input$add_deploy_btn, {
+      if (!is.null(input$selected_sensor) && input$selected_sensor != "") {
+        showNotification(paste("Adding deployment info for:", input$selected_sensor), type = "message")
+        # Add actual deployment logic here
+      } else {
+        showNotification("Please select a sensor first", type = "warning")
+      }
+    })
+    
+    # Load deployment configurations and update dropdown
+    observe({
+      deployment_values$deployment_configs <- load_config_file(output_dir(), "deployment")
+      
+      if (length(deployment_values$deployment_configs) > 0) {
+        config_names <- names(deployment_values$deployment_configs)
+        choices <- setNames(config_names, gsub("_", " ", config_names))
+        selected_value <- config_names[1]
+        
+        updateSelectInput(session, "deployment_config", 
+                          choices = choices, 
+                          selected = selected_value)
+      }
+    })
+    
+    # Update current config when dropdown selection changes
+    observe({
+      req(input$deployment_config, deployment_values$deployment_configs)
+      deployment_values$current_config <- deployment_values$deployment_configs[[input$deployment_config]]
+    })
+    
+    # ============================= #
+    # /// Output render \\\ ####  
+    # ============================= #    
+    
+    # Delineation status display using shared function
+    delineation_status <- create_individual_status_display(
+      "delineation_status", 
+      reactive(input$selected_sensor), 
+      reactive(output_dir()),
+      output, session, "delineation",
+      invalidation_trigger = reactive(deployment_values$data_updated)
+    )
     
     # Use the shared table module
     table_results <- fileSelectionTableServer(
@@ -164,37 +228,6 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       custom_formatting = custom_table_formatting
     )
     
-    # ============================= #
-    # /// UI State management \\\ ####  
-    # ============================= # 
-    
-
-    # ============================= #
-    # /// Event handlers \\\ ####  
-    # ============================= # 
-    
-    # Handle deployment info addition
-    observeEvent(input$add_deploy_btn, {
-      if (!is.null(input$selected_sensor) && input$selected_sensor != "") {
-        showNotification(paste("Adding deployment info for:", input$selected_sensor), type = "message")
-        # Add actual deployment logic here
-      } else {
-        showNotification("Please select a sensor first", type = "warning")
-      }
-    })
-    
-    # ============================= #
-    # /// Output render \\\ ####  
-    # ============================= #    
-    
-    # Delineation status display using shared function
-    delineation_status <- create_individual_status_display(
-      "delineation_status", 
-      reactive(input$selected_sensor), 
-      reactive(output_dir()),
-      output, session, "delineation",
-      invalidation_trigger = reactive(deployment_values$data_updated)
-    )
     
     # Return any reactive values other modules might need
     return(list(
