@@ -1,0 +1,9 @@
+file,roi,duration,pres_min.kPa.,pres_min.time.,pres_max.kPa.,pres_max.time.,pres_median.kPa.,pres_iqr.kPa.,pres_max_1s_nadir,pres_rpc,pres_acclim_surface,pres_acclim_pres_depth,pres_lrpc_surface,pres_lrpc_depth,rot_min.degs.,rot_min.time.,rot_max.degs.,rot_max.time.,rot_median.degs.,rot_iqr.degs.,acc_hig_min.g.,acc_hig_min.time.,acc_hig_max.g.,acc_hig_max.time.,acc_hig_median.g.,acc_hig_iqr.g.,acc_event_95g,acc_event_200g,acc_event_400g,acc_strike,acc_collision,acc_inacc_min.ms.,acc_inacc_min.time.,acc_inacc_max.ms.,acc_inacc_max.time.,acc_inacc_median.ms.,acc_inacc_iqr.ms.
+,overall,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,roi1,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,roi2,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,roi3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,roi4,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,roi5,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,roi6,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,roi7,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,

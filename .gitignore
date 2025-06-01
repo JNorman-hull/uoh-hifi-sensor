@@ -4,4 +4,5 @@
 .Ruserdata
 
 /shiny/RAW_data/
-/shiny/RAPID_processed
+/shiny/RAPID_processed/csv
+/shiny/RAPID_processed/old

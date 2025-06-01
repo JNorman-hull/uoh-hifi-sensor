@@ -1,0 +1,4 @@
+acc_peak_configuration1, 95, 47.5, 0.005
+acc_peak_configuration2, 200, 100, 0.005
+strike_threshold = 400
+collision_treshold = 400

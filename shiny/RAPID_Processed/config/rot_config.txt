@@ -1,0 +1,4 @@
+rot_peak_configuration1, 95, 47.5, 0.005
+rot_peak_configuration2, 200, 100, 0.005
+direct_strike_threshold = 400
+indirect_strike_treshold = 200

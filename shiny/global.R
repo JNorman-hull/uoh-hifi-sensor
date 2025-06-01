@@ -27,7 +27,7 @@ source("modules/pressureModule.R")
 
 ## Get sensor index ####
 get_sensor_index_file <- function(output_dir) {
-  index_file <- file.path(output_dir, "uoh_sensor_index.csv")
+  index_file <- file.path(output_dir, "index", "global_sensor_index.csv")
   if (file.exists(index_file)) {
     return(index_file)
   } else {
@@ -197,7 +197,7 @@ manage_button_states <- function(session, button_config) {
 # Not sure why this is global, maybe generalise it for a 'config loader'
 
 load_roi_configs <- function(output_dir) {
-  config_file <- file.path(output_dir, "roi_config.txt")
+  config_file <- file.path(output_dir, "config", "roi_config.txt")
   
   if (file.exists(config_file)) {
     config_lines <- readLines(config_file)
@@ -231,7 +231,7 @@ load_roi_configs <- function(output_dir) {
 }
 
 save_custom_roi_config <- function(output_dir, roi1, roi2, roi3, roi4, roi5, roi6, roi7, custom_label) {
-  config_file <- file.path(output_dir, "roi_config.txt")
+  config_file <- file.path(output_dir, "config", "roi_config.txt")
   
   tryCatch({
     # Use the provided custom label directly

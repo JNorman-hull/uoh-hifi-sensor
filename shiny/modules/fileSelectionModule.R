@@ -11,20 +11,6 @@ fileSelectionUI <- function(id) {
                       Sensors already in global index are highlighted in orange.'),)
     ),
     
-    fluidRow(
-      column(8,
-             div(style = "display: flex; align-items: center; gap: 10px;",
-                 checkboxInput(ns("select_all"), "Select All Sensors", value = FALSE),
-                 actionButton(ns("clear_all"), "Clear All", class = "btn-sm")
-             )
-      ),
-      column(4,
-             div(style = "text-align: right; padding-top: 5px;",
-                 textOutput(ns("selection_summary"))
-             )
-      )
-    ),
-    
     # Sensor selection table
     DT::dataTableOutput(ns("sensor_table"))
   )
@@ -40,6 +26,13 @@ fileSidebarUI <- function(id) {
       verbatimTextOutput("output_location"),
       
       hr(),
+      
+      checkboxInput(ns("select_all"), "Select All Sensors", value = FALSE),
+      actionButton(ns("clear_all"), "Clear All", class = "btn-sm"),
+      
+      textOutput(ns("selection_summary")),
+      
+      br(),
       
       actionButton(ns("process_btn"), "Process Selected Sensors", 
                    class = "btn-primary btn-block")

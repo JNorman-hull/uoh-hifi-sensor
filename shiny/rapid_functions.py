@@ -227,8 +227,8 @@ def process_imp_hig_direct(imp_filename, hig_filename, output_dir):
 
 def append_to_sensor_index(sensor_info, output_dir):
     """Add or replace sensor in the persistent index file."""
-    index_file = Path(output_dir) / "uoh_sensor_index.csv"
-    index_config_file = Path(output_dir) / "index_config.txt"
+    index_file = Path(output_dir) / "index" / "global_sensor_index.csv"
+    index_config_file = Path(output_dir) / "config" / "index_config.txt"
     
     # Load sensor config
     with open(index_config_file, 'r') as f:

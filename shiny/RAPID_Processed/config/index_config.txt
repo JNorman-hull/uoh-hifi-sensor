@@ -1,0 +1,41 @@
+file
+sensor
+date_deploy
+duration.mm.ss.
+site = NA
+deployment_id = NA
+site = NA
+pump_turbine = NA
+type = NA
+rpm = NA
+head = NA
+flow = NA
+point_bep = NA
+treatment = NA
+run = NA
+deployment_info = N
+roi_config = NA
+delineated = N
+trimmed = N
+normalized = N
+passage_duration.mm.ss. = NA
+ingress_nadir_duration.mm.ss. = NA
+nadir_outgress_duration.mm.ss. = NA
+all_pres_processed = N
+pres_sum_processed = N
+pres_rpc_processed = N
+pres_lrpc_processed = N
+acc_peak_config = NA
+all_acc_processed = N
+acc_sum_processed = N
+acc_peak_config = NA
+acc_hig_peaks_processed = N
+acc_strike_processed = N
+acc_collision_processed = N
+all_rot_processed = N
+rot_sum_processed = N
+pres_min.kPa.
+pres_min.time.
+HIG_max.g.
+HIG_max.time.
+messages
