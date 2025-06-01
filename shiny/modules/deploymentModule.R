@@ -18,7 +18,8 @@ deploymentUI <- function(id) {
           style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
                    border-radius: 5px; margin-bottom: 20px; margin-right: 10px;",
           tags$h4("Box header", style = "margin-top: 0; color: #333;"),
-          p("Left panel content area.")
+          p("Left panel content area."),
+          selectInput(ns("deployment_config"), "Configuration:", choices = NULL, width = "100%")
         )
       ),
       column(
@@ -177,13 +178,21 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     })
     
     # Load deployment configurations and update dropdown
+    # Load deployment configurations and update dropdown
     observe({
       deployment_values$deployment_configs <- load_config_file(output_dir(), "deployment")
       
       if (length(deployment_values$deployment_configs) > 0) {
         config_names <- names(deployment_values$deployment_configs)
         choices <- setNames(config_names, gsub("_", " ", config_names))
-        selected_value <- config_names[1]
+        
+        # Use current selection if it exists and is valid, otherwise use first
+        current_selection <- input$deployment_config
+        selected_value <- if (!is.null(current_selection) && current_selection %in% config_names) {
+          current_selection
+        } else {
+          config_names[1]
+        }
         
         updateSelectInput(session, "deployment_config", 
                           choices = choices, 
