@@ -330,11 +330,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
 # Load ROI configurations and update dropdown
     observe({
-<<<<<<< HEAD
       roi_values$roi_configs <- load_config_file(output_dir(), "roi")
-=======
-      roi_values$roi_configs <- load_config_file(dir, "roi")
->>>>>>> d625adae3d8beacec56a4cd273cc40e64b5cb6c1
       
       if (length(roi_values$roi_configs) > 0) {
         config_names <- names(roi_values$roi_configs)
@@ -938,7 +934,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       roi7_duration <- roi7_end - roi6_end
       
       # Save configuration
-<<<<<<< HEAD
       config_name <- trimws(input$roi_config_label)
       
       success <- save_config_value(
@@ -948,14 +943,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         value = c(roi1_duration, roi2_duration, roi3_duration, roi4_duration, 
                   roi5_duration, roi6_duration, roi7_duration)
       )
-=======
-      success <-   save_config_value(
-          output_dir = "path/to/output",
-          config_type = "roi",
-          key = "Custom_ROI",  # config name
-          value = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7)  # ROI values
-        )
->>>>>>> d625adae3d8beacec56a4cd273cc40e64b5cb6c1
       
       if (success) {
         # Reset custom mode
@@ -966,15 +953,10 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         shinyjs::removeClass("create_custom_roi", "btn-success")
         shinyjs::addClass("create_custom_roi", "btn-info")
         
-<<<<<<< HEAD
         # Reload configs and set current config to the newly saved one
         roi_values$roi_configs <- load_config_file(output_dir(), "roi")
         roi_values$current_config <- roi_values$roi_configs[[config_name]]
-=======
-        roi_values$roi_configs <- load_config_file(dir, "roi")
-        roi_values$current_config <- roi_values$roi_configs[[success$config_name]]
->>>>>>> d625adae3d8beacec56a4cd273cc40e64b5cb6c1
-        
+
         create_delineated_dataset()
         
         showNotification("Custom ROI configuration saved and applied successfully!", type = "message")
