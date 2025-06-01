@@ -195,60 +195,124 @@ manage_button_states <- function(session, button_config) {
 
 ## ROI configuration loader ####
 # Not sure why this is global, maybe generalise it for a 'config loader'
+#==============================================
+# SINGLE UNIFIED CONFIG LOADER
+#==============================================
 
-load_roi_configs <- function(output_dir) {
-  config_file <- file.path(output_dir, "config", "roi_config.txt")
+
+load_config_file <- function(output_dir, config_type) {
+  config_file <- file.path(output_dir, "config", paste0(config_type, "_config.txt"))
   
-  if (file.exists(config_file)) {
-    config_lines <- readLines(config_file)
+  if (!file.exists(config_file)) {
+    warning("Config file not found: ", config_file)
+    return(if(config_type == "roi") list() else NULL)
+  }
+  
+  lines <- readLines(config_file)
+  lines <- lines[!grepl("^\\s*#", lines)]  # Remove comments
+  lines <- lines[nchar(trimws(lines)) > 0]  # Remove empties
+  
+  #----------------------------------------------
+  # SPECIAL HANDLING FOR ROI CONFIGS
+  #----------------------------------------------
+  if (config_type == "roi") {
     config_list <- list()
-    
-    for (line in config_lines) {
-      if (nchar(trimws(line)) > 0 && !startsWith(trimws(line), "#")) {
-        # Parse: Config_name, 0.1, 1.1, 0.3, 0.2, 0.3, 1.1, 0.1
-        parts <- trimws(strsplit(line, ",")[[1]])
-        if (length(parts) == 8) {
-          config_name <- parts[1]
-          config_list[[config_name]] <- list(
-            label = config_name,
-            roi1_sens_ingress = as.numeric(parts[2]),
-            roi2_inflow_passage = as.numeric(parts[3]),
-            roi3_prenadir = as.numeric(parts[4]),
-            roi4_nadir = as.numeric(parts[5]),
-            roi5_postnadir = as.numeric(parts[6]),
-            roi6_outflow_passage = as.numeric(parts[7]),
-            roi7_sens_outgress = as.numeric(parts[8])
-          )
+    for (line in lines) {
+      parts <- strsplit(line, ",")[[1]]
+      parts <- trimws(parts)
+      if (length(parts) == 8) {  # 7 values + name
+        config_list[[parts[1]]] <- list(
+          label = parts[1],
+          roi1_sens_ingress = as.numeric(parts[2]),
+          roi2_inflow_passage = as.numeric(parts[3]),
+          roi3_prenadir = as.numeric(parts[4]),
+          roi4_nadir = as.numeric(parts[5]),
+          roi5_postnadir = as.numeric(parts[6]),
+          roi6_outflow_passage = as.numeric(parts[7]),
+          roi7_sens_outgress = as.numeric(parts[8])
+        )
+      }
+    }
+    return(config_list)
+  }
+  #----------------------------------------------
+  # DEFAULT HANDLING (Key-Value or CSV)
+  #----------------------------------------------
+  else {
+    config <- list()
+    for (line in lines) {
+      if (grepl("=", line)) {  # Key-value
+        parts <- strsplit(line, "=")[[1]]
+        key <- trimws(parts[1])
+        value <- trimws(paste(parts[-1], collapse = "="))
+        config[[key]] <- type_convert(value)
+      } 
+      else if (grepl(",", line)) {  # CSV
+        parts <- strsplit(line, ",")[[1]]
+        parts <- trimws(parts)
+        if (length(parts) > 1) {
+          name <- parts[1]
+          values <- lapply(parts[-1], function(x) type_convert(trimws(x)))
+          config[[name]] <- if (all(sapply(values, is.numeric))) unlist(values) else values
         }
       }
     }
-    
-    return(config_list)
-  } else {
-    warning("ROI config file not found: ", config_file)
-    return(list())
+    return(config)
   }
 }
 
-save_custom_roi_config <- function(output_dir, roi1, roi2, roi3, roi4, roi5, roi6, roi7, custom_label) {
-  config_file <- file.path(output_dir, "config", "roi_config.txt")
+#==============================================
+# SINGLE UNIFIED CONFIG SAVER
+#==============================================
+
+
+save_config_value <- function(output_dir, config_type, key, value, append = TRUE) {
+  config_file <- file.path(output_dir, "config", paste0(config_type, "_config.txt"))
   
   tryCatch({
-    # Use the provided custom label directly
-    config_name <- trimws(custom_label)
-    
-    # Create new config line
-    config_line <- paste(config_name, roi1, roi2, roi3, roi4, roi5, roi6, roi7, sep = ", ")
-    
-    # Append to file
-    write(config_line, file = config_file, append = TRUE)
-    
-    return(list(status = TRUE, config_name = config_name))
-    
+    #------------------------------------------
+    # SPECIAL HANDLING FOR ROI CONFIGS
+    #------------------------------------------
+    if (config_type == "roi") {
+      if (length(value) != 7) stop("ROI config requires exactly 7 values")
+      line <- paste(key, paste(value, collapse = ", "), sep = ", ")
+      write(line, file = config_file, append = append)
+    }
+    #------------------------------------------
+    # DEFAULT HANDLING (Key-Value)
+    #------------------------------------------
+    else {
+      if (append && file.exists(config_file)) {
+        lines <- readLines(config_file)
+        key_line <- grep(paste0("^\\s*", key, "\\s*="), lines)
+        
+        if (length(key_line) > 0) {  # Update existing
+          lines[key_line[1]] <- paste(key, "=", value)
+        } else {  # Add new
+          lines <- c(lines, paste(key, "=", value))
+        }
+        writeLines(lines, config_file)
+      } else {
+        writeLines(paste(key, "=", value), config_file)
+      }
+    }
+    return(TRUE)
   }, error = function(e) {
-    warning("Failed to save custom ROI config: ", e$message)
-    return(list(status = FALSE, config_name = NULL))
+    warning("Failed to save config: ", e$message)
+    return(FALSE)
   })
+}
+
+#==============================================
+# HELPER (PRIVATE)
+#==============================================
+
+type_convert <- function(x) {
+  x <- trimws(x)
+  num_val <- suppressWarnings(as.numeric(x))
+  if (!is.na(num_val)) return(num_val)
+  if (tolower(x) %in% c("true", "false", "t", "f")) return(tolower(x) %in% c("true", "t"))
+  return(x)
 }
 
 
