@@ -330,7 +330,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
 # Load ROI configurations and update dropdown
     observe({
-      roi_values$roi_configs <- load_roi_configs(output_dir())
+      roi_values$roi_configs <- load_config_file(dir, "roi")
       
       if (length(roi_values$roi_configs) > 0) {
         config_names <- names(roi_values$roi_configs)
@@ -934,12 +934,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       roi7_duration <- roi7_end - roi6_end
       
       # Save configuration
-      success <- save_custom_roi_config(
-        output_dir(),
-        roi1_duration, roi2_duration, roi3_duration, roi4_duration,
-        roi5_duration, roi6_duration, roi7_duration,
-        input$roi_config_label
-      )
+      success <-   save_config_value(
+          output_dir = "path/to/output",
+          config_type = "roi",
+          key = "Custom_ROI",  # config name
+          value = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7)  # ROI values
+        )
       
       if (success$status) {
         # Reset custom mode
@@ -950,7 +950,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         shinyjs::removeClass("create_custom_roi", "btn-success")
         shinyjs::addClass("create_custom_roi", "btn-info")
         
-        roi_values$roi_configs <- load_roi_configs(output_dir())
+        roi_values$roi_configs <- load_config_file(dir, "roi")
         roi_values$current_config <- roi_values$roi_configs[[success$config_name]]
         
         create_delineated_dataset()
