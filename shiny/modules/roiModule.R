@@ -339,10 +339,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         
         # Check if sensor has a saved configuration
         if (!is.null(input$plot_sensor) && input$plot_sensor != "") {
-          index_file <- get_sensor_index_file(output_dir())
-          if (!is.null(index_file)) {
+          index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
+          if (!is.null(index_df)) {
             tryCatch({
-              index_df <- read.csv(index_file)
               sensor_row <- index_df[index_df$file == input$plot_sensor, ]
               if (nrow(sensor_row) > 0 && !is.na(sensor_row$roi_config) && sensor_row$roi_config != "NA") {
                 if (sensor_row$roi_config %in% config_names) {
@@ -1182,11 +1181,10 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       req(input$plot_sensor)
       roi_values$summary_updated
       
-      index_file <- get_sensor_index_file(output_dir())
-      if (is.null(index_file)) return(paste0(prefix_text, ": Not calculated"))
+      index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
+      if (is.null(index_df)) return(paste0(prefix_text, ": Not calculated"))
       
       tryCatch({
-        index_df <- read.csv(index_file)
         sensor_row <- index_df[index_df$file == input$plot_sensor, ]
         
         if (nrow(sensor_row) > 0 && !is.na(sensor_row[[duration_col]]) && sensor_row[[duration_col]] != "NA") {

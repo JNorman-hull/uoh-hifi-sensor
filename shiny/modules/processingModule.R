@@ -55,10 +55,9 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
     summary_data_from_index <- reactive({
       values$processing_complete  # Invalidate when processing completes
       
-      index_file <- get_sensor_index_file(output_dir())
-      if (!is.null(index_file)) {
+      index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
+      if (!is.null(index_df)) {
         tryCatch({
-          index_df <- read.csv(index_file)
           # Convert to list format for compatibility with existing code
           summary_list <- list()
           for (i in seq_len(nrow(index_df))) {
@@ -73,7 +72,6 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
         return(list())
       }
     })
-    
     # Get newly processed sensors by comparing before/after
     newly_processed_sensors <- reactive({
       req(values$processing_complete)
@@ -154,10 +152,9 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       values$sensors_actually_processed <- selected_sensors()  
       
       # Snapshot sensors before processing
-      index_file <- get_sensor_index_file(output_dir())
-      if (!is.null(index_file) && file.exists(index_file)) {
+      index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
+      if (!is.null(index_df)) {
         tryCatch({
-          index_df <- read.csv(index_file)
           values$sensors_before_processing <- index_df$file
         }, error = function(e) {
           values$sensors_before_processing <- character(0)
@@ -192,10 +189,9 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       
       # Check for existing sensors BEFORE setting processing state
       existing_sensors <- character(0)
-      index_file <- get_sensor_index_file(output_dir())
-      if (!is.null(index_file)) {
+      index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
+      if (!is.null(index_df)) {
         tryCatch({
-          index_df <- read.csv(index_file)
           existing_sensors <- intersect(sensors, index_df$file)
         }, error = function(e) {
           warning("Error checking existing sensors: ", e$message)

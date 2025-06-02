@@ -87,13 +87,12 @@ fileSelectionServer <- function(id, raw_data_path, output_dir, processing_comple
         processing_complete()
       }, error = function(e) {})
       
-      index_file <- get_sensor_index_file(output_dir())
-      if (is.null(index_file) || !file.exists(index_file)) {
+      index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
+      if (is.null(index_df)) {
         return(character(0))
       }
       
       tryCatch({
-        index_df <- read.csv(index_file)
         return(index_df$file)
       }, error = function(e) {
         return(character(0))

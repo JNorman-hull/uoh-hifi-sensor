@@ -26,10 +26,19 @@ source("modules/pressureModule.R")
 # ============================= #  
 
 ## Get sensor index ####
-get_sensor_index_file <- function(output_dir) {
+get_sensor_index_file <- function(output_dir, read_data = FALSE) {
   index_file <- file.path(output_dir, "index", "global_sensor_index.csv")
   if (file.exists(index_file)) {
-    return(index_file)
+    if (read_data) {
+      tryCatch({
+        return(read.csv(index_file))
+      }, error = function(e) {
+        warning("Failed to read sensor index: ", e$message)
+        return(NULL)
+      })
+    } else {
+      return(index_file)
+    }
   } else {
     return(NULL)
   }
@@ -37,11 +46,10 @@ get_sensor_index_file <- function(output_dir) {
 
 ## Safe update index file ####
 safe_update_sensor_index <- function(output_dir, sensor_name, updates) {
-  index_file <- get_sensor_index_file(output_dir)
-  if (is.null(index_file)) return(FALSE)
+  index_df <- get_sensor_index_file(output_dir, read_data = TRUE)
+  if (is.null(index_df)) return(FALSE)
   
   tryCatch({
-    index_df <- read.csv(index_file)
     row_idx <- which(index_df$file == sensor_name)
     
     if (length(row_idx) > 0) {
@@ -50,6 +58,8 @@ safe_update_sensor_index <- function(output_dir, sensor_name, updates) {
           index_df[row_idx, col] <- updates[[col]]
         }
       }
+      # Get file path for writing
+      index_file <- get_sensor_index_file(output_dir)
       write.csv(index_df, index_file, row.names = FALSE)
       return(TRUE)
     }
@@ -59,7 +69,6 @@ safe_update_sensor_index <- function(output_dir, sensor_name, updates) {
     return(FALSE)
   })
 }
-
 ## Get processed sensors ####
 get_processed_sensors <- function(output_dir) {
   min_files <- list.files(path = file.path(output_dir, "csv"), 
@@ -110,14 +119,12 @@ get_nadir_info <- function(sensor_name, output_dir) {
     return(list(available = FALSE))
   }
   
-  index_file <- get_sensor_index_file(output_dir)
-  if (is.null(index_file)) {
+  index_df <- get_sensor_index_file(output_dir, read_data = TRUE)
+  if (is.null(index_df)) {
     return(list(available = FALSE))
   }
   
   tryCatch({
-    index_df <- read.csv(index_file)
-    
     if (!"file" %in% names(index_df)) {
       return(list(available = FALSE))
     }
@@ -128,19 +135,11 @@ get_nadir_info <- function(sensor_name, output_dir) {
       return(list(available = FALSE))
     }
     
-    # Handle different possible column name formats
-    possible_time_cols <- c("pres_min[time]", "pres_min.time.", "pres_min.time")
-    possible_value_cols <- c("pres_min[kPa]", "pres_min.kPa.", "pres_min.kPa")
+    # Index columns are consistently named
+    time_col <- "pres_min.time."
+    value_col <- "pres_min.kPa."
     
-    time_col <- NULL
-    value_col <- NULL
-    
-    for (col in names(sensor_row)) {
-      if (col %in% possible_time_cols) time_col <- col
-      if (col %in% possible_value_cols) value_col <- col
-    }
-    
-    if (!is.null(time_col) && !is.null(value_col)) {
+    if (time_col %in% names(sensor_row) && value_col %in% names(sensor_row)) {
       return(list(
         time = as.numeric(sensor_row[[time_col]]),
         value = as.numeric(sensor_row[[value_col]]),
@@ -193,8 +192,7 @@ manage_button_states <- function(session, button_config) {
 }
 
 
-## ROI configuration loader ####
-
+## Configuration loader ####
 
 load_config_file <- function(output_dir, config_type) {
   config_file <- file.path(output_dir, "config", paste0(config_type, "_config.txt"))
@@ -326,21 +324,19 @@ load_config_file <- function(output_dir, config_type) {
   }
 }
 
+## Configuration saver ####
+
 save_config_value <- function(output_dir, config_type, key, value, append = TRUE) {
   config_file <- file.path(output_dir, "config", paste0(config_type, "_config.txt"))
   
   tryCatch({
-    #------------------------------------------
-    # SPECIAL HANDLING FOR ROI CONFIGS
-    #------------------------------------------
+
     if (config_type == "roi") {
       if (length(value) != 7) stop("ROI config requires exactly 7 values")
       line <- paste(key, paste(value, collapse = ", "), sep = ", ")
       write(line, file = config_file, append = append)
     }
-    #------------------------------------------
-    # SPECIAL HANDLING FOR DEPLOYMENT CONFIGS
-    #------------------------------------------
+
     else if (config_type == "deployment") {
       if (is.list(value)) {
         # If value is a list with deployment fields
@@ -371,9 +367,7 @@ save_config_value <- function(output_dir, config_type, key, value, append = TRUE
         writeLines(line, config_file)
       }
     }
-    #------------------------------------------
-    # ACCELERATION AND ROTATION CONFIGS
-    #------------------------------------------
+
     else if (config_type %in% c("acc", "rot")) {
       if (grepl("configuration", key)) {
         # Configuration line format: name, val1, val2, val3
@@ -409,9 +403,7 @@ save_config_value <- function(output_dir, config_type, key, value, append = TRUE
         writeLines(line, config_file)
       }
     }
-    #------------------------------------------
-    # PRESSURE CONFIG (Simple key-value)
-    #------------------------------------------
+
     else if (config_type == "pres") {
       line <- paste(key, "=", value)
       
@@ -428,9 +420,7 @@ save_config_value <- function(output_dir, config_type, key, value, append = TRUE
         writeLines(line, config_file)
       }
     }
-    #------------------------------------------
-    # DIRECTORY CONFIG (Path handling)
-    #------------------------------------------
+
     else if (config_type == "directory") {
       if (is.vector(value) && length(value) > 1) {
         # Multi-part path: join with commas and add quotes if needed
@@ -779,15 +769,30 @@ create_sensor_plot <- function(sensor_data, sensor_name, plot_config = "standard
 ## Processing status flags ####
 
 get_sensor_status <- function(sensor_name, output_dir) {
-  index_file <- get_sensor_index_file(output_dir)
-  if (is.null(index_file)) return(list(delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE, exists = FALSE))
+  index_df <- get_sensor_index_file(output_dir, read_data = TRUE)
+  if (is.null(index_df)) {
+    return(list(
+      delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE,
+      bad_sens = FALSE, deployment_info = FALSE,
+      all_pres_processed = FALSE, pres_sum_processed = FALSE, pres_rpc_processed = FALSE, pres_lrpc_processed = FALSE,
+      all_acc_processed = FALSE, acc_sum_processed = FALSE, acc_hig_peaks_processed = FALSE, acc_strike_processed = FALSE, acc_collision_processed = FALSE,
+      all_rot_processed = FALSE, rot_sum_processed = FALSE,
+      exists = FALSE
+    ))
+  }
   
   tryCatch({
-    index_df <- read.csv(index_file)
     sensor_row <- index_df[index_df$file == sensor_name, ]
     
     if (nrow(sensor_row) == 0) {
-      return(list(delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE, exists = FALSE))
+      return(list(
+        delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE,
+        bad_sens = FALSE, deployment_info = FALSE,
+        all_pres_processed = FALSE, pres_sum_processed = FALSE, pres_rpc_processed = FALSE, pres_lrpc_processed = FALSE,
+        all_acc_processed = FALSE, acc_sum_processed = FALSE, acc_hig_peaks_processed = FALSE, acc_strike_processed = FALSE, acc_collision_processed = FALSE,
+        all_rot_processed = FALSE, rot_sum_processed = FALSE,
+        exists = FALSE
+      ))
     }
     
     # Check flags and verify files exist
@@ -795,6 +800,29 @@ get_sensor_status <- function(sensor_name, output_dir) {
     trimmed_flag <- !is.na(sensor_row$trimmed) && sensor_row$trimmed == "Y"
     normalized_flag <- !is.na(sensor_row$normalized) && sensor_row$normalized == "Y"
     passage_times_flag <- !is.na(sensor_row$passage_times) && sensor_row$passage_times == "Y"
+    
+    # Check bad sensor flag
+    bad_sens_flag <- !is.na(sensor_row$bad_sens) && sensor_row$bad_sens == "Y"
+    
+    # Check deployment info flag
+    deployment_info_flag <- !is.na(sensor_row$deployment_info) && sensor_row$deployment_info == "Y"
+    
+    # Check pressure processing flags
+    all_pres_processed_flag <- !is.na(sensor_row$all_pres_processed) && sensor_row$all_pres_processed == "Y"
+    pres_sum_processed_flag <- !is.na(sensor_row$pres_sum_processed) && sensor_row$pres_sum_processed == "Y"
+    pres_rpc_processed_flag <- !is.na(sensor_row$pres_rpc_processed) && sensor_row$pres_rpc_processed == "Y"
+    pres_lrpc_processed_flag <- !is.na(sensor_row$pres_lrpc_processed) && sensor_row$pres_lrpc_processed == "Y"
+    
+    # Check acceleration processing flags
+    all_acc_processed_flag <- !is.na(sensor_row$all_acc_processed) && sensor_row$all_acc_processed == "Y"
+    acc_sum_processed_flag <- !is.na(sensor_row$acc_sum_processed) && sensor_row$acc_sum_processed == "Y"
+    acc_hig_peaks_processed_flag <- !is.na(sensor_row$acc_hig_peaks_processed) && sensor_row$acc_hig_peaks_processed == "Y"
+    acc_strike_processed_flag <- !is.na(sensor_row$acc_strike_processed) && sensor_row$acc_strike_processed == "Y"
+    acc_collision_processed_flag <- !is.na(sensor_row$acc_collision_processed) && sensor_row$acc_collision_processed == "Y"
+    
+    # Check rotation processing flags
+    all_rot_processed_flag <- !is.na(sensor_row$all_rot_processed) && sensor_row$all_rot_processed == "Y"
+    rot_sum_processed_flag <- !is.na(sensor_row$rot_sum_processed) && sensor_row$rot_sum_processed == "Y"
     
     if (delineated_flag) {
       delineated_file <- file.path(output_dir, "csv", "delineated", paste0(sensor_name, "_delineated.csv"))
@@ -810,10 +838,30 @@ get_sensor_status <- function(sensor_name, output_dir) {
       trimmed = trimmed_flag,
       normalized = normalized_flag,
       passage_times = passage_times_flag,
+      bad_sens = bad_sens_flag,
+      deployment_info = deployment_info_flag,
+      all_pres_processed = all_pres_processed_flag,
+      pres_sum_processed = pres_sum_processed_flag,
+      pres_rpc_processed = pres_rpc_processed_flag,
+      pres_lrpc_processed = pres_lrpc_processed_flag,
+      all_acc_processed = all_acc_processed_flag,
+      acc_sum_processed = acc_sum_processed_flag,
+      acc_hig_peaks_processed = acc_hig_peaks_processed_flag,
+      acc_strike_processed = acc_strike_processed_flag,
+      acc_collision_processed = acc_collision_processed_flag,
+      all_rot_processed = all_rot_processed_flag,
+      rot_sum_processed = rot_sum_processed_flag,
       exists = TRUE
     ))
   }, error = function(e) {
-    return(list(delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE, exists = FALSE))
+    return(list(
+      delineated = FALSE, trimmed = FALSE, normalized = FALSE, passage_times = FALSE,
+      bad_sens = FALSE, deployment_info = FALSE,
+      all_pres_processed = FALSE, pres_sum_processed = FALSE, pres_rpc_processed = FALSE, pres_lrpc_processed = FALSE,
+      all_acc_processed = FALSE, acc_sum_processed = FALSE, acc_hig_peaks_processed = FALSE, acc_strike_processed = FALSE, acc_collision_processed = FALSE,
+      all_rot_processed = FALSE, rot_sum_processed = FALSE,
+      exists = FALSE
+    ))
   })
 }
 
