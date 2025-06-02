@@ -77,7 +77,7 @@ pressureSidebarUI <- function(id) {
     
     # Delineation status display
     div(style = "margin-bottom: 15px;", 
-        textOutput(ns("delineation_status"))),
+        textOutput(ns("pressure_status"))),
     
     selectInput(ns("sensor_dropdown"), NULL, choices = NULL, width = "100%"),
     
@@ -194,12 +194,12 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     # /// Output render \\\ ####  
     # ============================= #    
     
-    # Delineation status display using shared function
-    delineation_status <- create_individual_status_display(
-      "delineation_status", 
+    # pressure status display using shared function
+    pressure_status <- create_individual_status_display(
+      "pressure_status", 
       reactive(input$sensor_dropdown), 
       reactive(output_dir()),
-      output, session, "delineation",
+      output, session, "pres_processed",
       invalidation_trigger = reactive(pressure_values$data_updated)
     )
     

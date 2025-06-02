@@ -883,6 +883,27 @@ get_status_level_config <- function() {
 ## Define  status check types ####
 get_status_check_definitions <- function() {
   list(
+    
+    bad_sensor = list(
+      name = "Sensor Quality",
+      checks = list(
+        list(condition = function(status) status$bad_sens,
+             level = 1, message = "Sensor marked as 'bad'"),
+        list(condition = function(status) !status$bad_sens,
+             level = 4, message = "Sensor marked as 'good'")
+      )
+    ),
+    
+    deployment_info = list(
+      name = "Deployment Information",
+      checks = list(
+        list(condition = function(status) status$deployment_info,
+             level = 4, message = "Deployment information complete"),
+        list(condition = function(status) !status$deployment_info,
+             level = 1, message = "Deployment information required")
+      )
+    ),
+    
     delineation = list(
       name = "Delineation Status",
       checks = list(
@@ -915,31 +936,93 @@ get_status_check_definitions <- function() {
       )
     ),
     
-    pressure_processing = list(
-      name = "Pressure Analysis",
+    pres_processed = list(
+      name = "Pressure analysis",
       checks = list(
         list(condition = function(status) status$all_pres_processed,
              level = 4, message = "All pressure analysis complete"),
-        list(condition = function(status) status$pres_sum_processed,
-             level = 3, message = "Basic pressure analysis complete"),
-        list(condition = function(status) status$delineated && status$trimmed,
-             level = 1, message = "Pressure analysis required"),
-        list(condition = function(status) !status$delineated || !status$trimmed,
-             level = 0, message = "")
+        list(condition = function(status) !status$all_pres_processed,
+             level = 1, message = "Pressure processing incomplete ")
       )
     ),
     
-    acceleration_processing = list(
-      name = "Acceleration Analysis", 
+    pres_processed_sum = list(
+      name = "Pressure analysis (summary)",
+      checks = list(
+        list(condition = function(status) status$pres_sum_processed,
+             level = 4, message = "Pressure sumary calculated"),
+        list(condition = function(status) !status$pres_sum_processed,
+             level = 1, message = "Pressure summary requires calculation")
+      )
+    ),
+    
+    pres_processed_rpc = list(
+      name = "Pressure analysis (rpc)",
+      checks = list(
+        list(condition = function(status) status$pres_rpc_processed,
+             level = 4, message = "Rate pressure change calculated"),
+        list(condition = function(status) !status$pres_rpc_processed,
+             level = 1, message = "Rate pressure change requires calculation")
+      )
+    ),
+    
+    pres_processed_lrpc = list(
+      name = "Pressure analysis (lrpc)",
+      checks = list(
+        list(condition = function(status) status$pres_lrpc_processed,
+             level = 4, message = "Log ratio pressure change calculated"),
+        list(condition = function(status) !status$pres_lrpc_processed,
+             level = 1, message = "Log ratio pressure change requires calculation")
+      )
+    ),
+    
+    acc_processed = list(
+      name = "Acceleration analysis",
       checks = list(
         list(condition = function(status) status$all_acc_processed,
              level = 4, message = "All acceleration analysis complete"),
+        list(condition = function(status) !status$all_acc_processed,
+             level = 1, message = "Acceleration processing incomplete ")
+      )
+    ),
+    
+    acc_processed_sum = list(
+      name = "Acceleration analysis (summary)",
+      checks = list(
         list(condition = function(status) status$acc_sum_processed,
-             level = 3, message = "Basic acceleration analysis complete"),
-        list(condition = function(status) status$delineated && status$trimmed,
-             level = 1, message = "Acceleration analysis required"),
-        list(condition = function(status) !status$delineated || !status$trimmed,
-             level = 0, message = "")
+             level = 4, message = "Acceleration sumary calculated"),
+        list(condition = function(status) !status$acc_sum_processed,
+             level = 1, message = "Acceleration summary requires calculation")
+      )
+    ),
+
+    acc_processed_peaks = list(
+      name = "Acceleration peaks",
+      checks = list(
+        list(condition = function(status) status$acc_hig_peaks_processed,
+             level = 4, message = "Acceleration peaks processed"),
+        list(condition = function(status) !status$acc_hig_peaks_processed,
+             level = 1, message = "Acceleration peaks requires calculation")
+      )
+    ),
+    
+    acc_processed_strikes = list(
+      name = "Acceleration strikes",
+      checks = list(
+        list(condition = function(status) status$acc_strike_processed,
+             level = 4, message = "Acceleration strikes processed"),
+        list(condition = function(status) !status$acc_strike_processed,
+             level = 1, message = "Acceleration strikes requires calculation")
+      )
+    ),
+    
+    acc_processed_collision = list(
+      name = "Acceleration collisions",
+      checks = list(
+        list(condition = function(status) status$acc_collision_processed,
+             level = 4, message = "Acceleration collisions processed"),
+        list(condition = function(status) !status$acc_collision_processed,
+             level = 1, message = "Acceleration collisions requires calculation")
       )
     ),
     
@@ -949,18 +1032,21 @@ get_status_check_definitions <- function() {
         list(condition = function(status) status$all_rot_processed,
              level = 4, message = "All rotation analysis complete"),
         list(condition = function(status) status$rot_sum_processed,
-             level = 3, message = "Basic rotation analysis complete"),
-        list(condition = function(status) status$delineated && status$trimmed,
-             level = 1, message = "Rotation analysis required"),
-        list(condition = function(status) !status$delineated || !status$trimmed,
-             level = 0, message = "")
+             level = 2, message = "Rotation summary calculated"),
+        list(condition = function(status) !status$all_rot_processed,
+             level = 1, message = "Rotation analysis requires calculation")
       )
     )
   )
 }
 
 ## Evaluate status checks ####
-evaluate_status_checks <- function(sensor_name, output_dir, check_types = c("delineation", "normalization", "passage_times")) {
+evaluate_status_checks <- function(sensor_name, output_dir, 
+                                   check_types = c("bad_sens", "deployment_info", "delineation", "normalization",
+                                                   "passage_times", "pres_processed", "pres_processed_sum", "pres_processed_rpc",
+                                                   "pres_processed_lrpc", "acc_processed", "acc_processed_sum", "acc_processed_peaks",
+                                                   "acc_processed_strikes", "acc_processed_collision", "rotation_processing"
+                                                   )) {
   if (is.null(sensor_name) || sensor_name == "") {
     return(list(
       level = 0,
