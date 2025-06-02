@@ -14,6 +14,7 @@ point_bep = NA
 treatment = NA
 run = NA
 deployment_info = N
+deployment_config = NA
 roi_config = NA
 delineated = N
 trimmed = N
