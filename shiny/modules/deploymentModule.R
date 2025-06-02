@@ -1,8 +1,22 @@
 deploymentUI <- function(id) {
   ns <- NS(id)
   
+  # Define all input fields in a list
+  input_fields <- list(
+    list(id = "deployment_config_label", label = "Configuration Label:", placeholder = "e.g., PumpWizard_configuration"),
+    list(id = "site_config_label", label = "Site:", placeholder = "e.g., Johnson_Lane"),
+    list(id = "deployment_id_config_label", label = "Deployment ID:", placeholder = "e.g., JL_2025_FFP"),
+    list(id = "pump_turbine_config_label", label = "Pump/turbine model:", placeholder = "e.g., Pentair_XRW"),
+    list(id = "type_config_label", label = "Pump/turbine type:", placeholder = "e.g., Axial_flow"),
+    list(id = "rpm_config_label", label = "Rotation Per Minute (RPM):", placeholder = "e.g., 500"),
+    list(id = "head_config_label", label = "Head:", placeholder = "e.g., 3"),
+    list(id = "flow_config_label", label = "Flow:", placeholder = "e.g., 1.32"),
+    list(id = "point_bep_config_label", label = "Point of Best Efficiency Point (BEP):", placeholder = "e.g., 100"),
+    list(id = "treatment_config_label", label = "Treatment:", placeholder = "e.g., Scenario_1"),
+    list(id = "run_config_label", label = "Run:", placeholder = "e.g., 1")
+  )
+  
   tagList(
-    # Replace the main box with the selection table
     fileSelectionTableUI(
       ns("deployment_table"),
       title = "Processed sensor index",
@@ -10,7 +24,6 @@ deploymentUI <- function(id) {
       show_title = TRUE
     ),
     
-    # Keep the two smaller boxes below
     fluidRow(
       column(
         width = 6,
@@ -19,90 +32,18 @@ deploymentUI <- function(id) {
                    border-radius: 5px; margin-bottom: 20px; margin-right: 10px;",
           tags$h4("Configure deployment information", style = "margin-top: 0; color: #333;"),
           selectInput(ns("deployment_config"), "Configuration:", choices = NULL, width = "100%"),
-          
           hr(),
           
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-              tags$label("Configuration Label:", `for` = ns("deployment_config_label"), 
-                         style = "margin-right: 8px;"),
-              textInput(ns("deployment_config_label"), NULL, value = "", 
-                        width = "200px", placeholder = "e.g., PumpWizard_configuration")
-          ),
-          
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-              tags$label("Site:", `for` = ns("site_config_label"), 
-                         style = "margin-right: 8px;"),
-              textInput(ns("site_config_label"), NULL, value = "", 
-                        width = "200px", placeholder = "e.g., Johnson_Lane")
-          ),
-          
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-              tags$label("Deployment ID:", `for` = ns("deployment_id_config_label"), 
-                         style = "margin-right: 8px;"),
-              textInput(ns("deployment_id_config_label"), NULL, value = "", 
-                        width = "200px", placeholder = "e.g., JL_2025_FFP")
-          ),
-          
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-              tags$label("Pump/turbine model:", `for` = ns("pump_turbine_config_label"), 
-                         style = "margin-right: 8px;"),
-              textInput(ns("pump_turbine_config_label"), NULL, value = "", 
-                        width = "200px", placeholder = "e.g., Pentair_XRW")
-          ),
-          
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-              tags$label("Pump/turbine type:", `for` = ns("type_config_label"), 
-                         style = "margin-right: 8px;"),
-              textInput(ns("type_config_label"), NULL, value = "", 
-                        width = "200px", placeholder = "e.g., Axial_flow")
-          ),
-          
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-              tags$label("Rotation Per Minute (RPM):", `for` = ns("rpm_config_label"), 
-                         style = "margin-right: 8px;"),
-              textInput(ns("rpm_config_label"), NULL, value = "", 
-                        width = "200px", placeholder = "e.g., 500")
-          ),
-          
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-              tags$label("Head:", `for` = ns("head_config_label"), 
-                         style = "margin-right: 8px;"),
-              textInput(ns("head_config_label"), NULL, value = "", 
-                        width = "200px", placeholder = "e.g., 3")
-          ),
-          
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-              tags$label("Flow:", `for` = ns("flow_config_label"), 
-                         style = "margin-right: 8px;"),
-              textInput(ns("flow_config_label"), NULL, value = "", 
-                        width = "200px", placeholder = "e.g., 1.32")
-          ),
-          
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-              tags$label("Point of Best Efficiency Point (BEP):", `for` = ns("point_bep_config_label"), 
-                         style = "margin-right: 8px;"),
-              textInput(ns("point_bep_config_label"), NULL, value = "", 
-                        width = "200px", placeholder = "e.g., 100")
-          ),
-          
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-              tags$label("Treatment:", `for` = ns("treatment_config_label"), 
-                         style = "margin-right: 8px;"),
-              textInput(ns("treatment_config_label"), NULL, value = "", 
-                        width = "200px", placeholder = "e.g., Scenario_1")
-          ),
-          
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-              tags$label("Run:", `for` = ns("run_config_label"), 
-                         style = "margin-right: 8px;"),
-              textInput(ns("run_config_label"), NULL, value = "", 
-                        width = "200px", placeholder = "e.g., 1")
-          )
-        )
+          # Generate inputs from the list
+          lapply(input_fields, function(field) {
+            div(
+              style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label(field$label, `for` = ns(field$id), style = "margin-right: 8px;"),
+              textInput(ns(field$id), NULL, value = "", width = "200px", placeholder = field$placeholder)
+            )
+          })
         )
       ),
-      
-      
       column(
         width = 6,
         div(
@@ -110,12 +51,10 @@ deploymentUI <- function(id) {
                    border-radius: 5px; margin-bottom: 20px;",
           tags$h4("Box header", style = "margin-top: 0; color: #333;"),
           p("Right panel content area.")
-          
-          # Boxes will be replaced by 
-          
         )
       )
     )
+  )
 }
 
 deploymentSidebarUI <- function(id) {
