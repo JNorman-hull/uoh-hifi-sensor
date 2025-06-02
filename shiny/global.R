@@ -239,18 +239,19 @@ load_config_file <- function(output_dir, config_type) {
         value_parts <- strsplit(value_string, ",")[[1]]
         value_parts <- trimws(value_parts)
         
-        if (length(value_parts) >= 9) {
+        if (length(value_parts) >= 10) {
           config_list[[key]] <- list(
             label = key,
-            deployment_id = value_parts[1],
-            pump_turbine = value_parts[2],
-            type = value_parts[3],
-            rpm = type_convert(value_parts[4]),
-            head = type_convert(value_parts[5]),
-            flow = type_convert(value_parts[6]),
-            point_bep = type_convert(value_parts[7]),
-            treatment = value_parts[8],
-            run = type_convert(value_parts[9])
+            site = value_parts[1],
+            deployment_id = value_parts[2],
+            pump_turbine = value_parts[3],
+            type = value_parts[4],
+            rpm = type_convert(value_parts[5]),
+            head = type_convert(value_parts[6]),
+            flow = type_convert(value_parts[7]),
+            point_bep = type_convert(value_parts[8]),
+            treatment = value_parts[9],
+            run = type_convert(value_parts[10])
           )
         }
       }
@@ -340,18 +341,18 @@ save_config_value <- function(output_dir, config_type, key, value, append = TRUE
     else if (config_type == "deployment") {
       if (is.list(value)) {
         # If value is a list with deployment fields
-        deployment_string <- paste(
+        deployment_string <- paste(value$site,
           value$deployment_id, value$pump_turbine, value$type,
           value$rpm, value$head, value$flow, value$point_bep,
           value$treatment, value$run,
           sep = ", "
         )
         line <- paste(key, "=", deployment_string)
-      } else if (is.vector(value) && length(value) >= 9) {
-        # If value is a vector with 9+ elements
+      } else if (is.vector(value) && length(value) >= 10) {
+        # If value is a vector with 10+ elements
         line <- paste(key, "=", paste(value, collapse = ", "))
       } else {
-        stop("Deployment config requires 9 values or a structured list")
+        stop("Deployment config requires 10 values or a structured list")
       }
       
       if (append && file.exists(config_file)) {
