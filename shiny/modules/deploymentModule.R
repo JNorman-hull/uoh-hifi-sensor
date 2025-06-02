@@ -17,11 +17,92 @@ deploymentUI <- function(id) {
         div(
           style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
                    border-radius: 5px; margin-bottom: 20px; margin-right: 10px;",
-          tags$h4("Box header", style = "margin-top: 0; color: #333;"),
-          p("Left panel content area."),
-          selectInput(ns("deployment_config"), "Configuration:", choices = NULL, width = "100%")
+          tags$h4("Configure deployment information", style = "margin-top: 0; color: #333;"),
+          selectInput(ns("deployment_config"), "Configuration:", choices = NULL, width = "100%"),
+          
+          hr(),
+          
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label("Configuration Label:", `for` = ns("deployment_config_label"), 
+                         style = "margin-right: 8px;"),
+              textInput(ns("deployment_config_label"), NULL, value = "", 
+                        width = "200px", placeholder = "e.g., PumpWizard_configuration")
+          ),
+          
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label("Site:", `for` = ns("site_config_label"), 
+                         style = "margin-right: 8px;"),
+              textInput(ns("site_config_label"), NULL, value = "", 
+                        width = "200px", placeholder = "e.g., Johnson_Lane")
+          ),
+          
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label("Deployment ID:", `for` = ns("deployment_id_config_label"), 
+                         style = "margin-right: 8px;"),
+              textInput(ns("deployment_id_config_label"), NULL, value = "", 
+                        width = "200px", placeholder = "e.g., JL_2025_FFP")
+          ),
+          
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label("Pump/turbine model:", `for` = ns("pump_turbine_config_label"), 
+                         style = "margin-right: 8px;"),
+              textInput(ns("pump_turbine_config_label"), NULL, value = "", 
+                        width = "200px", placeholder = "e.g., Pentair_XRW")
+          ),
+          
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label("Pump/turbine type:", `for` = ns("type_config_label"), 
+                         style = "margin-right: 8px;"),
+              textInput(ns("type_config_label"), NULL, value = "", 
+                        width = "200px", placeholder = "e.g., Axial_flow")
+          ),
+          
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label("Rotation Per Minute (RPM):", `for` = ns("rpm_config_label"), 
+                         style = "margin-right: 8px;"),
+              textInput(ns("rpm_config_label"), NULL, value = "", 
+                        width = "200px", placeholder = "e.g., 500")
+          ),
+          
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label("Head:", `for` = ns("head_config_label"), 
+                         style = "margin-right: 8px;"),
+              textInput(ns("head_config_label"), NULL, value = "", 
+                        width = "200px", placeholder = "e.g., 3")
+          ),
+          
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label("Flow:", `for` = ns("flow_config_label"), 
+                         style = "margin-right: 8px;"),
+              textInput(ns("flow_config_label"), NULL, value = "", 
+                        width = "200px", placeholder = "e.g., 1.32")
+          ),
+          
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label("Point of Best Efficiency Point (BEP):", `for` = ns("point_bep_config_label"), 
+                         style = "margin-right: 8px;"),
+              textInput(ns("point_bep_config_label"), NULL, value = "", 
+                        width = "200px", placeholder = "e.g., 100")
+          ),
+          
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label("Treatment:", `for` = ns("treatment_config_label"), 
+                         style = "margin-right: 8px;"),
+              textInput(ns("treatment_config_label"), NULL, value = "", 
+                        width = "200px", placeholder = "e.g., Scenario_1")
+          ),
+          
+          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+              tags$label("Run:", `for` = ns("run_config_label"), 
+                         style = "margin-right: 8px;"),
+              textInput(ns("run_config_label"), NULL, value = "", 
+                        width = "200px", placeholder = "e.g., 1")
+          )
+        )
         )
       ),
+      
+      
       column(
         width = 6,
         div(
@@ -35,7 +116,6 @@ deploymentUI <- function(id) {
         )
       )
     )
-  )
 }
 
 deploymentSidebarUI <- function(id) {
@@ -53,16 +133,11 @@ deploymentSidebarUI <- function(id) {
     
     # Delineation status display
     div(style = "margin-bottom: 15px;", 
-        textOutput(ns("delineation_status"))),
+        textOutput(ns("deployment_info"))),
     # This no longer shows, as removed selected sensor dropdown. 
     # Will update this to reflect sensors in file selection
     # "Sensor requires deployment information", "One or more sensor requires deployment information", "All selected sensors have deployment information"
-    
-    hr(),
 
-    selectInput(ns("deployment_config"), "Deployment Configuration:", 
-                choices = NULL, width = "100%"),
-    
     hr(),
     
     fileSelectionControlsUI(
@@ -87,7 +162,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     # /// Reactive values \\\ ####  
     # ============================= #   
     
-    # Deployment state
+# Deployment state ####
     deployment_values <- reactiveValues(
       data_updated = 0,            # Counter to trigger data refresh
       deployment_configs = NULL,   # All available deployment configurations  
@@ -98,56 +173,42 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     # /// Data loading & processing  \\\ ####  
     # ============================= # 
     
-    # Get processed sensors using shared function
+# Get processed sensors ####
     processed_sensors <- reactive({
       processing_complete()
       get_processed_sensors(output_dir())
     })
     
-    # Prepare table data for processed sensors only
+# Prepare table data ####
     processed_sensor_data <- reactive({
       processing_complete()  # Trigger when processing completes
       deployment_values$data_updated  # Trigger on updates
       
-      sensors <- processed_sensors()
+      # Read directly from sensor index
+      index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
       
-      # Return NULL if no processed sensors
-      if (length(sensors) == 0) {
+      # Return NULL if no index file
+      if (is.null(index_df)) {
         return(NULL)
       }
       
-      # Get sensor info for each processed sensor
-      sensor_info <- map(sensors, function(name) {
-        tryCatch({
-          py$parse_filename_info(name)
-        }, error = function(e) {
-          list(
-            sensor = if(nchar(name) >= 3) substr(name, 1, 3) else name,
-            date_deploy = "Unknown",
-            time_deploy = "Unknown"
-          )
-        })
-      })
+      # Select desired columns and add row numbers
+      selected_columns <- c("file", "sensor", "date_deploy", "bad_sens", "site", 
+                            "deployment_id", "pump_turbine", "type", "rpm", "head", 
+                            "flow", "point_bep", "treatment", "run")
+
+      # Create the data frame with row numbers
+      result_df <- index_df[, selected_columns, drop = FALSE]
+      result_df <- cbind(`No.` = seq_len(nrow(result_df)), result_df)
       
-      # Create the data frame
-      tibble(
-        No. = seq_along(sensors),
-        Filename = sensors,
-        Sensor = map_chr(sensor_info, "sensor"),
-        Date = map_chr(sensor_info, "date_deploy"),
-        Time = map_chr(sensor_info, "time_deploy"),
-        
-      )
+      return(result_df)
     })
     
-    
-
     # ============================= #
     # /// UI State management \\\ ####  
     # ============================= # 
     
 # Custom table format ####
-#formatting function to handle empty state
     custom_table_formatting <- function(dt, table_data) {
       if (is.null(table_data) || nrow(table_data) == 0) {
         # Return a datatable with the message
@@ -161,24 +222,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       return(dt)
     }
     
-    
-    
-    # ============================= #
-    # /// Event handlers \\\ ####  
-    # ============================= # 
-    
-    # Handle deployment info addition
-    observeEvent(input$add_deploy_btn, {
-      if (!is.null(input$selected_sensor) && input$selected_sensor != "") {
-        showNotification(paste("Adding deployment info for:", input$selected_sensor), type = "message")
-        # Add actual deployment logic here
-      } else {
-        showNotification("Please select a sensor first", type = "warning")
-      }
-    })
-    
-    # Load deployment configurations and update dropdown
-    # Load deployment configurations and update dropdown
+# Load deployment configurations ####
     observe({
       deployment_values$deployment_configs <- load_config_file(output_dir(), "deployment")
       
@@ -200,26 +244,40 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       }
     })
     
-    # Update current config when dropdown selection changes
+# Update deployment config  ####
     observe({
       req(input$deployment_config, deployment_values$deployment_configs)
       deployment_values$current_config <- deployment_values$deployment_configs[[input$deployment_config]]
-    })
+    })    
     
+    # ============================= #
+    # /// Event handlers \\\ ####  
+    # ============================= # 
+    
+#  Deployment info button ####
+    observeEvent(input$add_deploy_btn, {
+      if (!is.null(input$selected_sensor) && input$selected_sensor != "") {
+        showNotification(paste("Adding deployment info for:", input$selected_sensor), type = "message")
+        # Add actual deployment logic here
+      } else {
+        showNotification("Please select a sensor first", type = "warning")
+      }
+    })
+
     # ============================= #
     # /// Output render \\\ ####  
     # ============================= #    
-    
-    # Delineation status display using shared function
-    delineation_status <- create_individual_status_display(
-      "delineation_status", 
+
+# Deployment status display ####
+    deployment_status <- create_individual_status_display(
+      "deployment_info", 
       reactive(input$selected_sensor), 
       reactive(output_dir()),
-      output, session, "delineation",
+      output, session, "deployment_info",
       invalidation_trigger = reactive(deployment_values$data_updated)
     )
     
-    # Use the shared table module
+# Table display ####
     table_results <- fileSelectionTableServer(
       "deployment_table",
       sensor_data_reactive = reactive({
@@ -233,12 +291,12 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       }),
       highlight_sensors_reactive = reactive(NULL),  # No highlighting needed
       enable_selection = TRUE,
-      selection_mode = 'single',  # Single selection for deployment
+      selection_mode = 'multiple',  # Changed from 'single' to 'multiple'
       custom_formatting = custom_table_formatting
     )
     
-    
-    # Return any reactive values other modules might need
+# Return reactive####
+#not sure if needed
     return(list(
       selected_sensor = reactive(input$selected_sensor),
       selected_sensors_from_table = table_results$selected_items
