@@ -64,7 +64,18 @@ ui <- navbarPage(
     sidebarLayout(
       sidebarPanel(
         width = 3,
-        uiOutput("processing_sidebar")
+        
+        # ROI Sidebar - show when roi_delineation tab is active
+        conditionalPanel(
+          condition = "input.processingTabset == 'process_raw_data'",
+          fileSidebarUI("file_selection")
+        ),
+        
+        # Plots Sidebar - show when interactive_plots tab is active  
+        conditionalPanel(
+          condition = "input.processingTabset == 'add_deployment_info'",
+          deploymentSidebarUI("deployment_info")
+        )
       ),
       
       mainPanel(

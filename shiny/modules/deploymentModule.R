@@ -1,6 +1,32 @@
 deploymentUI <- function(id) {
   ns <- NS(id)
   
+  tagList(
+    fileSelectionTableUI(
+      ns("deployment_table"),
+      title = "Processed sensor index",
+      help_text = "All processed sensors are shown here. Select sensors to add or edit deployment information. Sensors with deployment information are coloured green. Sensors without are coloured orange.",
+      show_title = TRUE
+    ),
+    
+    fluidRow(
+        column(
+        width = 6,
+        div(
+          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
+                   border-radius: 5px; margin-bottom: 20px;",
+          tags$h4("Deployment Configuration Status", style = "margin-top: 0; color: #333;"),
+          p("Configuration management and sensor deployment information status will be displayed here."),
+          
+        )
+      )
+    )
+  )
+}
+
+deploymentSidebarUI <- function(id) {
+  ns <- NS(id)
+  
   # Define all input fields in a list
   input_fields <- list(
     list(id = "deployment_config_label", label = "Configuration Label:", placeholder = "e.g., PumpWizard_configuration"),
@@ -20,64 +46,6 @@ deploymentUI <- function(id) {
   input_pairs <- split(input_fields, ceiling(seq_along(input_fields) / 2))
   
   tagList(
-    fileSelectionTableUI(
-      ns("deployment_table"),
-      title = "Processed sensor index",
-      help_text = "All processed sensors are shown here. Select sensors to add or edit deployment information. Sensors with deployment information are coloured green. Sensors without are coloured orange.",
-      show_title = TRUE
-    ),
-    
-    fluidRow(
-      column(
-        width = 6,
-        div(
-          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
-                   border-radius: 5px; margin-bottom: 20px; margin-right: 10px;",
-          tags$h4("Configure deployment information", style = "margin-top: 0; color: #333;"),
-          selectInput(ns("deployment_config"), "Configuration:", choices = NULL, width = "100%"),
-          hr(),
-          
-          # Create fluidRows with two columns each
-          lapply(input_pairs, function(pair) {
-            fluidRow(
-              lapply(pair, function(field) {
-                column(
-                  width = 6,
-                  div(
-                    style = "margin-bottom: 15px;",
-                    textInput(ns(field$id), label = field$label, value = "", 
-                              width = "100%", placeholder = field$placeholder)
-                  )
-                )
-              })
-            )
-          }),
-          
-          br(),
-          actionButton(ns("save_config_btn"), "Save Configuration", 
-                       class = "btn-success btn-block")
-        )
-      ),
-      column(
-        width = 6,
-        div(
-          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
-                   border-radius: 5px; margin-bottom: 20px;",
-          tags$h4("Deployment Configuration Status", style = "margin-top: 0; color: #333;"),
-          p("Configuration management and sensor deployment information status will be displayed here."),
-          textOutput(ns("config_change_status")),
-          br(),
-          textOutput(ns("deployment_summary"))
-        )
-      )
-    )
-  )
-}
-
-deploymentSidebarUI <- function(id) {
-  ns <- NS(id)
-  
-  tagList(
     h4("Deployment Information Controls"),
     
     div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
@@ -87,7 +55,35 @@ deploymentSidebarUI <- function(id) {
     div(style = "margin-bottom: 15px;", 
         textOutput(ns("deployment_status"))),
     
+    textOutput(ns("config_change_status")),
+    br(),
+    textOutput(ns("deployment_summary")),
+    
     hr(),
+    
+    selectInput(ns("deployment_config"), "Configuration:", choices = NULL, width = "100%"),
+        hr(),
+        
+        # Create fluidRows with two columns each
+        lapply(input_pairs, function(pair) {
+          fluidRow(
+            lapply(pair, function(field) {
+              column(
+                width = 6,
+                div(
+                  style = "margin-bottom: 15px;",
+                  textInput(ns(field$id), label = field$label, value = "", 
+                            width = "100%", placeholder = field$placeholder)
+                )
+              )
+            })
+          )
+        }),
+        
+    br(),
+    
+    actionButton(ns("save_config_btn"), "Save Configuration", 
+                     class = "btn-success btn-block"),
     
     fileSelectionControlsUI(
       ns("deployment_table"),

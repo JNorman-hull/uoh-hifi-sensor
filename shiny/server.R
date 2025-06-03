@@ -25,12 +25,4 @@ server <- function(input, output, session) {
     processing$process_sensors()
   })
   
-  output$processing_sidebar <- renderUI({
-    switch(input$processingTabset,
-           "process_raw_data" = fileSidebarUI("file_selection"),
-           "add_deployment_info" = deploymentSidebarUI("deployment_info")
-    )
-  })
-  
-  
 }
