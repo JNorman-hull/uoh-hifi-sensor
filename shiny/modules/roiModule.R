@@ -117,14 +117,18 @@ roiSidebarUI <- function(id) {
   var_choices <- setNames(sensor_vars$names, sensor_vars$labels)
   
   tagList(
-    h4("Sensor selection"),
-    selectInput(ns("plot_sensor"), "Select Sensor:", choices = NULL),
+    h4("Time series controls"),
+    
+    div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
+        "Select a sensor to begin time series analysis."),
     
     div(style = "margin-bottom: 15px;", 
         textOutput(ns("delineation_status")),
         textOutput(ns("normalization_status")), 
         textOutput(ns("passage_times_status"))
     ),
+    
+    enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "delineation"),
     
     hr(), h4("Axis Options"),
     selectInput(ns("left_y_var"), "Left Y-Axis:", choices = var_choices, selected = "pressure_kpa"),
@@ -191,50 +195,46 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 # /// Data loading & processing  \\\ ####  
 # ============================= # 
 
-  
-# Get processed sensors using shared function
-    processed_sensors <- reactive({
-      processing_complete()
-      get_processed_sensors(output_dir())
-    })
+#Sensor dropdown ####   
+sensor_selector <- enhancedSensorSelectionServer("sensor_selector", output_dir, processing_complete)
     
 # Get nadir info using shared function
     nadir_info <- reactive({
-      req(input$plot_sensor)
+      req(sensor_selector$selected_sensor())
       roi_values$summary_updated
       nadir_values$nadir_updated
-      get_nadir_info(input$plot_sensor, output_dir())
+      get_nadir_info(sensor_selector$selected_sensor(), output_dir())
     })
     
 # Get sensor status using shared function
     sensor_status <- reactive({
-      req(input$plot_sensor)
+      req(sensor_selector$selected_sensor())
       roi_values$summary_updated
       roi_values$data_updated
       
-      get_sensor_status(input$plot_sensor, output_dir())
+      get_sensor_status(sensor_selector$selected_sensor(), output_dir())
     })
     
 # Read selected sensor data (with preference for delineated data)
     selected_sensor_data <- reactive({
-      req(input$plot_sensor)
+      req(sensor_selector$selected_sensor())
       roi_values$data_updated  # Invalidate when data changes
       
       # Check for delineated file first
-      delineated_data <- read_sensor_data(output_dir(), input$plot_sensor, "delineated")
+      delineated_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
       if (!is.null(delineated_data)) {
         return(delineated_data)
       }
       
       # Fall back to regular minimal data
-      return(read_sensor_data(output_dir(), input$plot_sensor, "min"))
+      return(read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min"))
     })
     
 ## Calculate ROI times ####
     
     # Calculate ROI times based on configuration and nadir
     roi_times <- reactive({
-      req(input$plot_sensor, roi_values$current_config)
+      req(sensor_selector$selected_sensor(), roi_values$current_config)
       input$config_choice
       
       nadir <- nadir_info()
@@ -267,7 +267,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       roi7_end <- roi6_end + config$roi7_sens_outgress
       
       # Read sensor data to get actual start/end times
-      sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "min")
+      sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
       if (!is.null(sensor_data)) {
         data_start <- min(sensor_data$time_s)
         data_end <- max(sensor_data$time_s)
@@ -321,13 +321,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 # /// UI State management \\\ ####  
 # ============================= # 
     
-## Sensor dropdown ####
-    
-# Update sensor dropdown using shared function
-    observe({
-      update_sensor_dropdown(session, "plot_sensor", processed_sensors(), input$plot_sensor)
-    })
-    
+
 # Load ROI configurations and update dropdown
     observe({
       roi_values$roi_configs <- load_config_file(output_dir(), "roi")
@@ -338,11 +332,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         selected_value <- config_names[1]
         
         # Check if sensor has a saved configuration
-        if (!is.null(input$plot_sensor) && input$plot_sensor != "") {
+        if (!is.null(sensor_selector$selected_sensor()) && sensor_selector$selected_sensor() != "") {
           index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
           if (!is.null(index_df)) {
             tryCatch({
-              sensor_row <- index_df[index_df$file == input$plot_sensor, ]
+              sensor_row <- index_df[index_df$file == sensor_selector$selected_sensor(), ]
               if (nrow(sensor_row) > 0 && !is.na(sensor_row$roi_config) && sensor_row$roi_config != "NA") {
                 if (sensor_row$roi_config %in% config_names) {
                   selected_value <- sensor_row$roi_config
@@ -366,7 +360,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     })
     
 # Reset checkboxes when sensor changes
-    observeEvent(input$plot_sensor, {
+    observeEvent(sensor_selector$selected_sensor(), {
       # Reset standardization checkboxes when switching sensors
       updateCheckboxInput(session, "round_roi", value = FALSE)
       updateCheckboxInput(session, "match_pre_post", value = FALSE)
@@ -383,7 +377,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
 ## Enable/disable normalized view checkbox
     observe({
-      req(input$plot_sensor)
+      req(sensor_selector$selected_sensor())
       status <- sensor_status()
       
       if (status$normalized) {
@@ -397,7 +391,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 ## Button state management #####
     
     observe({
-      req(input$plot_sensor)
+      req(sensor_selector$selected_sensor())
       
       nadir <- nadir_info()
       status <- sensor_status()
@@ -492,7 +486,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         # Save nadir
         success <- safe_update_sensor_index(
           output_dir(), 
-          input$plot_sensor,
+          sensor_selector$selected_sensor(),
           list(
             "pres_min.time." = nadir_values$selected_point$x,
             "pres_min.kPa." = nadir_values$selected_point$y
@@ -533,7 +527,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 ## Delineate and trim ####
     
     observeEvent(input$create_delineated, {
-      req(input$plot_sensor, roi_times(), roi_values$current_config)
+      req(sensor_selector$selected_sensor(), roi_times(), roi_values$current_config)
       
       create_delineated_dataset()
     })
@@ -547,10 +541,10 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Trim sensor button
     observeEvent(input$trim_sensor, {
-      req(input$plot_sensor)
+      req(sensor_selector$selected_sensor())
       
       # Read delineated data using shared function
-      sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "delineated")
+      sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
       
       if (is.null(sensor_data)) {
         showNotification("Failed to read delineated dataset.", type = "error")
@@ -561,11 +555,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       trimmed_data <- sensor_data[!sensor_data$roi %in% c("trim_start", "trim_end"), ]
       
       # Save over existing delineated file
-      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
+      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
       write.csv(trimmed_data, delineated_path, row.names = FALSE)
       
       # Update sensor index using shared function
-      success <- safe_update_sensor_index(output_dir(), input$plot_sensor, list(trimmed = "Y"))
+      success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), list(trimmed = "Y"))
       
       if (success) {
         # Trigger data refresh
@@ -581,10 +575,10 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 ## Start over ####
     
     observeEvent(input$start_over, {
-      req(input$plot_sensor)
+      req(sensor_selector$selected_sensor())
       
       # Remove delineated file
-      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
+      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
       if (file.exists(delineated_path)) {
         file.remove(delineated_path)
       }
@@ -592,7 +586,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       # Reset flags in sensor index using shared function
       success <- safe_update_sensor_index(
         output_dir(), 
-        input$plot_sensor,
+        sensor_selector$selected_sensor(),
         list(
           delineated = "N",
           trimmed = "N",
@@ -622,12 +616,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 ## Normalize time series ####
     
     observeEvent(input$normalize_time, {
-      req(input$plot_sensor)
+      req(sensor_selector$selected_sensor())
       
       # Perform normalization
       tryCatch({
         # Read delineated data
-        sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "delineated")
+        sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
         
         if (is.null(sensor_data)) {
           showNotification("Failed to read delineated dataset", type = "error")
@@ -652,11 +646,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           ))
         
         # Save updated delineated file
-        delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(input$plot_sensor, "_delineated.csv"))
+        delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
         write.csv(sensor_data, delineated_path, row.names = FALSE)
         
         # Update sensor index
-        success <- safe_update_sensor_index(output_dir(), input$plot_sensor, list(normalized = "Y"))
+        success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), list(normalized = "Y"))
         
         if (success) {
           # Trigger data refresh
@@ -676,12 +670,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 ## Calculate passage times ####
     
     observeEvent(input$passage_time, {
-      req(input$plot_sensor)
+      req(sensor_selector$selected_sensor())
       
       # Calculate passage times
       tryCatch({
         # Read delineated data
-        sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "delineated")
+        sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
         
         if (is.null(sensor_data)) {
           showNotification("Failed to read delineated dataset", type = "error")
@@ -711,7 +705,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         # Update sensor index
         success <- safe_update_sensor_index(
           output_dir(), 
-          input$plot_sensor,
+          sensor_selector$selected_sensor(),
           list(
             passage_times = "Y",
             passage_duration.mm.ss. = format_mm_ss(passage_duration_s),
@@ -970,7 +964,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     create_delineated_dataset <- function() {
       tryCatch({
         # Read original data using shared function
-        sensor_data <- read_sensor_data(output_dir(), input$plot_sensor, "min")
+        sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
         
         # Create delineated folder - always check/create fresh
         delineated_dir <- file.path(output_dir(), "csv", "delineated")
@@ -1001,7 +995,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                include.lowest = TRUE, right = FALSE)
         
         # Save delineated file
-        output_file <- file.path(delineated_dir, paste0(input$plot_sensor, "_delineated.csv"))
+        output_file <- file.path(delineated_dir, paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
         write.csv(sensor_data, output_file, row.names = FALSE)
         
         # Verify file was created
@@ -1013,7 +1007,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         # Update sensor index using shared function
         success <- safe_update_sensor_index(
           output_dir(),
-          input$plot_sensor,
+          sensor_selector$selected_sensor(),
           list(
             delineated = "Y",
             roi_config = roi_values$current_config$label,
@@ -1058,7 +1052,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 # Delineation, normalization, passage status ####
     delineation_status <- create_individual_status_display(
       "delineation_status", 
-      reactive(input$plot_sensor), 
+      reactive(sensor_selector$selected_sensor()), 
       reactive(output_dir()),
       output, session, "delineation",
       invalidation_trigger = reactive(roi_values$summary_updated)  # Triggers refresh
@@ -1066,7 +1060,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     normalization_status <- create_individual_status_display(
       "normalization_status",
-      reactive(input$plot_sensor), 
+      reactive(sensor_selector$selected_sensor()), 
       reactive(output_dir()),
       output, session, "normalization",
       invalidation_trigger = reactive(roi_values$summary_updated)
@@ -1074,7 +1068,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     passage_times_status <- create_individual_status_display(
       "passage_times_status",
-      reactive(input$plot_sensor), 
+      reactive(sensor_selector$selected_sensor()), 
       reactive(output_dir()),
       output, session, "passage_times", 
       invalidation_trigger = reactive(roi_values$summary_updated)
@@ -1152,7 +1146,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
 # Normalize status output ####
     output$normalize_status <- renderText({
-      req(input$plot_sensor)
+      req(sensor_selector$selected_sensor())
       status <- sensor_status()
       
       if (status$normalized) {
@@ -1164,7 +1158,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
 # Passage status output####
     output$passage_status <- renderText({
-      req(input$plot_sensor)
+      req(sensor_selector$selected_sensor())
       status <- sensor_status()
       
       if (status$passage_times) {
@@ -1178,14 +1172,14 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
 # Helper function to generate duration text
     generate_duration_text <- function(duration_col, prefix_text) {
-      req(input$plot_sensor)
+      req(sensor_selector$selected_sensor())
       roi_values$summary_updated
       
       index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
       if (is.null(index_df)) return(paste0(prefix_text, ": Not calculated"))
       
       tryCatch({
-        sensor_row <- index_df[index_df$file == input$plot_sensor, ]
+        sensor_row <- index_df[index_df$file == sensor_selector$selected_sensor(), ]
         
         if (nrow(sensor_row) > 0 && !is.na(sensor_row[[duration_col]]) && sensor_row[[duration_col]] != "NA") {
           time_parts <- strsplit(sensor_row[[duration_col]], ":")[[1]]
@@ -1243,7 +1237,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 # Create base plot
       p <- create_sensor_plot(
         sensor_data = sensor_data,
-        sensor_name = input$plot_sensor,
+        sensor_name = sensor_selector$selected_sensor(),
         plot_config = "roi_delineation",
         left_var = input$left_y_var,
         right_var = input$right_y_var,

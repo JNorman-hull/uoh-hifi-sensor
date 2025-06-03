@@ -1429,28 +1429,6 @@ fileSelectionTableServer <- function(id,
 # /// Enhanced Sensor Selection Module \\\ ####  
 # ============================= #
 
-# ============================= #
-# /// Enhanced Sensor Selection Module \\\ ####  
-# ============================= #
-
-# ============================= #
-# /// Enhanced Sensor Selection Module \\\ ####  
-# ============================= #
-
-# ============================= #
-# /// Enhanced Sensor Selection Module \\\ ####  
-# ============================= #
-
-## Enhanced Sensor Selection UI ####
-# ============================= #
-# /// Enhanced Sensor Selection Module \\\ ####  
-# ============================= #
-
-## Enhanced Sensor Selection UI ####
-# ============================= #
-# /// Enhanced Sensor Selection Module \\\ ####  
-# ============================= #
-
 ## Enhanced Sensor Selection UI ####
 enhancedSensorSelectionUI <- function(id, label = "Select Sensor:", show_filters = TRUE, status_filter_type = NULL) {
   ns <- NS(id)

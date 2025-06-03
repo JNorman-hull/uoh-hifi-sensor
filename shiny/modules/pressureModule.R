@@ -80,9 +80,7 @@ pressureSidebarUI <- function(id) {
         textOutput(ns("pressure_status"))),
     
     enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "pres_processed"),
-    
-    hr(),
-    
+
     h4("Plot controls"),
     
     checkboxInput(ns("show_roi_markers"), "Show ROI markers", value = FALSE),
