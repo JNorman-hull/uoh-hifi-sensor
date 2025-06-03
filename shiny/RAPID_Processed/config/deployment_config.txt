@@ -1,4 +1,3 @@
 #site, deployment_id, pump_turbine, type, rpm	head, flow, point_bep, treatment, run
-default_configuration = PumpFlow, PF_Test_Rig_2024, PF_FFP_700, Axial_flow, 500, 3, 1.32, 100, Scenario_1, 1
-Kirton_Lane_default_configuration = Kirton_Lane, KL_Pentair_XRW_2025, Pentair_XRW, Centrifugal, 0, 0, 0, 0, Scenario_1, 1
-default_configuration2 = PumpFlow, PF_Test_Rig_2024, PF_FFP_700, Axial_flow, 500, 3, 1.32, 100, Scenario_2, 1
+Pumpflow_configuration = PumpFlow, PF_Test_Rig_2024, PF_FFP_700, Axial_flow, 500, 3, 1.32, 100, Scenario_1, 1
+Kirton_Lane_configuration = Kirton_Lane, KL_Pentair_XRW_2025, Pentair_XRW, Centrifugal, 0, 0, 0, 0, Scenario_1, 1

@@ -66,33 +66,27 @@ pressureSidebarUI <- function(id) {
     h4("Pressure controls"),
     
     #Method 1: helpText() - styled for instructions
-    helpText("This sidebar controls the pressure configuration for sensor data."),
+    #helpText("This sidebar controls the pressure configuration for sensor data."),
     
     # Method 2: p() - regular paragraph
-    p("Configure pressure parameters below:"),
+    #p("Configure pressure parameters below:"),
     
     # Method 3: Custom styled text
     div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
-        "Select a sensor to begin pressure configuration."),
+        "Select a sensor to begin pressure analysis."),
     
     # Delineation status display
     div(style = "margin-bottom: 15px;", 
         textOutput(ns("pressure_status"))),
     
-    selectInput(ns("sensor_dropdown"), NULL, choices = NULL, width = "100%"),
+    enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "pres_processed"),
     
-    # Text input
-    div(
-      tags$label("LABEL:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-      textInput(ns("input_text"), NULL, value = "INPUT TEXT HERE", width = "100%")
-    ),
+    hr(),
     
-    # Checkboxes
-    div(style = "margin: 15px 0;",
-        checkboxInput(ns("checkbox1"), "Checkbox", value = FALSE),
-        checkboxInput(ns("checkbox2"), "Checkbox", value = FALSE),
-        checkboxInput(ns("show_roi_markers"), "Show ROI markers", value = FALSE)
-    ),
+    h4("Plot controls"),
+    
+    checkboxInput(ns("show_roi_markers"), "Show ROI markers", value = FALSE),
+    
     hr(),
     
     actionButton(ns("add_deploy_btn"), "Add pressure Information", 
@@ -115,53 +109,46 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     
 # Get roi boundaries ####
     roi_boundaries <- reactive({
-    get_roi_boundaries(input$sensor_dropdown, output_dir(), input$show_roi_markers)
+    get_roi_boundaries(sensor_selector$selected_sensor(), output_dir(), input$show_roi_markers)
   }) 
     
     # ============================= #
     # /// Data loading & processing  \\\ ####  
     # ============================= # 
     
-    # Get processed sensors using shared function
-    processed_sensors <- reactive({
-      processing_complete()
-      get_processed_sensors(output_dir())
-    })
+    sensor_selector <- enhancedSensorSelectionServer("sensor_selector", output_dir, processing_complete, status_filter_type = "pres_processed")
     
     # Read selected sensor data
     selected_sensor_data <- reactive({
-      req(input$sensor_dropdown)
+      req(sensor_selector$selected_sensor())
       pressure_values$data_updated  
 
       
       # Check for delineated file first, fall back to minimal data
-      delineated_data <- read_sensor_data(output_dir(), input$sensor_dropdown, "delineated")
+      delineated_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
       if (!is.null(delineated_data)) {
         return(delineated_data)
       }
       
-      return(read_sensor_data(output_dir(), input$sensor_dropdown, "min"))
+      return(read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min"))
     })
     
     # Get nadir info using shared function
     nadir_info <- reactive({
-      req(input$sensor_dropdown)
+      req(sensor_selector$selected_sensor())
       pressure_values$data_updated 
-      get_nadir_info(input$sensor_dropdown, output_dir())
+      get_nadir_info(sensor_selector$selected_sensor(), output_dir())
     })
     
     # ============================= #
     # /// UI State management \\\ ####  
     # ============================= # 
     
-# Update sensor dropdown ####
-    observe({
-      update_sensor_dropdown(session, "sensor_dropdown", processed_sensors(), input$sensor_dropdown)
-    })
+
 # Enable/disable ROI checkbox ####
     observe({
-      req(input$sensor_dropdown)
-      status <- get_sensor_status(input$sensor_dropdown, output_dir())
+      req(sensor_selector$selected_sensor())
+      status <- get_sensor_status(sensor_selector$selected_sensor(), output_dir())
       
       if (status$delineated && status$trimmed) {
         shinyjs::enable("show_roi_markers")
@@ -177,8 +164,8 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     
     # Handle pressure info addition
     observeEvent(input$add_deploy_btn, {
-      if (!is.null(input$sensor_dropdown) && input$sensor_dropdown != "") {
-        showNotification(paste("Adding pressure info for:", input$sensor_dropdown), type = "message")
+      if (!is.null(sensor_selector$selected_sensor()) && sensor_selector$selected_sensor() != "") {
+        showNotification(paste("Adding pressure info for:", sensor_selector$selected_sensor()), type = "message")
       } else {
         showNotification("Please select a sensor first", type = "warning")
       }
@@ -197,7 +184,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     # pressure status display using shared function
     pressure_status <- create_individual_status_display(
       "pressure_status", 
-      reactive(input$sensor_dropdown), 
+      reactive(sensor_selector$selected_sensor()), 
       reactive(output_dir()),
       output, session, "pres_processed",
       invalidation_trigger = reactive(pressure_values$data_updated)
@@ -217,7 +204,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
       tryCatch({
         p <- create_sensor_plot(
           sensor_data = sensor_data,
-          sensor_name = input$sensor_dropdown,
+          sensor_name = sensor_selector$selected_sensor(),
           plot_config = "pressure_only",
           nadir_info = nadir,
           show_nadir = TRUE,
@@ -234,7 +221,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     })
     
     return(list(
-      selected_sensor = reactive(input$sensor_dropdown)
+      selected_sensor = reactive(sensor_selector$selected_sensor())
     ))
     
   })
