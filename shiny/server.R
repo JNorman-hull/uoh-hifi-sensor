@@ -32,11 +32,5 @@ server <- function(input, output, session) {
     )
   })
   
-  # Sidebar for time series analysis tabs  
-  output$time_sidebar <- renderUI({
-    switch(input$visualizationTabset,
-           "interactive_plots" = plotsSidebarUI("plots"),
-           "roi_delineation" = roiSidebarUI("roi")
-    )
-  })
+  
 }

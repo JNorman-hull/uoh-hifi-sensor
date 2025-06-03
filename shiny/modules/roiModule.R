@@ -196,7 +196,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 # ============================= # 
 
 #Sensor dropdown ####   
-sensor_selector <- enhancedSensorSelectionServer("sensor_selector", output_dir, processing_complete)
+    sensor_selector <- enhancedSensorSelectionServer("sensor_selector", output_dir, processing_complete, status_filter_type = "delineation")
     
 # Get nadir info using shared function
     nadir_info <- reactive({

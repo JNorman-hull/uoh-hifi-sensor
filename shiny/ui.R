@@ -102,7 +102,18 @@ ui <- navbarPage(
     sidebarLayout(
       sidebarPanel(
         width = 3,
-        uiOutput("time_sidebar")
+        
+        # ROI Sidebar - show when roi_delineation tab is active
+        conditionalPanel(
+          condition = "input.visualizationTabset == 'roi_delineation'",
+          roiSidebarUI("roi")
+        ),
+        
+        # Plots Sidebar - show when interactive_plots tab is active  
+        conditionalPanel(
+          condition = "input.visualizationTabset == 'interactive_plots'",
+          plotsSidebarUI("plots")
+        )
       ),
       
       mainPanel(

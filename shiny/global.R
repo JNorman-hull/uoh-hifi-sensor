@@ -1558,13 +1558,15 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
       updateSelectInput(session, "treatment_filter", choices = choices)
       
       # Enable/disable based on deployment selection
+      if (!is.null(input$deployment_filter) && length(input$deployment_filter) > 0) {
       if (input$deployment_filter == "all") {
         shinyjs::disable("treatment_filter")
         updateSelectInput(session, "treatment_filter", selected = "all")
       } else {
         shinyjs::enable("treatment_filter")
       }
-    })
+    }
+  })
     
     # Get available runs based on filters
     available_runs <- reactive({
@@ -1600,11 +1602,13 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
       updateSelectInput(session, "run_filter", choices = choices)
       
       # Enable/disable based on treatment selection
+      if (!is.null(input$treatment_filter) && length(input$treatment_filter) > 0) {
       if (input$treatment_filter == "all") {
         shinyjs::disable("run_filter")
         updateSelectInput(session, "run_filter", selected = "all")
       } else {
         shinyjs::enable("run_filter")
+      }
       }
     })
     
@@ -1638,11 +1642,16 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
     
     # Enable/disable quality filter based on bad sensors presence
     observe({
-      if (has_bad_sensors_in_filter()) {
-        shinyjs::enable("quality_filter")
-      } else {
-        shinyjs::disable("quality_filter")
-        updateSelectInput(session, "quality_filter", selected = "all")
+      has_bad <- has_bad_sensors_in_filter()
+      if (!is.null(has_bad) && length(has_bad) > 0) {
+        if (has_bad) {
+          shinyjs::enable("quality_filter")
+        } else {
+          shinyjs::disable("quality_filter")
+          if (!is.null(input$quality_filter)) {
+            updateSelectInput(session, "quality_filter", selected = "all")
+          }
+        }
       }
     })
     
@@ -1693,15 +1702,19 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
     # Enable/disable status filter based on processing status
     observe({
       if (!is.null(status_filter_type)) {
-        if (has_processing_status()) {
-          shinyjs::enable("status_filter")
-        } else {
-          shinyjs::disable("status_filter")
-          updateSelectInput(session, "status_filter", selected = "all")
+        has_processing <- has_processing_status()
+        if (!is.null(has_processing) && length(has_processing) > 0) {
+          if (has_processing) {
+            shinyjs::enable("status_filter")
+          } else {
+            shinyjs::disable("status_filter")
+            if (!is.null(input$status_filter)) {
+              updateSelectInput(session, "status_filter", selected = "all")
+            }
+          }
         }
       }
     })
-    
     # Get filtered sensors
     filtered_sensors <- reactive({
       index_df <- sensor_index_data()
