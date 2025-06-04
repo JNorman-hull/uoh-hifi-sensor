@@ -130,22 +130,7 @@ roiSidebarUI <- function(id) {
     
     enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "delineation"),
     
-    hr(), h4("Plot controls"),
-    plotSidebarUI(ns("roi_plot"), 
-                  show_left_var = TRUE,   
-                  show_right_var = TRUE,    
-                  show_normalized = TRUE,   
-                  show_nadir = TRUE,      
-                  show_roi_markers = TRUE,   
-                  show_legend = TRUE,
-                  default_show_normalized = FALSE,
-                  default_show_nadir = TRUE,
-                  default_show_roi_markers = TRUE,
-                  default_show_legend = FALSE,
-                  default_left_var = "pressure_kpa",
-                  default_right_var = "higacc_mag_g"),       
-    
-    hr(), h4("Delineate data"),
+    h4("Delineate data"),
     actionButton(ns("create_delineated"), "Create delineated dataset", class = "btn-primary btn-block"),
     actionButton(ns("start_over"), "Start Over", class = "btn-warning btn-block"),
     actionButton(ns("trim_sensor"), "Trim sensor start and end", class = "btn-danger btn-block"),
@@ -158,7 +143,24 @@ roiSidebarUI <- function(id) {
     
     hr(), h4("Time normalization"),
     actionButton(ns("normalize_time"), "Normalize time series", class = "btn-primary btn-block"),
-    textOutput(ns("normalize_status"))
+    textOutput(ns("normalize_status")),
+    
+    hr(),
+    
+    h4("Plot controls"),
+    plotSidebarUI(ns("roi_plot"), 
+                  show_left_var = TRUE,   
+                  show_right_var = TRUE,    
+                  show_normalized = TRUE,   
+                  show_nadir = TRUE,      
+                  show_roi_markers = TRUE,   
+                  show_legend = TRUE,
+                  default_show_normalized = FALSE,
+                  default_show_nadir = TRUE,
+                  default_show_roi_markers = TRUE,
+                  default_show_legend = FALSE,
+                  default_left_var = "pressure_kpa",
+                  default_right_var = "higacc_mag_g") 
   )
 }
 
@@ -384,16 +386,23 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
  
 ## Normalized checkbox ####
     
-## Enable/disable normalized view checkbox
+    # Enable/disable normalized checkbox based on sensor status  
     observe({
       req(sensor_selector$selected_sensor())
-      status <- sensor_status()
+      status <- get_sensor_status(sensor_selector$selected_sensor(), output_dir())
       
       if (status$normalized) {
-        shinyjs::enable("show_normalized")
+        shinyjs::enable(paste0("roi_plot-show_normalized"))
       } else {
-        shinyjs::disable("show_normalized")
-        updateCheckboxInput(session, "show_normalized", value = FALSE)
+        shinyjs::disable(paste0("roi_plot-show_normalized"))
+        updateCheckboxInput(session, "roi_plot-show_normalized", value = FALSE)
+      }
+    })
+    
+    # Auto-uncheck nadir when normalized is checked
+    observeEvent(input$`roi_plot-show_normalized`, {
+      if (input$`roi_plot-show_normalized`) {
+        updateCheckboxInput(session, "roi_plot-show_nadir", value = FALSE)
       }
     })
     

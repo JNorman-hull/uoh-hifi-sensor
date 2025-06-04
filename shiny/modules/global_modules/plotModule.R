@@ -236,12 +236,6 @@ plotModuleServer <- function(id,
         }
       }
       
-      # Set plot source for event handling
-      p$x$source <- plot_source
-      p <- p %>% event_register("plotly_click")
-      
-      return(p)
-      
       # Add selected nadir point if provided (for editing mode)
       if (!is.null(selected_nadir()) && !is.null(selected_nadir()$x)) {
         p <- p %>% add_trace(

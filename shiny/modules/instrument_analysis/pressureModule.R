@@ -154,18 +154,41 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     # ============================= # 
     
 
-# Enable/disable ROI checkbox ####
+
+    # Enable/disable normalized checkbox based on sensor status  
     observe({
       req(sensor_selector$selected_sensor())
       status <- get_sensor_status(sensor_selector$selected_sensor(), output_dir())
       
-      if (status$delineated && status$trimmed) {
-        shinyjs::enable("show_roi_markers")
+      if (status$normalized) {
+        shinyjs::enable(paste0("pressure_plot-show_normalized"))
       } else {
-        shinyjs::disable("show_roi_markers")
-        updateCheckboxInput(session, "show_roi_markers", value = FALSE)
+        shinyjs::disable(paste0("pressure_plot-show_normalized"))
+        updateCheckboxInput(session, "pressure_plot-show_normalized", value = FALSE)
       }
     })
+    
+    # Enable/disable normalized checkbox based on sensor status  
+    observe({
+      req(sensor_selector$selected_sensor())
+      status <- get_sensor_status(sensor_selector$selected_sensor(), output_dir())
+      
+      if (status$delineated) {
+        shinyjs::enable(paste0("pressure_plot-show_roi_markers"))
+      } else {
+        shinyjs::disable(paste0("pressure_plot-show_roi_markers"))
+        updateCheckboxInput(session, "pressure_plot-show_roi_markers", value = FALSE)
+      }
+    })  
+    
+    # Auto-uncheck nadir when normalized is checked
+    observeEvent(input$`pressure_plot-show_normalized`, {
+      if (input$`pressure_plot-show_normalized`) {
+        updateCheckboxInput(session, "pressure_plot-show_nadir", value = FALSE)
+      }
+    })
+    
+    
     
     # ============================= #
     # /// Event handlers \\\ ####  
