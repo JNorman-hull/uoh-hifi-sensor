@@ -68,7 +68,7 @@ ui <- navbarPage(
         # Raw file selection Sidebar - show when roi_delineation tab is active
         conditionalPanel(
           condition = "input.processingTabset == 'process_raw_data'",
-          fileSidebarUI("file_selection")
+          rawdataprocessingsidebarUI("raw_data")
         ),
         
         # Processing Sidebar - show when deployment_info tab is active  
@@ -87,7 +87,7 @@ ui <- navbarPage(
           tabPanel(
             title = "Process raw data",
             value = "process_raw_data",
-            fileSelectionUI("file_selection"),
+            rawdataprocessingUI("raw_data"),
             hr(),
             resultsUI("results"),
             hr()

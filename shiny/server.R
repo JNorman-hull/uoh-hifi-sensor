@@ -8,7 +8,7 @@ server <- function(input, output, session) {
   default_processing_complete <- reactive(FALSE)
   
   # Initialize file_selection first with default
-  file_selection <- fileSelectionServer("file_selection", raw_data_path, output_dir, default_processing_complete)
+  file_selection <- rawdataprocessingServer("raw_data", raw_data_path, output_dir, default_processing_complete)
   
   # Then processing with selected sensors
   processing <- processingServer("processing", file_selection$selected_sensors, raw_data_path, output_dir)

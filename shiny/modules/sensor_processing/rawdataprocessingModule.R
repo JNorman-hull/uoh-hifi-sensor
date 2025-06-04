@@ -1,6 +1,6 @@
 # File Selection Module - Using shared components
 
-fileSelectionUI <- function(id) {
+rawdataprocessingUI <- function(id) {
   ns <- NS(id)
   
   fileSelectionTableUI(
@@ -11,7 +11,7 @@ fileSelectionUI <- function(id) {
   )
 }
 
-fileSidebarUI <- function(id) {
+rawdataprocessingsidebarUI <- function(id) {
   ns <- NS(id)
   
   tagList(
@@ -43,7 +43,7 @@ fileSidebarUI <- function(id) {
   )
 }
 
-fileSelectionServer <- function(id, raw_data_path, output_dir, processing_complete = reactive(FALSE)) {
+rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_complete = reactive(FALSE)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     

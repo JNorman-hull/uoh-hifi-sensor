@@ -10,7 +10,7 @@ library(shinydashboard)
 dir.create("./processed_sens_data", showWarnings = FALSE, recursive = TRUE)
 
 # Import Python functions
-source_python("rapid_functions.py")
+source_python("modules/global_modules/rapid_functions.py")
 
 
 #global modules
@@ -22,7 +22,7 @@ source("modules/global_modules/enhancedSensorSelectionModule.R")
 #sensor processing modules
 source("modules/sensor_processing/resultsModule.R")
 source("modules/sensor_processing/processingModule.R")
-source("modules/sensor_processing/fileSelectionModule.R")
+source("modules/sensor_processing/rawdataprocessingModule.R")
 source("modules/sensor_processing/deploymentModule.R")
 
 #time series modules
