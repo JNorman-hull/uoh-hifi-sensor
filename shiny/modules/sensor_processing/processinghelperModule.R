@@ -1,4 +1,4 @@
-processingUI <- function(id) {
+processinghelperUI <- function(id) {
   ns <- NS(id)
   
   tagList(
@@ -24,7 +24,7 @@ create_log_updater <- function(session, reactive_values) {
   }
 }
 
-processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
+processinghelperServer <- function(id, selected_sensors, raw_data_path, output_dir) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     

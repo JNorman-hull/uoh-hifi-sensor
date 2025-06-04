@@ -20,9 +20,9 @@ source("modules/global_modules/enhancedSensorSelectionModule.R")
 #sensor dashboard modules
 
 #sensor processing modules
-source("modules/sensor_processing/resultsModule.R")
-source("modules/sensor_processing/processingModule.R")
 source("modules/sensor_processing/rawdataprocessingModule.R")
+source("modules/sensor_processing/processinghelperModule.R")
+source("modules/sensor_processing/resultsModule.R")
 source("modules/sensor_processing/deploymentModule.R")
 
 #time series modules

@@ -24,7 +24,7 @@ rawdataprocessingsidebarUI <- function(id) {
     
     hr(),
     
-    processingUI("processing"),
+    processinghelperUI("processing"),
     
     hr(),
     

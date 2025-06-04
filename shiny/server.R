@@ -11,7 +11,7 @@ server <- function(input, output, session) {
   file_selection <- rawdataprocessingServer("raw_data", raw_data_path, output_dir, default_processing_complete)
   
   # Then processing with selected sensors
-  processing <- processingServer("processing", file_selection$selected_sensors, raw_data_path, output_dir)
+  processing <- processinghelperServer("processing_helper", file_selection$selected_sensors, raw_data_path, output_dir)
   
   # Initialize other modules with real processing_complete
   resultsServer("results", processing$newly_processed_sensors, processing$processing_complete)
