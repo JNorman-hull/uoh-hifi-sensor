@@ -83,8 +83,8 @@ pressureSidebarUI <- function(id) {
 
     hr(), h4("Plot controls"),
     plotSidebarUI(ns("pressure_plot"), 
-                  show_left_var = FALSE,   
-                  show_right_var = FALSE,    
+                  show_left_var = TRUE,   
+                  show_right_var = TRUE,    
                   show_normalized = TRUE,   
                   show_nadir = TRUE,      
                   show_roi_markers = TRUE,   
@@ -92,7 +92,9 @@ pressureSidebarUI <- function(id) {
                   default_show_normalized = FALSE,
                   default_show_nadir = TRUE,
                   default_show_roi_markers = FALSE,
-                  default_show_legend = FALSE),    
+                  default_show_legend = FALSE,
+                  default_left_var = "pressure_kpa",
+                  default_right_var = "higacc_mag_g"),    
     
     hr(),
     
@@ -203,6 +205,8 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
                                       sensor_name = reactive(sensor_selector$selected_sensor()),
                                       nadir_info = nadir_info,
                                       roi_boundaries = roi_boundaries,
+                                      right_var = reactive(input$`pressure_plot-right_y_var`),
+                                      left_var = reactive(input$`pressure_plot-left_y_var`),
                                       #don't need to provide left and right var as default = pressure, none
                                       show_nadir = reactive(input$`pressure_plot-show_nadir`),
                                       show_legend = reactive(input$`pressure_plot-show_legend`),

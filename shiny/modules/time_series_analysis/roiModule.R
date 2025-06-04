@@ -131,19 +131,19 @@ roiSidebarUI <- function(id) {
     enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "delineation"),
     
     hr(), h4("Plot controls"),
-    plotSidebarUI(ns("pressure_plot"), 
+    plotSidebarUI(ns("roi_plot"), 
                   show_left_var = TRUE,   
                   show_right_var = TRUE,    
                   show_normalized = TRUE,   
                   show_nadir = TRUE,      
-                  show_roi_markers = FALSE,   
+                  show_roi_markers = TRUE,   
                   show_legend = TRUE,
                   default_show_normalized = FALSE,
                   default_show_nadir = TRUE,
-                  default_show_roi_markers = FALSE,
+                  default_show_roi_markers = TRUE,
                   default_show_legend = FALSE,
                   default_left_var = "pressure_kpa",
-                  default_right_var = "higacc_mag_g"),     
+                  default_right_var = "higacc_mag_g"),       
     
     hr(), h4("Delineate data"),
     actionButton(ns("create_delineated"), "Create delineated dataset", class = "btn-primary btn-block"),
@@ -1220,6 +1220,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                       sensor_data = selected_sensor_data,
                                       sensor_name = reactive(sensor_selector$selected_sensor()),
                                       nadir_info = nadir_info,
+                                      right_var = reactive(input$`roi_plot-right_y_var`),
+                                      left_var = reactive(input$`roi_plot-left_y_var`),
+                                      show_nadir = reactive(input$`roi_plot-show_nadir`),
+                                      show_legend = reactive(input$`roi_plot-show_legend`),
+                                      show_normalized = reactive(input$`roi_plot-show_normalized`),
                                       selected_nadir = reactive({
                                         if (nadir_values$edit_mode && !is.null(nadir_values$selected_point)) {
                                           nadir_values$selected_point
@@ -1229,19 +1234,17 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                       }),
                                       roi_boundaries = reactive({
                                         times <- roi_times()
-                                        # Show standard ROI boundaries only when NOT in custom edit mode
-                                        if (!custom_roi_values$custom_edit_mode && !is.null(times)) {
+                                        if (!is.null(times)) {
                                           times$boundaries
                                         } else {
                                           NULL
                                         }
                                       }),
-                                      left_var = reactive(input$`roi_plot-left_y_var`),
-                                      right_var = reactive(input$`roi_plot-right_y_var`),
-                                      show_nadir = reactive(input$`roi_plot-show_nadir`),
-                                      show_legend = reactive(input$`roi_plot-show_legend`),
-                                      show_normalized = reactive(input$`roi_plot-show_normalized`),
-                                      show_roi_markers = reactive(FALSE), # Always controlled by delineation state
+                                      show_roi_markers = reactive({
+                                        # Show ROI markers when delineated, trimmed, and NOT in custom edit mode
+                                        status <- sensor_status()
+                                        !custom_roi_values$custom_edit_mode && status$delineated && status$trimmed
+                                      }),
                                       custom_edit_mode = reactive(custom_roi_values$custom_edit_mode),
                                       title_prefix = "ROI Delineated",
                                       plot_source = "roi_nadir_plot"
