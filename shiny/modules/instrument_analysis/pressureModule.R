@@ -83,12 +83,16 @@ pressureSidebarUI <- function(id) {
 
     hr(), h4("Plot controls"),
     plotSidebarUI(ns("pressure_plot"), 
-                  show_left_var = TRUE,   
-                  show_right_var = TRUE,    
+                  show_left_var = FALSE,   
+                  show_right_var = FALSE,    
                   show_normalized = TRUE,   
                   show_nadir = TRUE,      
                   show_roi_markers = TRUE,   
-                  show_legend = TRUE),    
+                  show_legend = TRUE,
+                  default_show_normalized = FALSE,
+                  default_show_nadir = FALSE,
+                  default_show_roi_markers = FALSE,
+                  default_show_legend = FALSE),    
     
     hr(),
     
@@ -193,13 +197,20 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
       invalidation_trigger = reactive(pressure_values$data_updated)
     )
     
-    plotModuleServer("pressure_plot", 
-                     sensor_data = selected_sensor_data,
-                     sensor_name = reactive(sensor_selector$selected_sensor()),
-                     nadir_info = nadir_info,
-                     roi_boundaries = roi_boundaries,
-                     title_prefix = "Pressure Analysis",
-                     plot_source = "pressure_plot"
+
+    #Don't need custom reactive to change default behaviors, as defaults are desired here
+    plot_controls <- plotModuleServer("pressure_plot", 
+                                      sensor_data = selected_sensor_data,
+                                      sensor_name = reactive(sensor_selector$selected_sensor()),
+                                      nadir_info = nadir_info,
+                                      roi_boundaries = roi_boundaries,
+                                      #don't need to provide left and right var as default = pressure
+                                      show_nadir = reactive(input$`pressure_plot-show_nadir`),
+                                      show_legend = reactive(input$`pressure_plot-show_legend`),
+                                      show_normalized = reactive(input$`pressure_plot-show_normalized`),
+                                      show_roi_markers = reactive(input$`pressure_plot-show_roi_markers`),
+                                      title_prefix = "Pressure Analysis",
+                                      plot_source = "pressure_plot"
     )
     return(list(
       selected_sensor = reactive(sensor_selector$selected_sensor())
