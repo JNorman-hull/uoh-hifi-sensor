@@ -131,8 +131,13 @@ roiSidebarUI <- function(id) {
     enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "delineation"),
     
     hr(), h4("Axis Options"),
-    selectInput(ns("left_y_var"), "Left Y-Axis:", choices = var_choices, selected = "pressure_kpa"),
-    selectInput(ns("right_y_var"), "Right Y-Axis:", choices = c("None" = "none", var_choices), selected = "higacc_mag_g"),
+    plotSidebarUI(ns("roi_plot"), 
+                  show_left_var = TRUE,
+                  show_right_var = TRUE, 
+                  show_normalized = TRUE,
+                  show_nadir = TRUE,
+                  show_roi_markers = FALSE,  # Always controlled by delineation state
+                  show_legend = FALSE),   
     
     hr(), h4("Delineate data"),
     actionButton(ns("create_delineated"), "Create delineated dataset", class = "btn-primary btn-block"),
@@ -140,7 +145,6 @@ roiSidebarUI <- function(id) {
     actionButton(ns("trim_sensor"), "Trim sensor start and end", class = "btn-danger btn-block"),
     
     hr(), h4("Pressure Nadir Options"),
-    checkboxInput(ns("show_nadir"), "Show Pressure Nadir", value = TRUE),
     verbatimTextOutput(ns("current_nadir_display")),
     actionButton(ns("nadir_btn"), "Modify Pressure Nadir", class = "btn-warning btn-block"),
     actionButton(ns("cancel_nadir_btn"), "Cancel", class = "btn-danger btn-block"),
@@ -148,8 +152,7 @@ roiSidebarUI <- function(id) {
     
     hr(), h4("Time normalization"),
     actionButton(ns("normalize_time"), "Normalize time series", class = "btn-primary btn-block"),
-    textOutput(ns("normalize_status")),
-    checkboxInput(ns("show_normalized"), "Show normalized time series", value = FALSE)
+    textOutput(ns("normalize_status"))
   )
 }
 
@@ -1205,117 +1208,120 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     })
     
 # Create main plot #####
-    output$roi_plot <- renderPlotly({
-      sensor_data <- selected_sensor_data()
-      req(sensor_data)
-      
-      nadir <- nadir_info()
-      req(nadir$available)
-      
-# Determine which time variable to use
-      time_var <- if (isTRUE(input$show_normalized) && "time_norm" %in% names(sensor_data)) {
-        "time_norm"
-      } else {
-        "time_s"
-      }
-      
-# Check if we're in normalized view
-      is_normalized_view <- (time_var == "time_norm")
-      
-# Get ROI times and boundaries (only if not normalized)
-      times <- roi_times()
-      roi_boundaries <- if (!is_normalized_view && !is.null(times)) times$boundaries else NULL
-      
-      selected_nadir <- if (nadir_values$edit_mode && !is.null(nadir_values$selected_point)) {
-        nadir_values$selected_point
-      } else {
-        NULL
-      }
-      
-      suppress_roi_lines <- isTRUE(custom_roi_values$custom_edit_mode) || is_normalized_view
-      
-# Create base plot
-      p <- create_sensor_plot(
-        sensor_data = sensor_data,
-        sensor_name = sensor_selector$selected_sensor(),
-        plot_config = "roi_delineation",
-        left_var = input$left_y_var,
-        right_var = input$right_y_var,
-        nadir_info = nadir,
-        show_nadir = input$show_nadir && !is_normalized_view,
-        selected_nadir = selected_nadir,
-        roi_boundaries = roi_boundaries,
-        show_legend = FALSE,
-        plot_source = "roi_nadir_plot",
-        suppress_roi_lines = suppress_roi_lines,
-        time_var = time_var
+    # Get plot controls from the module
+    # Setup the base plot using plot module
+    plotModuleServer("roi_plot", 
+                     sensor_data = selected_sensor_data,
+                     sensor_name = reactive(sensor_selector$selected_sensor()),
+                     nadir_info = nadir_info,
+                     selected_nadir = reactive({
+                       if (nadir_values$edit_mode && !is.null(nadir_values$selected_point)) {
+                         nadir_values$selected_point
+                       } else {
+                         NULL
+                       }
+                     }),
+                     roi_boundaries = reactive({
+                       times <- roi_times()
+                       # Show ROI boundaries unless in custom edit mode or normalized view
+                       if (!custom_roi_values$custom_edit_mode && !is.null(times)) {
+                         times$boundaries
+                       } else {
+                         NULL
+                       }
+                     }),
+                     show_legend = reactive(FALSE),
+                     custom_edit_mode = reactive(custom_roi_values$custom_edit_mode),
+                     title_prefix = "ROI Delineated",
+                     plot_source = "roi_nadir_plot"
+    )
+    
+    # Add custom ROI editing lines when in edit mode
+    observeEvent({
+      list(
+        custom_roi_values$custom_edit_mode,
+        custom_roi_values$selected_boundaries,
+        custom_roi_values$pending_point,
+        input$roi4_nadir_duration,
+        selected_sensor_data()
       )
-      
-# Add custom ROI lines in edit mode (skip if normalized view)
-      if (custom_roi_values$custom_edit_mode &&
-          !is.null(input$left_y_var) &&
-          input$left_y_var %in% names(sensor_data) &&
-          !is_normalized_view) {
+    }, {
+      if (custom_roi_values$custom_edit_mode) {
         
-        y_min <- min(sensor_data[[input$left_y_var]], na.rm = TRUE)
-        y_max <- max(sensor_data[[input$left_y_var]], na.rm = TRUE)
+        sensor_data <- selected_sensor_data()
+        nadir <- nadir_info()
+        req(sensor_data, nadir$available)
         
-        # Add ROI 4 nadir duration lines (based on user input)
-        nadir_duration <- input$roi4_nadir_duration %||% 0.4
-        roi4_start <- nadir$time - (nadir_duration / 2)
-        roi4_end <- nadir$time + (nadir_duration / 2)
+        # Get current left axis variable from the plot module
+        left_var <- "pressure_kpa"  # Default, or you can access from module if needed
         
-        # ROI 4 start line
-        p <- p %>% add_segments(
-          x = roi4_start, xend = roi4_start,
-          y = y_min, yend = y_max,
-          line = list(color = "orange", width = 2, dash = "solid"),
-          text = "ROI 4 Start (Nadir)",
-          hoverinfo = "text",
-          showlegend = FALSE
-        )
-        
-        # ROI 4 end line  
-        p <- p %>% add_segments(
-          x = roi4_end, xend = roi4_end,
-          y = y_min, yend = y_max,
-          line = list(color = "orange", width = 2, dash = "solid"),
-          text = "ROI 4 End (Nadir)",
-          hoverinfo = "text",
-          showlegend = FALSE
-        )
-        
-        # Add custom boundary lines (purple)
-        for (boundary_name in names(custom_roi_values$selected_boundaries)) {
-          boundary_time <- custom_roi_values$selected_boundaries[[boundary_name]]
-          boundary_label <- gsub("_", " ", toupper(boundary_name))
+        if (left_var %in% names(sensor_data)) {
+          y_min <- min(sensor_data[[left_var]], na.rm = TRUE)
+          y_max <- max(sensor_data[[left_var]], na.rm = TRUE)
           
-          p <- p %>% add_segments(
-            x = boundary_time, xend = boundary_time,
-            y = y_min, yend = y_max,
-            line = list(color = "purple", width = 2, dash = "dash"),
-            text = boundary_label,
-            hoverinfo = "text",
-            showlegend = FALSE
-          )
+          # Prepare custom lines data
+          custom_lines <- list()
+          
+          # ROI 4 nadir duration lines
+          nadir_duration <- input$roi4_nadir_duration %||% 0.4
+          roi4_start <- nadir$time - (nadir_duration / 2)
+          roi4_end <- nadir$time + (nadir_duration / 2)
+          
+          custom_lines <- append(custom_lines, list(
+            list(
+              x = c(roi4_start, roi4_start), y = c(y_min, y_max),
+              mode = "lines", line = list(color = "orange", width = 2, dash = "solid"),
+              hovertext = "ROI 4 Start (Nadir)", hoverinfo = "text", showlegend = FALSE,
+              name = "roi4_start"
+            ),
+            list(
+              x = c(roi4_end, roi4_end), y = c(y_min, y_max),
+              mode = "lines", line = list(color = "orange", width = 2, dash = "solid"),
+              hovertext = "ROI 4 End (Nadir)", hoverinfo = "text", showlegend = FALSE,
+              name = "roi4_end"
+            )
+          ))
+          
+          # Custom boundary lines
+          for (boundary_name in names(custom_roi_values$selected_boundaries)) {
+            boundary_time <- custom_roi_values$selected_boundaries[[boundary_name]]
+            boundary_label <- gsub("_", " ", toupper(boundary_name))
+            
+            custom_lines <- append(custom_lines, list(
+              list(
+                x = c(boundary_time, boundary_time), y = c(y_min, y_max),
+                mode = "lines", line = list(color = "purple", width = 2, dash = "dash"),
+                hovertext = boundary_label, hoverinfo = "text", showlegend = FALSE,
+                name = paste0("boundary_", boundary_name)
+              )
+            ))
+          }
+          
+          # Pending point line
+          if (!is.null(custom_roi_values$pending_point)) {
+            custom_lines <- append(custom_lines, list(
+              list(
+                x = c(custom_roi_values$pending_point$x, custom_roi_values$pending_point$x), 
+                y = c(y_min, y_max),
+                mode = "lines", line = list(color = "green", width = 2, dash = "dot"),
+                hovertext = "Pending Selection", hoverinfo = "text", showlegend = FALSE,
+                name = "pending_point"
+              )
+            ))
+          }
+          
+          # Add the custom lines to the plot
+          plotlyProxy("roi_plot", session) %>%
+            plotlyProxyInvoke("addTraces", custom_lines)
         }
-        
-        # Add pending point line (green)
-        if (!is.null(custom_roi_values$pending_point)) {
-          x_val <- custom_roi_values$pending_point$x
-          p <- p %>% add_segments(
-            x = x_val, xend = x_val,
-            y = y_min, yend = y_max,
-            line = list(color = "green", width = 2, dash = "dot"),
-            text = "Pending Selection",
-            hoverinfo = "text",
-            showlegend = FALSE
-          )
-        }
-      }  # End of custom ROI section
-      
-      return(p)
-    })
+      } else {
+        # Remove custom lines when not in edit mode
+        plotlyProxy("roi_plot", session) %>%
+          plotlyProxyInvoke("deleteTraces", 
+                            which(c("roi4_start", "roi4_end", paste0("boundary_", names(custom_roi_values$selected_boundaries)), "pending_point") %in% 
+                                    plotlyProxy("roi_plot", session)$x$data))
+      }
+    }, ignoreInit = TRUE)
     
   })  # End of moduleServer
 }     # End of roiServer

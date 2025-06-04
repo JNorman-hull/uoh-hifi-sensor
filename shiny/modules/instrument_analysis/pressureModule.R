@@ -5,7 +5,7 @@ pressureUI <- function(id) {
     # Introductory text at the top
     tagList(
       h3("Pressure Analysis"),
-      plotlyOutput(ns("pressure_plot"), height = "600px"),
+      plotModuleUI(ns("pressure_plot"), height = "600px"),
       br(),
     
     # Two smaller boxes side by side
@@ -81,9 +81,14 @@ pressureSidebarUI <- function(id) {
     
     enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "pres_processed"),
 
-    h4("Plot controls"),
-    
-    checkboxInput(ns("show_roi_markers"), "Show ROI markers", value = FALSE),
+    hr(), h4("Plot controls"),
+    plotSidebarUI(ns("pressure_plot"), 
+                  show_left_var = TRUE,   
+                  show_right_var = TRUE,    
+                  show_normalized = TRUE,   
+                  show_nadir = TRUE,      
+                  show_roi_markers = TRUE,   
+                  show_legend = TRUE),    
     
     hr(),
     
@@ -107,8 +112,8 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     
 # Get roi boundaries ####
     roi_boundaries <- reactive({
-    get_roi_boundaries(sensor_selector$selected_sensor(), output_dir(), input$show_roi_markers)
-  }) 
+      get_roi_boundaries(sensor_selector$selected_sensor(), output_dir(), TRUE)
+    })
     
     # ============================= #
     # /// Data loading & processing  \\\ ####  
@@ -188,36 +193,14 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
       invalidation_trigger = reactive(pressure_values$data_updated)
     )
     
-    output$pressure_plot <- renderPlotly({
-      sensor_data <- selected_sensor_data()
-      req(sensor_data)
-      
-      nadir <- nadir_info()
-      
-      if (!"pressure_kpa" %in% names(sensor_data)) {
-        showNotification("Pressure data not available for this sensor", type = "warning")
-        return(NULL)
-      }
-      
-      tryCatch({
-        p <- create_sensor_plot(
-          sensor_data = sensor_data,
-          sensor_name = sensor_selector$selected_sensor(),
-          plot_config = "pressure_only",
-          nadir_info = nadir,
-          show_nadir = TRUE,
-          show_legend = FALSE,
-          plot_source = "pressure_plot",
-          roi_boundaries = roi_boundaries()
-        )
-        return(p)
-      }, error = function(e) {
-        cat("Plot error:", e$message, "\n")
-        showNotification(paste("Plot error:", e$message), type = "error")
-        return(NULL)
-      })
-    })
-    
+    plotModuleServer("pressure_plot", 
+                     sensor_data = selected_sensor_data,
+                     sensor_name = reactive(sensor_selector$selected_sensor()),
+                     nadir_info = nadir_info,
+                     roi_boundaries = roi_boundaries,
+                     title_prefix = "Pressure Analysis",
+                     plot_source = "pressure_plot"
+    )
     return(list(
       selected_sensor = reactive(sensor_selector$selected_sensor())
     ))
