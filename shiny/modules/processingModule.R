@@ -225,8 +225,6 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
     return(list(
       summary_data = summary_data_from_index,
       processing_complete = reactive(values$processing_complete),
-      #is_processing = reactive(values$is_processing),
-      #log_messages = reactive(values$log_messages),
       newly_processed_sensors = newly_processed_sensors,
       process_sensors = process_sensors
     ))
