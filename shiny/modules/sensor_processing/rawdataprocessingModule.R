@@ -24,7 +24,7 @@ rawdataprocessingsidebarUI <- function(id) {
     
     hr(),
     
-    processinghelperUI("processing"),
+    processinghelperUI("processing_helper"),
     
     hr(),
     
@@ -46,15 +46,6 @@ rawdataprocessingsidebarUI <- function(id) {
 rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_complete = reactive(FALSE)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
-    # File location outputs
-    output$raw_data_location <- renderText({
-      paste("Raw Data Path:", raw_data_path())
-    })
-    
-    output$output_location <- renderText({
-      paste("Output Path:", output_dir())
-    })
     
     # Prepare sensor data
     sensor_data <- reactive({

@@ -89,7 +89,7 @@ ui <- navbarPage(
             value = "process_raw_data",
             rawdataprocessingUI("raw_data"),
             hr(),
-            resultsUI("results"),
+            processingresultsUI("processing_results"),
             hr()
           ),
           

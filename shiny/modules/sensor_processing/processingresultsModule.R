@@ -1,4 +1,4 @@
-resultsUI <- function(id) {
+processingresultsUI <- function(id) {
   ns <- NS(id)
   
   tagList(
@@ -10,7 +10,7 @@ resultsUI <- function(id) {
   )
 }
 
-resultsServer <- function(id, newly_processed_sensors, processing_complete) {
+processingresultsServer <- function(id, newly_processed_sensors, processing_complete) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
