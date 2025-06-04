@@ -7,7 +7,7 @@ library(plotly)
 library(patchwork)
 library(shinydashboard)
 
-dir.create("./RAPID_Processed", showWarnings = FALSE, recursive = TRUE)
+dir.create("./processed_sens_data", showWarnings = FALSE, recursive = TRUE)
 
 # Import Python functions
 source_python("rapid_functions.py")
@@ -106,7 +106,7 @@ read_sensor_data <- function(output_dir, sensor_name, type = "min", subdir = "cs
 
 ## Get raw sensor names ####
 # Path needs to be linked to directory_config
-get_sensor_names <- function(raw_data_path = "./RAW_data/RAPID") {
+get_sensor_names <- function(raw_data_path = "./raw_sens_data") {
   # Find all IMP files
   imp_files <- list.files(path = raw_data_path, pattern = "\\.IMP$", full.names = FALSE)
   
@@ -198,7 +198,7 @@ manage_button_states <- function(session, button_config) {
 ## Configuration loader ####
 
 load_config_file <- function(output_dir, config_type) {
-  config_file <- file.path(output_dir, "config", paste0(config_type, "_config.txt"))
+  config_file <- file.path("config", paste0(config_type, "_config.txt"))
   
   if (!file.exists(config_file)) {
     warning("Config file not found: ", config_file)
@@ -331,7 +331,7 @@ load_config_file <- function(output_dir, config_type) {
 ## Configuration saver ####
 
 save_config_value <- function(output_dir, config_type, key, value, append = TRUE) {
-  config_file <- file.path(output_dir, "config", paste0(config_type, "_config.txt"))
+  config_file <- file.path("config", paste0(config_type, "_config.txt"))
   
   tryCatch({
 

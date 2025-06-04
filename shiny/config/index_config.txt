@@ -2,6 +2,7 @@ file
 sensor
 date_deploy
 duration.mm.ss.
+bad_sens = N
 site = NA
 deployment_id = NA
 site = NA
@@ -19,6 +20,7 @@ roi_config = NA
 delineated = N
 trimmed = N
 normalized = N
+passage_times = N
 passage_duration.mm.ss. = NA
 ingress_nadir_duration.mm.ss. = NA
 nadir_outgress_duration.mm.ss. = NA

@@ -22,6 +22,10 @@ fileSidebarUI <- function(id) {
     
     hr(),
     
+    processingUI("processing"),
+    
+    hr(),
+    
     # Use shared controls
     fileSelectionControlsUI(
       ns("sensor_table"),

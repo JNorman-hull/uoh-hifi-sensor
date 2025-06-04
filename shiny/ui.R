@@ -89,8 +89,6 @@ ui <- navbarPage(
             value = "process_raw_data",
             fileSelectionUI("file_selection"),
             hr(),
-            processingUI("processing"),
-            hr(),
             resultsUI("results"),
             hr()
           ),

@@ -2,9 +2,13 @@ processingUI <- function(id) {
   ns <- NS(id)
   
   tagList(
-    h4("Processing messages"),
-    helpText('Processing report printed here'),
-    verbatimTextOutput(ns("process_log"))
+    verbatimTextOutput(ns("process_log"), 
+                       placeholder = FALSE) %>%
+      tagAppendAttributes(style = "height: 250px; overflow-y: auto;
+                          overflow-x: auto; white-space: pre-wrap;
+                          font-family: monospace; font-size: 12px;
+                          padding: 10px; border: 1px solid #ddd;
+                          background-color: #f8f9fa;")
   )
 }
 
@@ -39,7 +43,7 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
       # Only set initial message if log is empty
       if (length(values$log_messages) == 0) {
         isolate({
-          values$log_messages <- 'Select sensors and click "Process Selected Sensors" to begin processing'
+          values$log_messages <- 'This is the processing log. Processing progress messages will be printed here.'
         })
       }
     })

@@ -3,6 +3,6 @@
 .RData
 .Ruserdata
 
-/shiny/RAW_data/
-/shiny/RAPID_processed/csv
-/shiny/RAPID_processed/old
+/shiny/raw_sens_data
+/shiny/processed_sens_data/csv
+/shiny/processed_sens_data/old

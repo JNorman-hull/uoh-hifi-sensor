@@ -1,8 +1,8 @@
 # server.R - Better approach
 server <- function(input, output, session) {
   
-  raw_data_path <- reactive("./RAW_data/RAPID")
-  output_dir <- reactive("./RAPID_Processed")
+  raw_data_path <- reactive("./raw_sens_data")
+  output_dir <- reactive("./processed_sens_data")
   
   # Create a default processing_complete for initial load
   default_processing_complete <- reactive(FALSE)

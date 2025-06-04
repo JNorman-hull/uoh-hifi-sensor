@@ -1,4 +1,4 @@
-raw_data_path = "./RAW_data/RAPID"
-output_dir = "./RAPID_Processed"
+raw_data_path = "./raw_sens_data"
+output_dir = "./processed_sens_data"
 default_index = output_dir, "index", "global_sensor_index.csv"
 strike_index = output_dir, "index", "strike_index.csv"
