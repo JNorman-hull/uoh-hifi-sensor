@@ -90,7 +90,7 @@ pressureSidebarUI <- function(id) {
                   show_roi_markers = TRUE,   
                   show_legend = TRUE,
                   default_show_normalized = FALSE,
-                  default_show_nadir = FALSE,
+                  default_show_nadir = TRUE,
                   default_show_roi_markers = FALSE,
                   default_show_legend = FALSE),    
     
