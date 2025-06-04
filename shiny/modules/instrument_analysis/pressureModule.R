@@ -91,7 +91,7 @@ pressureSidebarUI <- function(id) {
                   show_legend = TRUE,
                   default_show_normalized = FALSE,
                   default_show_nadir = TRUE,
-                  default_show_roi_markers = FALSE,
+                  default_show_roi_markers = TRUE,
                   default_show_legend = FALSE,
                   default_left_var = "pressure_kpa",
                   default_right_var = "higacc_mag_g"),    

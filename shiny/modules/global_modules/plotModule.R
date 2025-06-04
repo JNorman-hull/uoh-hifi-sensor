@@ -76,7 +76,8 @@ plotModuleServer <- function(id,
                              title_prefix = "Sensor Data",
                              # Internal logic parameters (not user controls)
                              custom_edit_mode = reactive(FALSE),
-                             is_normalized_view = reactive(FALSE)) {
+                             is_normalized_view = reactive(FALSE),
+                             custom_traces = reactive(NULL)) {
   
   moduleServer(id, function(input, output, session) {
     
@@ -218,6 +219,28 @@ plotModuleServer <- function(id,
           )
         }
       }
+      
+      if (!is.null(custom_traces()) && length(custom_traces()) > 0) {
+        for (trace in custom_traces()) {
+          p <- p %>% add_trace(
+            x = trace$x,
+            y = trace$y,
+            type = trace$type %||% "scatter",
+            mode = trace$mode %||% "lines",
+            line = trace$line,
+            name = trace$name %||% "",
+            showlegend = trace$showlegend %||% FALSE,
+            hovertext = trace$hovertext,
+            hoverinfo = trace$hoverinfo %||% "text"
+          )
+        }
+      }
+      
+      # Set plot source for event handling
+      p$x$source <- plot_source
+      p <- p %>% event_register("plotly_click")
+      
+      return(p)
       
       # Add selected nadir point if provided (for editing mode)
       if (!is.null(selected_nadir()) && !is.null(selected_nadir()$x)) {
