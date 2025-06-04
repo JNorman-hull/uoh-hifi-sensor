@@ -8,7 +8,9 @@ processingUI <- function(id) {
                           overflow-x: auto; white-space: pre-wrap;
                           font-family: monospace; font-size: 12px;
                           padding: 10px; border: 1px solid #ddd;
-                          background-color: #f8f9fa;")
+                          background-color: #f8f9fa;"),
+    br(),
+    actionButton(ns("clear_log"), "Clear Log", class = "btn-sm btn-outline-secondary")
   )
 }
 
@@ -224,6 +226,12 @@ processingServer <- function(id, selected_sensors, raw_data_path, output_dir) {
     observeEvent(input$confirm_replace_sensors, {
       removeModal()
       start_processing()
+    })
+    
+    # Clear log button
+    observeEvent(input$clear_log, {
+      values$log_messages <- character(0)
+      session$sendCustomMessage("updateProcessLog", list(text = ""))
     })
     
     return(list(

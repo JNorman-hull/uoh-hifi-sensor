@@ -65,9 +65,9 @@ fileSelectionTableServer <- function(id,
       
       # Create highlight config
       highlight_config <- if (length(highlight_rows) > 0) {
-        list(rows = highlight_rows, color = 'orange')
+        list(rows = highlight_rows, color = 'lightgreen')
       } else {
-        NULL
+        list(rows = highlight_rows, color = 'orange')
       }
       
       # Create table using shared function
@@ -77,7 +77,7 @@ fileSelectionTableServer <- function(id,
         selection_mode = selection_mode,
         highlight_config = highlight_config,
         page_length = 15,
-        scroll_y = "400px",
+        scroll_y = "560px",
         dom_options = 'tip',
         column_widths = get_sensor_table_column_widths(),
         state_save = TRUE,

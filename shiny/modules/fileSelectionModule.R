@@ -6,8 +6,8 @@ fileSelectionUI <- function(id) {
   fileSelectionTableUI(
     ns("sensor_table"),
     title = "RAW Rapid data index",
-    help_text = "Index of RAW RAPID data files. IMP and HIG must be present. 
-                 Sensors already in global index are highlighted in orange."
+    help_text = "Index of RAW RAPID data files. Green = sensor processed. Orange = sensor requires processing."
+    
   )
 }
 
@@ -19,6 +19,8 @@ fileSidebarUI <- function(id) {
 
     div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
         "Select sensor(s) to process binary RAPID data."),
+    div(style = "color: #666; font-style: bold; margin-bottom: 15px;",
+        "Raw RAPID sensor data (.imp and .hig) should be added to ./raw_sens_data."),
     
     hr(),
     

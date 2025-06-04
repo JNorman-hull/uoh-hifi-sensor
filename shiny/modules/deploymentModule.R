@@ -5,21 +5,8 @@ deploymentUI <- function(id) {
     fileSelectionTableUI(
       ns("deployment_table"),
       title = "Processed sensor index",
-      help_text = "All processed sensors are shown here. Select sensors to add or edit deployment information. Sensors with deployment information are coloured green. Sensors without are coloured orange.",
+      help_text = "All processed sensors are shown here. Select sensors to add or edit deployment information. Green = deployment information present. Orange = requires deployment information.",
       show_title = TRUE
-    ),
-    
-    fluidRow(
-        column(
-        width = 6,
-        div(
-          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
-                   border-radius: 5px; margin-bottom: 20px;",
-          tags$h4("Deployment Configuration Status", style = "margin-top: 0; color: #333;"),
-          p("Configuration management and sensor deployment information status will be displayed here."),
-          
-        )
-      )
     )
   )
 }
@@ -114,7 +101,6 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       current_config = NULL,       # Currently selected configuration
       inputs_changed = FALSE,      # Track if inputs differ from config
       baseline_config = NULL,       # Store original config for comparison
-      suppress_auto_select = FALSE
     )
     
     # ============================= #
