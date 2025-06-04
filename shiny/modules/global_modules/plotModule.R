@@ -20,7 +20,9 @@ plotSidebarUI <- function(id,
                           default_show_normalized = FALSE,
                           default_show_nadir = TRUE,
                           default_show_roi_markers = FALSE,
-                          default_show_legend = FALSE) {
+                          default_show_legend = FALSE,
+                          default_left_var = "pressure_kpa",
+                          default_right_var = "none") {
   ns <- NS(id)
   
   # Get sensor variables for dropdown choices
@@ -31,13 +33,13 @@ plotSidebarUI <- function(id,
     if (show_left_var) {
       selectInput(ns("left_y_var"), "Left Y-Axis:",
                   choices = var_choices,
-                  selected = "pressure_kpa")
+                  selected = default_left_var)
     },
     
     if (show_right_var) {
       selectInput(ns("right_y_var"), "Right Y-Axis:",
                   choices = c("None" = "none", var_choices),
-                  selected = "none")
+                  selected = default_right_var)
     },
     
     if (show_normalized) {
@@ -269,9 +271,6 @@ plotModuleServer <- function(id,
   })
 }
 
-
-
-
 #Module usage
 
 #add main UI call
@@ -280,81 +279,38 @@ plotModuleServer <- function(id,
 # Add desired sidebar content
 # hr(), h4("Plot controls"),
 # plotSidebarUI(ns("pressure_plot"), 
-#               show_left_var = TRUE,   
-#               show_right_var = TRUE,    
-#               show_normalized = TRUE,   
-#               show_nadir = TRUE,      
-#               show_roi_markers = TRUE,   
-#               show_legend = TRUE), 
-# Any of these can be false
+#               show_left_var = TRUE,
+# show_right_var = TRUE, 
+# show_normalized = TRUE,
+# show_nadir = TRUE,
+# show_roi_markers = TRUE,
+# show_legend = TRUE,
+# default_show_normalized = FALSE,
+# default_show_nadir = TRUE,
+# default_show_roi_markers = FALSE,
+# default_show_legend = FALSE,
+# default_left_var = "pressure_kpa",
+# default_right_var = "none")
 
-#Setup pressure plot with reactive defaults
+# Defaults can be set here, or fallback to server level defaults if sidebar content hidden
 
-# left_var_reactive <- reactive({
-# if (!is.null(input$`pressure_plot-left_y_var`)) {
-#   input$`pressure_plot-left_y_var`
-# } else {
-#   "pressure_kpa"  
-# }
-# })
-# 
-# right_var_reactive <- reactive({
-#   if (!is.null(input$`pressure_plot-right_y_var`)) {
-#     input$`pressure_plot-right_y_var`
-#   } else {
-#     "none"  
-#   }
-# })
-# 
-# show_legend_reactive <- reactive({
-#   if (!is.null(input$`pressure_plot-show_legend`)) {
-#     input$`pressure_plot-show_legend`
-#   } else {
-#     FALSE  
-#   }
-# })
-# 
-# show_nadir_reactive <- reactive({
-#   if (!is.null(input$`pressure_plot-show_nadir`)) {
-#     input$`pressure_plot-show_nadir`
-#   } else {
-#     FALSE  
-#   }
-# })
-# 
-# show_normalized_reactive <- reactive({
-#   if (!is.null(input$`pressure_plot-show_normalized`)) {
-#     input$`pressure_plot-show_normalized`
-#   } else {
-#     FALSE  
-#   }
-# })
-# 
-# show_roi_markers_reactive <- reactive({
-#   if (!is.null(input$`pressure_plot-show_roi_markers`)) {
-#     input$`pressure_plot-show_roi_markers`
-#   } else {
-#     FALSE  
-#   }
-# })
-# 
-# # Then use these in the plotModuleServer call
+#Then add server controls to output of module
+
 # plot_controls <- plotModuleServer("pressure_plot", 
 #                                   sensor_data = selected_sensor_data,
 #                                   sensor_name = reactive(sensor_selector$selected_sensor()),
 #                                   nadir_info = nadir_info,
 #                                   roi_boundaries = roi_boundaries,
-#                                   left_var = left_var_reactive,
-#                                   right_var = right_var_reactive, 
-#                                   show_nadir = show_nadir_reactive,                  
-#                                   show_legend = show_legend_reactive,
-#                                   show_normalized = show_normalized_reactive,
-#                                   show_roi_markers = show_roi_markers_reactive,
+#                                   #don't need to provide left and right var as default = pressure
+#                                   show_nadir = reactive(input$`pressure_plot-show_nadir`),
+#                                   show_legend = reactive(input$`pressure_plot-show_legend`),
+#                                   show_normalized = reactive(input$`pressure_plot-show_normalized`),
+#                                   show_roi_markers = reactive(input$`pressure_plot-show_roi_markers`),
 #                                   title_prefix = "Pressure Analysis",
 #                                   plot_source = "pressure_plot"
 # )
-# If any variable is not defined in server call, then it will default to 
 
+#Default fallback
 #plotModuleServer <- function(id, 
 # sensor_data,
 # sensor_name,

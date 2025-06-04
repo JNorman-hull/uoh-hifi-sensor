@@ -197,14 +197,13 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
       invalidation_trigger = reactive(pressure_values$data_updated)
     )
     
-
     #Don't need custom reactive to change default behaviors, as defaults are desired here
     plot_controls <- plotModuleServer("pressure_plot", 
                                       sensor_data = selected_sensor_data,
                                       sensor_name = reactive(sensor_selector$selected_sensor()),
                                       nadir_info = nadir_info,
                                       roi_boundaries = roi_boundaries,
-                                      #don't need to provide left and right var as default = pressure
+                                      #don't need to provide left and right var as default = pressure, none
                                       show_nadir = reactive(input$`pressure_plot-show_nadir`),
                                       show_legend = reactive(input$`pressure_plot-show_legend`),
                                       show_normalized = reactive(input$`pressure_plot-show_normalized`),
