@@ -12,17 +12,27 @@ dir.create("./processed_sens_data", showWarnings = FALSE, recursive = TRUE)
 # Import Python functions
 source_python("rapid_functions.py")
 
-# Source all modules
-source("modules/fileSelectionModule.R")
-source("modules/processingModule.R")
-source("modules/resultsModule.R")
-source("modules/plotsModule.R")
-source("modules/roiModule.R")
-source("modules/deploymentModule.R")
-source("modules/pressureModule.R")
-source("modules/fileSelectionTableModule.R")
-source("modules/enhancedSensorSelectionModule.R")
 
+#global modules
+source("modules/global_modules/fileSelectionTableModule.R")
+source("modules/global_modules/enhancedSensorSelectionModule.R")
+
+#sensor dashboard modules
+
+#sensor processing modules
+source("modules/sensor_processing/resultsModule.R")
+source("modules/sensor_processing/processingModule.R")
+source("modules/sensor_processing/fileSelectionModule.R")
+source("modules/sensor_processing/deploymentModule.R")
+
+#time series modules
+source("modules/time_series_analysis/plotsModule.R")
+source("modules/time_series_analysis/roiModule.R")
+
+#instrument modules
+source("modules/instrument_analysis/pressureModule.R")
+
+#post-process modules
 
 # ============================= #
 # /// Shared helpers \\\ ####  
