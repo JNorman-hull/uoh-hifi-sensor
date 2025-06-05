@@ -57,51 +57,90 @@ pressureUI <- function(id) {
   ))
 }
 
+#Method 1: helpText() - styled for instructions
+#helpText("This sidebar controls the pressure configuration for sensor data."),
+
+# Method 2: p() - regular paragraph
+#p("Configure pressure parameters below:"),
+
+
 pressureSidebarUI <- function(id) {
   ns <- NS(id)
   
+  # CSS for subtle scrollbar that appears on interaction
+  scroll_css <- HTML("
+    <style>
+      /* Hide scrollbar by default */
+      .scrollable-sidebar::-webkit-scrollbar {
+        width: 8px;
+        background-color: transparent;
+      }
+      
+      /* Show scrollbar track on hover or when scrolling */
+      .scrollable-sidebar:hover::-webkit-scrollbar-track,
+      .scrollable-sidebar:active::-webkit-scrollbar-track,
+      .scrollable-sidebar:focus::-webkit-scrollbar-track {
+        background: rgba(240,240,240,0.5);
+        border-radius: 4px;
+      }
+      
+      /* Show scrollbar thumb on hover or when scrolling */
+      .scrollable-sidebar:hover::-webkit-scrollbar-thumb,
+      .scrollable-sidebar:active::-webkit-scrollbar-thumb,
+      .scrollable-sidebar:focus::-webkit-scrollbar-thumb {
+        background: rgba(180,180,180,0.5);
+        border-radius: 4px;
+      }
+      
+      /* Show scrollbar thumb when scrolling */
+      .scrollable-sidebar::-webkit-scrollbar-thumb:vertical:active {
+        background: rgba(150,150,150,0.7);
+      }
+    </style>
+  ")
+  
   tagList(
-    h4("Pressure controls"),
-    
-    #Method 1: helpText() - styled for instructions
-    #helpText("This sidebar controls the pressure configuration for sensor data."),
-    
-    # Method 2: p() - regular paragraph
-    #p("Configure pressure parameters below:"),
-    
-    # Method 3: Custom styled text
-    div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
-        "Select a sensor to begin pressure analysis."),
-    
-    # Delineation status display
-    div(style = "margin-bottom: 15px;", 
-        textOutput(ns("pressure_status"))),
-    
-    enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "pres_processed"),
-
-    hr(), h4("Plot controls"),
-    plotSidebarUI(ns("pressure_plot"), 
-                  show_left_var = TRUE,   
-                  show_right_var = TRUE,    
-                  show_normalized = TRUE,   
-                  show_nadir = TRUE,      
-                  show_roi_markers = TRUE,   
-                  show_legend = TRUE,
-                  show_plot_width = TRUE,
-                  show_plot_height = TRUE,
-                  default_plot_height = 8,
-                  default_plot_width = 16,
-                  default_show_normalized = FALSE,
-                  default_show_nadir = TRUE,
-                  default_show_roi_markers = TRUE,
-                  default_show_legend = FALSE,
-                  default_left_var = "pressure_kpa",
-                  default_right_var = "higacc_mag_g"),    
-    
-    hr(),
-    
-    actionButton(ns("add_deploy_btn"), "Add pressure Information", 
-                 class = "btn-primary btn-block")
+    scroll_css,
+    div(class = "scrollable-sidebar", 
+        style = "height: 90vh; overflow-y: auto; padding-right: 5px;",
+        
+        h4("Pressure controls"),
+        
+        div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
+            "Select a sensor to begin pressure analysis."),
+        
+        # Delineation status display
+        div(style = "margin-bottom: 15px;", 
+            textOutput(ns("pressure_status"))),
+        
+        enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "pres_processed"),
+        
+        summarytableSidebarUI(ns("pressure_summary")),
+        
+        hr(), h4("Plot controls"),
+        plotSidebarUI(ns("pressure_plot"), 
+                      show_left_var = TRUE,   
+                      show_right_var = TRUE,    
+                      show_normalized = TRUE,   
+                      show_nadir = TRUE,      
+                      show_roi_markers = TRUE,   
+                      show_legend = TRUE,
+                      show_plot_width = TRUE,
+                      show_plot_height = TRUE,
+                      default_plot_height = 8,
+                      default_plot_width = 16,
+                      default_show_normalized = FALSE,
+                      default_show_nadir = TRUE,
+                      default_show_roi_markers = TRUE,
+                      default_show_legend = FALSE,
+                      default_left_var = "pressure_kpa",
+                      default_right_var = "higacc_mag_g"),    
+        
+        hr(),
+        
+        actionButton(ns("add_deploy_btn"), "Add pressure Information", 
+                     class = "btn-primary btn-block")
+    )
   )
 }
 
@@ -230,7 +269,10 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     )
     
 # Pressure summary display ####
-    summary_table <- summarytableModuleServer("pressure_summary", instrument_variable = "pres")
+    summary_table <- summarytableModuleServer("pressure_summary", 
+                                              sensor_reactive = reactive(sensor_selector$selected_sensor()),
+                                              output_dir_reactive = reactive(output_dir()),
+                                              instrument_variable = "pres")
     
 # Pressure plot ####
     plot_controls <- plotModuleServer("pressure_plot", 

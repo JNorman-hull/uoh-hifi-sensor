@@ -84,6 +84,90 @@ safe_update_sensor_index <- function(output_dir, sensor_name, updates) {
     return(FALSE)
   })
 }
+
+## Get instrument index file ####
+get_instrument_index_file <- function(output_dir, read_data = FALSE) {
+  index_file <- file.path(output_dir, "instrument_data", "global_processed_instrument_data.csv")
+  if (file.exists(index_file)) {
+    if (read_data) {
+      tryCatch({
+        return(read.csv(index_file))
+      }, error = function(e) {
+        warning("Failed to read instrument index: ", e$message)
+        return(NULL)
+      })
+    } else {
+      return(index_file)
+    }
+  } else {
+    return(NULL)
+  }
+}
+
+## Safe update instrument index ####
+safe_update_instrument_index <- function(output_dir, sensor_name, roi, updates) {
+  index_df <- get_instrument_index_file(output_dir, read_data = TRUE)
+  if (is.null(index_df)) return(FALSE)
+  
+  tryCatch({
+    # Find the row for this sensor and ROI
+    row_idx <- which(index_df$file == sensor_name & index_df$roi == roi)
+    
+    if (length(row_idx) > 0) {
+      # Update existing row
+      for (col in names(updates)) {
+        if (col %in% names(index_df)) {
+          index_df[row_idx, col] <- updates[[col]]
+        }
+      }
+    } else {
+      # Create new row
+      new_row <- index_df[1, ]  # Copy structure
+      new_row[1, ] <- NA  # Clear values
+      new_row$file <- sensor_name
+      new_row$roi <- roi
+      
+      for (col in names(updates)) {
+        if (col %in% names(index_df)) {
+          new_row[col] <- updates[[col]]
+        }
+      }
+      
+      index_df <- rbind(index_df, new_row)
+    }
+    
+    # Get file path for writing
+    index_file <- get_instrument_index_file(output_dir)
+    write.csv(index_df, index_file, row.names = FALSE)
+    return(TRUE)
+  }, error = function(e) {
+    warning("Failed to update instrument index: ", e$message)
+    return(FALSE)
+  })
+}
+
+## Get instrument column mappings ####
+get_instrument_column_mapping <- function(instrument_var) {
+  switch(instrument_var,
+    "pres" = list(
+      data_cols = c("pressure_kpa"),
+      prefix = "pres",
+      units = c(".kPa.")
+    ),
+    "acc" = list(
+      data_cols = c("higacc_mag_g", "inacc_mag_ms"),
+      prefix = c("acc_hig", "acc_inacc"),
+      units = c(".g.", ".ms.")
+    ),
+    "rot" = list(
+      data_cols = c("rot_mag_degs"),
+      prefix = "rot",
+      units = c(".degs.")
+    ),
+    NULL
+  )
+}
+
 ## Get processed sensors ####
 get_processed_sensors <- function(output_dir) {
   min_files <- list.files(path = file.path(output_dir, "csv"), 
