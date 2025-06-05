@@ -523,58 +523,6 @@ get_roi_boundaries <- function(sensor_name, output_dir, show_roi = FALSE) {
   return(boundaries)
 }
 
-
-#DATA ANALYSIS#####
-
-#Calculate summary statistics ####
-
-calc_summary_stats <- function(sensor_name, output_dir, isntrument = NULL){
-  # Function to calculate summary statistics to be used across instrument analysis types
-  
-  roi_times <- get_roi_boundaries(sensor_name, output_dir)
-  
-  isntrument <- list(
-    pres = "pressure_kpa",
-    acc = list("higacc_mag_g",
-                        "inacc_mag_ms"
-    ),
-    rot = "rot_mag_degs"
-  )
-  
-  # for each roi defined by start and end of boundary), calculate summary statistics
-  
-  # Create an 'overall' summary too, which does summary on all data
-
-  instrument_summary <- bind_rows(
-      data %>%
-    group_by(roi) %>%
-      summarise(
-        med = median(isntrument),
-        min = min(isntrument),
-        max = max(isntrument),
-        IQR = IQR(isntrument),
-        .groups = "drop"
-      ), data %>%
-      mutate(roi = "overall") %>%
-      group_by(roi) %>%
-      summarise(
-        med = median(isntrument),
-        min = min(isntrument),
-        max = max(isntrument),
-        IQR = IQR(isntrument),
-        .groups = "drop"
-      )
-    )
-    
-  # Write the summary statistics to instrument_index.csv, where 'instrument' the variable name appends the column names e.g., pres_min.kPa. acc_hig_min.g., rot_min.degs.
-
-  
-  
-  return(instrument_summary)
-  #to be used to display the summary in a tidy DT Table in respective instrument module 
-}
-
-
 # ============================= #
 # /// Shared status functions \\\ ####  
 # ============================= #  
