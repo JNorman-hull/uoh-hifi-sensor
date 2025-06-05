@@ -2,6 +2,63 @@
 # /// Shared Plot Module \\\ ####  
 # ============================= #
 
+## Variable definitions #####
+get_sensor_variables <- function() {
+  list(
+    names = c("pressure_kpa", "higacc_mag_g", "inacc_mag_ms", "rot_mag_degs"),
+    labels = c("Pressure [kPa]", "HIG Acceleration [g]", 
+               "Inertial Acceleration [m/s²]", "Rotational Magnitude [deg/s]"),
+    colors = c("black", "red", "blue", "green")
+  )
+}
+
+# Get ROI boundaries for plots ####
+
+## Get ROI boundaries ####
+get_roi_boundaries <- function(sensor_name, output_dir, show_roi = FALSE) {
+  if (!show_roi || is.null(sensor_name) || sensor_name == "") {
+    return(NULL)
+  }
+  
+  # Check if sensor is delineated and trimmed
+  status <- get_sensor_status(sensor_name, output_dir)
+  if (!status$delineated || !status$trimmed) {
+    return(NULL)
+  }
+  
+  # Read delineated data
+  sensor_data <- read_sensor_data(output_dir, sensor_name, "delineated")
+  if (is.null(sensor_data) || !"roi" %in% names(sensor_data)) {
+    return(NULL)
+  }
+  
+  # ROI levels for trimmed data
+  roi_levels <- c("roi1_sens_ingress", "roi2_inflow_passage", 
+                  "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                  "roi6_outflow_passage", "roi7_sens_outgress")
+  
+  # Create boundaries array to match plot function expectations (10 elements)
+  boundaries <- numeric(10)
+  boundaries[1] <- min(sensor_data$time_s)  # Data start
+  boundaries[10] <- max(sensor_data$time_s)  # Data end
+  
+  # Find ROI start times
+  for (i in seq_along(roi_levels)) {
+    roi_data <- sensor_data[sensor_data$roi == roi_levels[i], ]
+    if (nrow(roi_data) > 0) {
+      boundaries[i + 1] <- min(roi_data$time_s)  # boundaries[2] through boundaries[8]
+    }
+  }
+  
+  # ROI 7 end time (boundary[9])
+  roi7_data <- sensor_data[sensor_data$roi == "roi7_sens_outgress", ]
+  if (nrow(roi7_data) > 0) {
+    boundaries[9] <- max(roi7_data$time_s)
+  }
+  
+  return(boundaries)
+}
+
 plotModuleUI <- function(id, height = "600px") {
   ns <- NS(id)
   

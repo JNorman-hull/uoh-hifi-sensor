@@ -3,6 +3,22 @@
 # /// Enhanced Sensor Selection Module \\\ ####  
 # ============================= #
 
+# Sensor dropdown management ####
+
+update_sensor_dropdown <- function(session, input_id, processed_sensors, current_selection = NULL) {
+  choices <- processed_sensors
+  if (length(choices) == 0) return()
+  
+  current_choice <- current_selection
+  selected_value <- if (!is.null(current_choice) && current_choice %in% choices) {
+    current_choice
+  } else {
+    choices[1]
+  }
+  
+  updateSelectInput(session, input_id, choices = choices, selected = selected_value)
+}
+
 ## Enhanced Sensor Selection UI ####
 enhancedSensorSelectionUI <- function(id, label = "Select Sensor:", show_filters = TRUE, status_filter_type = NULL) {
   ns <- NS(id)
