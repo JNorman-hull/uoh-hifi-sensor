@@ -2,8 +2,7 @@ plotsUI <- function(id) {
   ns <- NS(id)
   
   tagList(
-    h3("Complete sensor passage"),
-    plotlyOutput(ns("sensor_plot"), height = "600px")
+    h3("Module will be remvoed/reworked for advance ggplot export. Currently just export plots with snapshot")
   )
 }
 

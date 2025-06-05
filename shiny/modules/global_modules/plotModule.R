@@ -17,6 +17,10 @@ plotSidebarUI <- function(id,
                           show_nadir = TRUE,
                           show_roi_markers = TRUE,
                           show_legend = TRUE,
+                          show_plot_width = TRUE,
+                          show_plot_height = TRUE,
+                          default_plot_height = 8,
+                          default_plot_width = 16,
                           default_show_normalized = FALSE,
                           default_show_nadir = TRUE,
                           default_show_roi_markers = FALSE,
@@ -41,6 +45,20 @@ plotSidebarUI <- function(id,
                   choices = c("None" = "none", var_choices),
                   selected = default_right_var)
     },
+    
+    if (show_plot_width) {
+      div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
+          "Enter plot width for figure export.")
+      textInput(ns("plot_width"), "Export plot width:", value = default_plot_width*37.8)
+    },
+    #37.8 = cm x pixels at 96 DPI
+    
+    if (show_plot_height) {
+      div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
+                               "Enter plot height for figure export.")
+      textInput(ns("plot_height"), "Export plot height:", value = default_plot_height*37.8)
+    },
+    
     
     if (show_normalized) {
       checkboxInput(ns("show_normalized"), "Show normalized time series", value = default_show_normalized)
@@ -72,6 +90,8 @@ plotModuleServer <- function(id,
                              show_legend = reactive(FALSE),
                              show_normalized = reactive(FALSE),
                              show_roi_markers = reactive(FALSE),
+                             plot_width = reactive(16*37.8),
+                             plot_height = reactive(8*37.8),
                              plot_source = "plot",
                              title_prefix = "Sensor Data",
                              # Internal logic parameters (not user controls)
@@ -151,6 +171,15 @@ plotModuleServer <- function(id,
             showticklabels = TRUE,
             ticks = "outside",
             tickcolor = "black"
+          )
+        )%>%
+        config(
+          toImageButtonOptions = list(
+            format = 'svg',
+            filename = paste0(sensor_name(), "_plot"),
+            width = input$plot_width,
+            height = input$plot_height,
+            scale = 1
           )
         )
       
@@ -278,6 +307,8 @@ plotModuleServer <- function(id,
     
     # Return reactive inputs for external access
     return(list(
+      plot_width = reactive(input$plot_width),
+      plot_height = reactive(input$plot_height),
       left_var = reactive(input$left_y_var),
       right_var = reactive(input$right_y_var),
       show_normalized = reactive(input$show_normalized),
