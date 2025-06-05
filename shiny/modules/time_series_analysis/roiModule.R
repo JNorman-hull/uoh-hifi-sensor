@@ -102,11 +102,10 @@ roiSidebarUI <- function(id) {
         div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
             "Select a sensor to begin time series analysis."),
         
-        div(style = "margin-bottom: 15px;", 
-            textOutput(ns("delineation_status")),
-            textOutput(ns("normalization_status")), 
-            textOutput(ns("passage_times_status"))
-        ),
+        statusSidebarUI(ns("status_display"),
+                        show_delineation = TRUE,
+                        show_normalization = TRUE,
+                        show_passage_times = TRUE),
         
         enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "delineation"),
         
@@ -1089,29 +1088,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     })
     
 # Delineation, normalization, passage status ####
-    delineation_status <- create_individual_status_display(
-      "delineation_status", 
-      reactive(sensor_selector$selected_sensor()), 
-      reactive(output_dir()),
-      output, session, "delineation",
-      invalidation_trigger = reactive(roi_values$summary_updated)  # Triggers refresh
-    )
-    
-    normalization_status <- create_individual_status_display(
-      "normalization_status",
-      reactive(sensor_selector$selected_sensor()), 
-      reactive(output_dir()),
-      output, session, "normalization",
-      invalidation_trigger = reactive(roi_values$summary_updated)
-    )
-    
-    passage_times_status <- create_individual_status_display(
-      "passage_times_status",
-      reactive(sensor_selector$selected_sensor()), 
-      reactive(output_dir()),
-      output, session, "passage_times", 
-      invalidation_trigger = reactive(roi_values$summary_updated)
-    )
+    status_controls <- statusModuleServer("status_display",
+                                          sensor_name_reactive = reactive(sensor_selector$selected_sensor()),
+                                          output_dir_reactive = reactive(output_dir()),
+                                          check_types = c("delineation", "normalization", "passage_times"),
+                                          invalidation_trigger = reactive(roi_values$summary_updated),
+                                          individual_outputs = TRUE)
     
 # Nadir editing status display ####
     

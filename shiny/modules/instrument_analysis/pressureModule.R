@@ -109,9 +109,10 @@ pressureSidebarUI <- function(id) {
         div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
             "Select a sensor to begin pressure analysis."),
         
-        # Delineation status display
-        div(style = "margin-bottom: 15px;", 
-            textOutput(ns("pressure_status"))),
+        #status display
+        statusSidebarUI(ns("status_display"),
+                        show_pres_processed = TRUE,
+                        show_pres_processed_sum = TRUE),
         
         enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "pres_processed"),
         
@@ -260,13 +261,12 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     # ============================= #    
     
 # Pressure status display ####
-    pressure_status <- create_individual_status_display(
-      "pressure_status", 
-      reactive(sensor_selector$selected_sensor()), 
-      reactive(output_dir()),
-      output, session, "pres_processed",
-      invalidation_trigger = reactive(pressure_values$data_updated)
-    )
+    status_controls <- statusModuleServer("status_display",
+                                          sensor_name_reactive = reactive(sensor_selector$selected_sensor()),
+                                          output_dir_reactive = reactive(output_dir()),
+                                          check_types = c("pres_processed", "pres_processed_sum"),
+                                          invalidation_trigger = reactive(pressure_values$data_updated),
+                                          individual_outputs = TRUE)
     
 # Pressure summary display ####
     summary_table <- summarytableModuleServer("pressure_summary", 
