@@ -27,9 +27,7 @@ pressureUI <- function(id) {
         div(
           style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
                    border-radius: 5px; margin-bottom: 20px;",
-          tags$h4("Characterize pressure profile", style = "margin-top: 0; color: #333;"),
-          p("Calculate pressure summary data button. Follow similiar logic developed in roi module. Summarize by roi and produce a table of summary data.
-            Build helper functions for perfomring the filtering and summarising tasks")
+        summarytableModuleUI(ns("pressure_summary"))
         )
       )
     ),
@@ -110,6 +108,11 @@ pressureSidebarUI <- function(id) {
 pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    
+    #needs to load the instrument index and get all the pressure variables, perhaps should be a global function to load instrument data? not sure
+    # needs to be able to write back to the instrument index, same logic as reading/writing the sensor index file for each operation we do
+    # so perhaps has a global function which loads instrument index, identifies the necessary instrument variables (pres_ acc_, rot_), 
+    # then any function we need can read and write the relevant instrument_var = for any operation required
     
     # ============================= #
     # /// Reactive values \\\ ####  
@@ -217,7 +220,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     # /// Output render \\\ ####  
     # ============================= #    
     
-    # pressure status display using shared function
+# Pressure status display ####
     pressure_status <- create_individual_status_display(
       "pressure_status", 
       reactive(sensor_selector$selected_sensor()), 
@@ -226,7 +229,10 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
       invalidation_trigger = reactive(pressure_values$data_updated)
     )
     
-    #Don't need custom reactive to change default behaviors, as defaults are desired here
+# Pressure summary display ####
+    summary_table <- summarytableModuleServer("pressure_summary", instrument_variable = "pres")
+    
+# Pressure plot ####
     plot_controls <- plotModuleServer("pressure_plot", 
                                       sensor_data = selected_sensor_data,
                                       sensor_name = reactive(sensor_selector$selected_sensor()),
