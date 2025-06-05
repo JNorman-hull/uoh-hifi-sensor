@@ -3,88 +3,33 @@
 roiUI <- function(id) {
   ns <- NS(id)
   
-  fluidPage(
-    plotModuleUI(ns("roi_plot"), height = "600px"),
-    br(),
-    
-    fluidRow(
-      column(
-        width = 4,
-        
-        div(
-          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 15px; 
-                 border-radius: 5px; margin-bottom: 20px;",
-          
-          tags$h4("ROI Controls", style = "margin-top: 0; text-align: center;"),
-          
-          selectInput(ns("config_choice"), "Configuration:", choices = NULL, width = "100%"),
-          
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-              tags$label("ROI 4 Nadir Duration (s):", `for` = ns("roi4_nadir_duration"), 
-                         style = "margin-right: 8px;"),
-              numericInput(ns("roi4_nadir_duration"), NULL, value = 0.2, min = 0.1, max = 2.0, step = 0.1,
-                           width = "80px")
-          ),
-          
-          div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
-                tags$label("Configuration Label:", `for` = ns("roi_config_label"), 
-                           style = "margin-right: 8px;"),
-                textInput(ns("roi_config_label"), NULL, value = "", 
-                          width = "200px", placeholder = "e.g., Peter_PS_Sep24")
-          ),
-          
-          actionButton(ns("create_custom_roi"), "Create Custom Delineation", 
-                       class = "btn btn-sm btn-warning", style = "width: 100%; margin-bottom: 15px;"),
-          
-          actionButton(ns("mark_roi_dynamic"), "Mark ROI 1 Start", 
-                       class = "btn btn-sm btn-primary", style = "width: 100%; margin-bottom: 10px;"),
-          
-          actionButton(ns("cancel_custom_roi"), "Cancel Custom", 
-                       class = "btn btn-sm btn-danger", style = "width: 100%; margin-bottom: 10px;"),
-          
-          textOutput(ns("dynamic_instruction")),
-          
-          hr(),
-          
-          tags$h4("Standardize ROI", style = "margin-top: 0; text-align: center;"),
-          
-          checkboxInput(ns("round_roi"), "Round ROI to nearest 0.1s", value = FALSE),
-          textOutput(ns("round_status")),
-          checkboxInput(ns("match_pre_post"), "Match pre- and post-nadir ROI", value = FALSE),
-          textOutput(ns("match_status"))
-        )
-      ),
+    fluidPage(
+      plotModuleUI(ns("roi_plot"), height = "600px"),
+      br(),
       
-      column(
-        width = 8,
-        tags$h4("Passage Information"),
-        DT::dataTableOutput(ns("roi_table")),
-        
-        div(
-          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 15px; 
-                 border-radius: 5px; margin-top: 20px;",
-          
-          fluidRow(
-            column(
-              width = 4,
-              tags$h4("Passage Times", style = "margin-top: 0; text-align: center;"),
-              actionButton(ns("passage_time"), "Calculate passage times", 
-                           class = "btn-primary", style = "width: 100%;"),
-              textOutput(ns("passage_status"))
-            ),
-            column(
-              width = 8,
-              tags$p(style = "margin-top: 10px;", textOutput(ns("passage_duration_text"))),
-              tags$p(textOutput(ns("ingress_nadir_text"))),
-              tags$p(textOutput(ns("nadir_outgress_text")))
+      fluidRow(
+        column(
+          width = 12,
+          div(
+            style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 15px; 
+                   border-radius: 5px; margin-top: 20px;",
+            tags$h4("Delineation and passage summary"),
+            fluidRow(
+              column(
+                width = 8,
+                DT::dataTableOutput(ns("roi_table"))
+              ),
+              column(
+                width = 4,
+                tags$p(style = "margin-top: 10px;", textOutput(ns("passage_duration_text"))),
+                tags$p(textOutput(ns("ingress_nadir_text"))),
+                tags$p(textOutput(ns("nadir_outgress_text")))
+              )
             )
           )
         )
-      )
-    ),
-    
-
-    hr(),
+      ),
+      hr(),
     
     h4("Delineation Instructions"),
     
@@ -116,51 +61,127 @@ roiSidebarUI <- function(id) {
   sensor_vars <- get_sensor_variables()
   var_choices <- setNames(sensor_vars$names, sensor_vars$labels)
   
+  # CSS for subtle scrollbar that appears on interaction
+  scroll_css <- HTML("
+    <style>
+      /* Hide scrollbar by default */
+      .scrollable-sidebar::-webkit-scrollbar {
+        width: 8px;
+        background-color: transparent;
+      }
+      
+      /* Show scrollbar track on hover or when scrolling */
+      .scrollable-sidebar:hover::-webkit-scrollbar-track,
+      .scrollable-sidebar:active::-webkit-scrollbar-track,
+      .scrollable-sidebar:focus::-webkit-scrollbar-track {
+        background: rgba(240,240,240,0.5);
+        border-radius: 4px;
+      }
+      
+      /* Show scrollbar thumb on hover or when scrolling */
+      .scrollable-sidebar:hover::-webkit-scrollbar-thumb,
+      .scrollable-sidebar:active::-webkit-scrollbar-thumb,
+      .scrollable-sidebar:focus::-webkit-scrollbar-thumb {
+        background: rgba(180,180,180,0.5);
+        border-radius: 4px;
+      }
+      
+      /* Show scrollbar thumb when scrolling */
+      .scrollable-sidebar::-webkit-scrollbar-thumb:vertical:active {
+        background: rgba(150,150,150,0.7);
+      }
+    </style>
+  ")
+  
   tagList(
-    h4("Time series controls"),
-    
-    div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
-        "Select a sensor to begin time series analysis."),
-    
-    div(style = "margin-bottom: 15px;", 
-        textOutput(ns("delineation_status")),
-        textOutput(ns("normalization_status")), 
-        textOutput(ns("passage_times_status"))
-    ),
-    
-    enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "delineation"),
-    
-    h4("Delineate data"),
-    actionButton(ns("create_delineated"), "Create delineated dataset", class = "btn-primary btn-block"),
-    actionButton(ns("start_over"), "Start Over", class = "btn-warning btn-block"),
-    actionButton(ns("trim_sensor"), "Trim sensor start and end", class = "btn-danger btn-block"),
-    
-    hr(), h4("Pressure Nadir Options"),
-    verbatimTextOutput(ns("current_nadir_display")),
-    actionButton(ns("nadir_btn"), "Modify Pressure Nadir", class = "btn-warning btn-block"),
-    actionButton(ns("cancel_nadir_btn"), "Cancel", class = "btn-danger btn-block"),
-    textOutput(ns("nadir_status")),
-    
-    hr(), h4("Time normalization"),
-    actionButton(ns("normalize_time"), "Normalize time series", class = "btn-primary btn-block"),
-    textOutput(ns("normalize_status")),
-    
-    hr(),
-    
-    h4("Plot controls"),
-    plotSidebarUI(ns("roi_plot"), 
-                  show_left_var = TRUE,   
-                  show_right_var = TRUE,    
-                  show_normalized = TRUE,   
-                  show_nadir = TRUE,      
-                  show_roi_markers = TRUE,   
-                  show_legend = TRUE,
-                  default_show_normalized = FALSE,
-                  default_show_nadir = TRUE,
-                  default_show_roi_markers = TRUE,
-                  default_show_legend = FALSE,
-                  default_left_var = "pressure_kpa",
-                  default_right_var = "higacc_mag_g") 
+    scroll_css,
+    div(class = "scrollable-sidebar", 
+        style = "height: 90vh; overflow-y: auto; padding-right: 5px;",
+        h4("Time series controls"),
+        
+        div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
+            "Select a sensor to begin time series analysis."),
+        
+        div(style = "margin-bottom: 15px;", 
+            textOutput(ns("delineation_status")),
+            textOutput(ns("normalization_status")), 
+            textOutput(ns("passage_times_status"))
+        ),
+        
+        enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "delineation"),
+        
+        h4("Delineate data"),
+        actionButton(ns("create_delineated"), "Apply delineation configuration", class = "btn-success btn-block"),
+        actionButton(ns("start_over"), "Start Over", class = "btn-danger btn-block"),
+        actionButton(ns("trim_sensor"), "Trim sensor start and end", class = "btn-warning btn-block"),
+        
+        br(),
+        
+        selectInput(ns("config_choice"), "Delineation configuration:", choices = NULL, width = "100%"),
+        
+        div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+            tags$label("ROI 4 Nadir Duration (s):", `for` = ns("roi4_nadir_duration"), 
+                       style = "margin-right: 8px;"),
+            numericInput(ns("roi4_nadir_duration"), NULL, value = 0.2, min = 0.1, max = 2.0, step = 0.1,
+                         width = "80px")
+        ),
+        
+        div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
+            tags$label("Label:", `for` = ns("roi_config_label"), 
+                       style = "margin-right: 8px;"),
+            textInput(ns("roi_config_label"), NULL, value = "", 
+                      width = "200px", placeholder = "e.g., Peter_PS_Sep24")
+        ),
+        
+        actionButton(ns("create_custom_roi"), "Create Custom Delineation", 
+                     class = "btn btn-sm btn-warning", style = "width: 100%; margin-bottom: 15px;"),
+        
+        actionButton(ns("mark_roi_dynamic"), "Mark ROI 1 Start", 
+                     class = "btn btn-sm btn-primary", style = "width: 100%; margin-bottom: 10px;"),
+        
+        actionButton(ns("cancel_custom_roi"), "Cancel Custom", 
+                     class = "btn btn-sm btn-danger", style = "width: 100%; margin-bottom: 10px;"),
+        
+        textOutput(ns("dynamic_instruction")),
+        
+        hr(),
+        
+        checkboxInput(ns("round_roi"), "Round ROI to nearest 0.1s", value = FALSE),
+        textOutput(ns("round_status")),
+        checkboxInput(ns("match_pre_post"), "Match pre- and post-nadir ROI", value = FALSE),
+        textOutput(ns("match_status")),
+        
+        hr(), h4("Pressure Nadir Options"),
+        textOutput(ns("current_nadir_display")),
+        actionButton(ns("nadir_btn"), "Modify Pressure Nadir", class = "btn-warning btn-block"),
+        actionButton(ns("cancel_nadir_btn"), "Cancel", class = "btn-danger btn-block"),
+        textOutput(ns("nadir_status")),
+        
+           hr(), h4("Time normalization"),
+        actionButton(ns("normalize_time"), "Normalize time series", class = "btn-primary btn-block"),
+        textOutput(ns("normalize_status")),
+        
+        hr(), h4("Passage time calculation"),
+        actionButton(ns("passage_time"), "Calculate passage times", class = "btn-primary btn-block"),
+        textOutput(ns("passage_status")),
+        
+        hr(),
+        
+        h4("Plot controls"),
+        plotSidebarUI(ns("roi_plot"), 
+                      show_left_var = TRUE,   
+                      show_right_var = TRUE,    
+                      show_normalized = TRUE,   
+                      show_nadir = TRUE,      
+                      show_roi_markers = TRUE,   
+                      show_legend = TRUE,
+                      default_show_normalized = FALSE,
+                      default_show_nadir = TRUE,
+                      default_show_roi_markers = TRUE,
+                      default_show_legend = FALSE,
+                      default_left_var = "pressure_kpa",
+                      default_right_var = "higacc_mag_g") 
+    )
   )
 }
 
@@ -1155,10 +1176,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
             paging = FALSE,
             info = FALSE
           ),
-          rownames = FALSE,
-          class = 'cell-border stripe compact'
+          rownames = FALSE
         ) %>%
-          DT::formatStyle(columns = 1:4, fontSize = '11px')
+          DT::formatStyle(columns = 1:4, fontSize = '14px')
       }
     })
     
