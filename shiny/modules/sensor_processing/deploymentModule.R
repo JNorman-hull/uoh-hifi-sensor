@@ -189,6 +189,55 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       deployment_values$inputs_changed <- FALSE
     })
     
+    # Auto-select deployment config based on selected sensor(s)
+    observe({
+      selected_sensors <- table_results$selected_items()
+      
+      if (length(selected_sensors) > 0) {
+        # Get deployment configs for all selected sensors
+        index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
+        if (!is.null(index_df)) {
+          tryCatch({
+            selected_rows <- index_df[index_df$file %in% selected_sensors, ]
+            
+            # Get all deployment configs, treating NA/"NA"/"" as "blank"
+            configs <- selected_rows$deployment_config
+            configs <- ifelse(is.na(configs) | configs == "NA" | configs == "", "blank", configs)
+            unique_configs <- unique(configs)
+            
+            # Determine which config to select
+            if (length(unique_configs) == 1 && unique_configs[1] != "blank") {
+              # All selected sensors have the same non-blank config
+              target_config <- unique_configs[1]
+              
+              # Check if this config exists in available configs
+              available_configs <- names(deployment_config$all_configs() %||% list())
+              if (target_config %in% available_configs) {
+                updateSelectInput(session, "deployment_config-config_choice", 
+                                  selected = target_config)
+              } else {
+                # Config doesn't exist, default to blank
+                updateSelectInput(session, "deployment_config-config_choice", 
+                                  selected = "Blank_configuration")
+              }
+            } else {
+              # Multiple different configs, or all blank, or mix - default to blank
+              updateSelectInput(session, "deployment_config-config_choice", 
+                                selected = "Blank_configuration")
+            }
+          }, error = function(e) {
+            # Error reading, default to blank
+            updateSelectInput(session, "deployment_config-config_choice", 
+                              selected = "Blank_configuration")
+          })
+        }
+      } else {
+        # No sensors selected, default to blank
+        updateSelectInput(session, "deployment_config-config_choice", 
+                          selected = "Blank_configuration")
+      }
+    })
+    
     # Populate input fields from selected configuration
     observe({
       config <- deployment_values$current_config
