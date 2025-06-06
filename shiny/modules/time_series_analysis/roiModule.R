@@ -116,7 +116,8 @@ roiSidebarUI <- function(id) {
         
         br(),
         
-        selectInput(ns("config_choice"), "Delineation configuration:", choices = NULL, width = "100%"),
+        configurationSidebarUI(ns("roi_config"), config_type = "roi", 
+                               label = "Delineation configuration:"),
         
         div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
             tags$label("ROI 4 Nadir Duration (s):", `for` = ns("roi4_nadir_duration"), 
@@ -227,7 +228,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 # ============================= # 
 
 #Sensor dropdown ####   
-    sensor_selector <- enhancedSensorSelectionServer("sensor_selector", output_dir, processing_complete, status_filter_type = "delineation")
+    sensor_selector <- enhancedSensorSelectionServer("sensor_selector",
+                                                     output_dir, processing_complete,
+                                                     status_filter_type = "delineation")
     
 # Get nadir info using shared function
     nadir_info <- reactive({
@@ -265,8 +268,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Calculate ROI times based on configuration and nadir
     roi_times <- reactive({
-      req(sensor_selector$selected_sensor(), roi_values$current_config)
-      input$config_choice
+      req(sensor_selector$selected_sensor(), roi_times(), roi_values$current_config)
+      roi_config$selected_config_name()
       
       nadir <- nadir_info()
       
@@ -354,40 +357,15 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
 
 # Load ROI configurations and update dropdown
-    observe({
-      roi_values$roi_configs <- load_config_file(output_dir(), "roi")
-      
-      if (length(roi_values$roi_configs) > 0) {
-        config_names <- names(roi_values$roi_configs)
-        choices <- setNames(config_names, gsub("_", " ", config_names))
-        selected_value <- config_names[1]
-        
-        # Check if sensor has a saved configuration
-        if (!is.null(sensor_selector$selected_sensor()) && sensor_selector$selected_sensor() != "") {
-          index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
-          if (!is.null(index_df)) {
-            tryCatch({
-              sensor_row <- index_df[index_df$file == sensor_selector$selected_sensor(), ]
-              if (nrow(sensor_row) > 0 && !is.na(sensor_row$roi_config) && sensor_row$roi_config != "NA") {
-                if (sensor_row$roi_config %in% config_names) {
-                  selected_value <- sensor_row$roi_config
-                }
-              }
-            },
-            error = function(e) {
-            })
-          }
-        }
-        updateSelectInput(session, "config_choice", 
-                          choices = choices, 
-                          selected = selected_value)
-      }
-    })
+    roi_config <- configurationServer("roi_config",
+                                      output_dir = output_dir,
+                                      config_type = "roi",
+                                      sensor_name = reactive(sensor_selector$selected_sensor()),
+                                      auto_select_sensor_config = TRUE)
     
-# Update current config when dropdown selection changes
+    # Use the config
     observe({
-      req(input$config_choice, roi_values$roi_configs)
-      roi_values$current_config <- roi_values$roi_configs[[input$config_choice]]
+      roi_values$current_config <- roi_config$current_config()
     })
     
 # Reset checkboxes when sensor changes
@@ -985,13 +963,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         shinyjs::addClass("create_custom_roi", "btn-info")
         
         # Reload configs and set current config to the newly saved one
-        roi_values$roi_configs <- load_config_file(output_dir(), "roi")
-        roi_values$current_config <- roi_values$roi_configs[[config_name]]
+        roi_config$reload_configs()
 
         create_delineated_dataset()
         
         showNotification("Custom ROI configuration saved and applied successfully!", type = "message")
-      } else {
+      }else {
         showNotification("Failed to save custom ROI configuration", type = "error")
       }
     }

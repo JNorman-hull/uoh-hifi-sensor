@@ -47,7 +47,8 @@ deploymentSidebarUI <- function(id) {
     
     hr(),
     
-    selectInput(ns("deployment_config"), "Configuration:", choices = NULL, width = "100%"),
+    configurationSidebarUI(ns("deployment_config"), config_type = "deployment", 
+                           label = "Configuration:"),
         hr(),
         
         # Create fluidRows with two columns each
@@ -175,30 +176,51 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     # ============================= # 
     
 # Load deployment configurations and update dropdown ####
+    deployment_config <- configurationServer("deployment_config",
+                                             output_dir = output_dir,
+                                             config_type = "deployment",
+                                             sensor_name = reactive(NULL),  # No auto-select for deployment
+                                             auto_select_sensor_config = FALSE)
+    
+    # Use the config with "Blank" option
     observe({
-      deployment_values$deployment_configs <- load_config_file(output_dir(), "deployment")
+      all_configs <- deployment_config$all_configs()
+      selected_name <- deployment_config$selected_config_name()
       
-      choices <- c("Blank" = "Blank")
+      if (selected_name == "" || is.null(all_configs) || length(all_configs) == 0) {
+        deployment_values$current_config <- NULL
+        deployment_values$baseline_config <- NULL
+      } else {
+        deployment_values$current_config <- all_configs[[selected_name]]
+        deployment_values$baseline_config <- deployment_values$current_config
+      }
       
-      if (length(deployment_values$deployment_configs) > 0) {
-        config_names <- names(deployment_values$deployment_configs)
+      deployment_values$inputs_changed <- FALSE
+    })
+    
+    observe({
+      all_configs <- deployment_config$all_configs()
+      
+      choices <- c("Blank" = "")
+      if (length(all_configs) > 0) {
+        config_names <- names(all_configs)
         config_choices <- setNames(config_names, gsub("_", " ", config_names))
         choices <- c(choices, config_choices)
       }
       
-      updateSelectInput(session, "deployment_config", choices = choices)
+      updateSelectInput(session, "deployment_config-config_choice", choices = choices)
     })
     
 # Update current config when dropdown selection changes ####
     observe({
-      req(input$deployment_config)  # Only require the input, not the configs
+      req(deployment_config$selected_config_name())  # Only require the input, not the configs
       
-      if (input$deployment_config == "Blank") {
+      if (deployment_config$selected_config_name() == "Blank") {
         deployment_values$current_config <- NULL
         deployment_values$baseline_config <- NULL
       } else {
         req(deployment_values$deployment_configs)
-        deployment_values$current_config <- deployment_values$deployment_configs[[input$deployment_config]]
+        deployment_values$current_config <- deployment_values$deployment_configs[[deployment_config$selected_config_name()]]
         deployment_values$baseline_config <- deployment_values$current_config
       }
       
@@ -207,10 +229,10 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     
     # Populate input fields from selected configuration
     observe({
-      if (input$deployment_config == "Blank" || is.null(deployment_values$current_config)) {
+      if (deployment_config$selected_config_name() == "" || is.null(deployment_values$current_config)) {
         # Populate with empty values for Blank option
         isolate({
-          updateTextInput(session, "deployment_config_label", value = "")
+          updateTextInput(session, "deployment_config_label", value = deployment_config$selected_config_name())
           updateTextInput(session, "site_config_label", value = "")
           updateTextInput(session, "deployment_id_config_label", value = "")
           updateTextInput(session, "pump_turbine_config_label", value = "")
@@ -228,7 +250,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
         config <- deployment_values$current_config
         
         isolate({
-          updateTextInput(session, "deployment_config_label", value = input$deployment_config)
+          updateTextInput(session, "deployment_config_label", value = deployment_config$selected_config_name())
           updateTextInput(session, "site_config_label", value = config$site)
           updateTextInput(session, "deployment_id_config_label", value = config$deployment_id)
           updateTextInput(session, "pump_turbine_config_label", value = config$pump_turbine)
@@ -288,7 +310,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       selected_sensors <- table_results$selected_items()
       
       button_states <- list(
-        "save_config_btn" = deployment_values$inputs_changed && !is.null(input$deployment_config_label) && nchar(trimws(input$deployment_config_label)) > 0,
+        "save_config_btn" = deployment_values$inputs_changed && !is.null(deployment_config$selected_config_name()) && nchar(trimws(deployment_config$selected_config_name())) > 0,
         "add_deploy_btn" = length(selected_sensors) > 0
       )
       
@@ -335,9 +357,9 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
 
 # Save configuration button ####
     observeEvent(input$save_config_btn, {
-      req(input$deployment_config_label)
+      req(deployment_config$selected_config_name())
       
-      config_name <- trimws(input$deployment_config_label)
+      config_name <- trimws(deployment_config$selected_config_name())
       if (nchar(config_name) == 0) {
         showNotification("Please enter a configuration label", type = "error")
         return()
@@ -416,7 +438,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     
 # Save deployment configuration function ####
     save_deployment_configuration <- function() {
-      config_name <- trimws(input$deployment_config_label)
+      config_name <- trimws(deployment_config$selected_config_name())
       
       # Create deployment configuration from inputs
       deployment_config <- list(
@@ -442,14 +464,8 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       
       if (success) {
         # Reload configurations
-        deployment_values$deployment_configs <- load_config_file(output_dir(), "deployment")
-        
-        # Update dropdown to show new configuration
-        config_names <- names(deployment_values$deployment_configs)
-        choices <- setNames(config_names, gsub("_", " ", config_names))
-        updateSelectInput(session, "deployment_config", 
-                          choices = choices, 
-                          selected = config_name)
+        deployment_config$reload_configs()
+        deployment_values$deployment_configs <- load_config_file(output_dir(), "deployment")  # Update local copy
         
         # Reset change tracking
         deployment_values$inputs_changed <- FALSE
@@ -467,7 +483,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       
       tryCatch({
         # Read values directly from input fields
-        config_name <- if (input$deployment_config == "Blank") "Custom" else input$deployment_config
+        config_name <- if (deployment_config$selected_config_name() == "Blank") "Custom" else deployment_config$selected_config_name()
         
         success_count <- 0
         
