@@ -38,9 +38,8 @@ deploymentSidebarUI <- function(id) {
     div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
         "Select sensor(s) to view and manage deployment configuration."),
     
-    # Deployment status display
-    div(style = "margin-bottom: 15px;", 
-        textOutput(ns("deployment_status"))),
+    statusSidebarUI(ns("status_display"),
+                    show_deployment_info = TRUE),
     
     textOutput(ns("config_change_status")),
     br(),
@@ -518,24 +517,19 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     # /// Output render \\\ ####  
     # ============================= #    
 # Deployment status display using shared function ####
-    deployment_status <- create_individual_status_display(
-      "deployment_status", 
-      reactive({
-        selected_sensors <- table_results$selected_items()
-        if (length(selected_sensors) == 0) return("")
-        
-        # For multiple sensors, show summary status
-        if (length(selected_sensors) == 1) {
-          return(selected_sensors[1])
-        } else {
-          # Return a summary indicator for multiple sensors
-          return("multiple_sensors")
-        }
-      }), 
-      reactive(output_dir()),
-      output, session, "deployment_info",
-      invalidation_trigger = reactive(deployment_values$data_updated)
-    )
+    status_controls <- statusModuleServer("status_display",
+                                          sensor_name_reactive = reactive({
+                                            selected_sensors <- table_results$selected_items()
+                                            if (length(selected_sensors) == 1) {
+                                              return(selected_sensors[1])
+                                            } else {
+                                              return("")  # Multiple or no sensors selected
+                                            }
+                                          }),
+                                          output_dir_reactive = reactive(output_dir()),
+                                          check_types = c("deployment_info"),
+                                          invalidation_trigger = reactive(deployment_values$data_updated),
+                                          individual_outputs = TRUE)
     
 # Config change status ####
     output$config_change_status <- renderText({
