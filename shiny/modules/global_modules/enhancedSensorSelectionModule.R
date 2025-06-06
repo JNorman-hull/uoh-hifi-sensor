@@ -69,11 +69,21 @@ enhancedSensorSelectionUI <- function(id, label = "Select Sensor:", show_filters
 }
 
 ## Enhanced Sensor Selection Server ####
-enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = reactive(TRUE), status_filter_type = NULL) {
+enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = reactive(TRUE), 
+                                          status_filter_type = NULL, session_state = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
     # Reactive values for tracking updates
+    values <- reactiveValues(
+      index_updated = 0,
+      current_sensor = NULL,
+      expected_checkbox_value = NULL,
+      initialized = FALSE  # Add this flag
+    )
+    
+   
+  # Reactive values for tracking updates
     values <- reactiveValues(
       index_updated = 0,  # Counter to force index reload when sensor status changes
       current_sensor = NULL,  # Track current sensor to detect changes
@@ -433,6 +443,8 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
       }
     }, ignoreInit = TRUE)
     
+    
+    
     # Render sensor count
     output$sensor_count <- renderText({
       sensors <- filtered_sensors()
@@ -456,6 +468,56 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
         paste("Sensor", input$sensor_selection, "marked as bad")
       } else {
         paste("Sensor", input$sensor_selection, "marked as good")
+      }
+    })
+    
+    observe({
+      # Initialize once
+      if (!is.null(session_state) && !isTRUE(values$initialized)) {
+        values$initialized <- TRUE
+      }
+      
+      # Save current state (only if inputs exist)
+      if (!is.null(session_state) && isTRUE(values$initialized)) {
+        tryCatch({
+          if (!is.null(input$sensor_selection)) {
+            session_state$selected_sensor <- input$sensor_selection
+          }
+          if (!is.null(input$deployment_filter)) {
+            session_state$deployment_filter <- input$deployment_filter
+          }
+          if (!is.null(input$treatment_filter)) {
+            session_state$treatment_filter <- input$treatment_filter
+          }
+          if (!is.null(input$run_filter)) {
+            session_state$run_filter <- input$run_filter
+          }
+          if (!is.null(input$quality_filter)) {
+            session_state$quality_filter <- input$quality_filter
+          }
+        }, error = function(e) {
+          # Silently handle any errors
+        })
+      }
+    })
+    
+    # Restore sensor selection when filters change
+    observe({
+      if (!is.null(session_state) && 
+          isTRUE(values$initialized) && 
+          !is.null(session_state$selected_sensor)) {
+        
+        tryCatch({
+          sensors <- filtered_sensors()
+          if (length(sensors) > 0 && session_state$selected_sensor %in% sensors) {
+            current <- input$sensor_selection
+            if (is.null(current) || current != session_state$selected_sensor) {
+              updateSelectInput(session, "sensor_selection", selected = session_state$selected_sensor)
+            }
+          }
+        }, error = function(e) {
+          # Silently handle any errors
+        })
       }
     })
     

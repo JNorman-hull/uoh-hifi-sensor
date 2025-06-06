@@ -4,6 +4,16 @@ server <- function(input, output, session) {
   raw_data_path <- reactive("./raw_sens_data")
   output_dir <- reactive("./processed_sens_data")
   
+  session_state <- reactiveValues(
+    selected_sensor = NULL,
+    deployment_filter = "all",
+    treatment_filter = "all", 
+    run_filter = "all",
+    quality_filter = "all",
+    status_filter = "all",
+    last_active_tab = NULL
+  )
+  
   # Create a default processing_complete for initial load
   default_processing_complete <- reactive(FALSE)
   
@@ -16,11 +26,11 @@ server <- function(input, output, session) {
   # Initialize other modules with real processing_complete
   processingresultsServer("processing_results", processing$newly_processed_sensors, processing$processing_complete)
   plotsServer("plots", output_dir, processing$summary_data, processing$processing_complete)
-  roiServer("roi", output_dir, processing$summary_data, processing$processing_complete)
-  deploymentServer("deployment_info", raw_data_path, output_dir, processing$processing_complete)
-  pressureServer("pressure", raw_data_path, output_dir, processing$processing_complete)
-  accelerationServer("acceleration", raw_data_path, output_dir, processing$processing_complete)
-  rotationServer("rotation", raw_data_path, output_dir, processing$processing_complete)
+  roiServer("roi", output_dir, processing$summary_data, processing$processing_complete, session_state)
+  deploymentServer("deployment_info", raw_data_path, output_dir, processing$processing_complete, session_state)
+  pressureServer("pressure", raw_data_path, output_dir, processing$processing_complete, session_state)
+  accelerationServer("acceleration", raw_data_path, output_dir, processing$processing_complete, session_state)
+  rotationServer("rotation", raw_data_path, output_dir, processing$processing_complete, session_state)
   
   # Handle process button click here since it spans modules
   observeEvent(input$`file_selection-process_btn`, {

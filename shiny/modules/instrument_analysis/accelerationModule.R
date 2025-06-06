@@ -135,7 +135,7 @@ accelerationSidebarUI <- function(id) {
   )
 }
 
-accelerationServer <- function(id, raw_data_path, output_dir, processing_complete) {
+accelerationServer <- function(id, raw_data_path, output_dir, processing_complete, session_state = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -162,7 +162,10 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     # /// Data loading & processing  \\\ ####  
     # ============================= # 
     
-    sensor_selector <- enhancedSensorSelectionServer("sensor_selector", output_dir, processing_complete, status_filter_type = "acc_processed")
+    sensor_selector <- enhancedSensorSelectionServer("sensor_selector", output_dir,
+                                                     processing_complete,
+                                                     status_filter_type = "acc_processed",
+                                                     session_state = session_state)
     
     # Read selected sensor data
     selected_sensor_data <- reactive({

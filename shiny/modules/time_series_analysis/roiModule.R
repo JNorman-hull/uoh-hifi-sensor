@@ -185,7 +185,7 @@ roiSidebarUI <- function(id) {
   )
 }
 
-roiServer <- function(id, output_dir, summary_data, processing_complete = reactive(FALSE)) {
+roiServer <- function(id, output_dir, summary_data, processing_complete = reactive(FALSE), session_state = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -230,7 +230,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 #Sensor dropdown ####   
     sensor_selector <- enhancedSensorSelectionServer("sensor_selector",
                                                      output_dir, processing_complete,
-                                                     status_filter_type = "delineation")
+                                                     status_filter_type = "delineation",
+                                                     session_state = session_state)
     
 # Get nadir info using shared function
     nadir_info <- reactive({

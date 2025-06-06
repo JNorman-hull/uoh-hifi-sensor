@@ -135,7 +135,7 @@ rotationSidebarUI <- function(id) {
   )
 }
 
-rotationServer <- function(id, raw_data_path, output_dir, processing_complete) {
+rotationServer <- function(id, raw_data_path, output_dir, processing_complete, session_state = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -162,7 +162,10 @@ rotationServer <- function(id, raw_data_path, output_dir, processing_complete) {
     # /// Data loading & processing  \\\ ####  
     # ============================= # 
     
-    sensor_selector <- enhancedSensorSelectionServer("sensor_selector", output_dir, processing_complete, status_filter_type = "rot_processed")
+    sensor_selector <- enhancedSensorSelectionServer("sensor_selector", output_dir,
+                                                     processing_complete,
+                                                     status_filter_type = "rot_processed",
+                                                     session_state = session_state)
     
     # Read selected sensor data
     selected_sensor_data <- reactive({

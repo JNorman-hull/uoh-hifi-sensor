@@ -86,7 +86,7 @@ deploymentSidebarUI <- function(id) {
   )
 }
 
-deploymentServer <- function(id, raw_data_path, output_dir, processing_complete) {
+deploymentServer <- function(id, raw_data_path, output_dir, processing_complete, session_state = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
