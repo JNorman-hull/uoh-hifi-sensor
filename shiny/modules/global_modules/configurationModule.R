@@ -339,9 +339,9 @@ configurationServer <- function(id,
     
     # Update current config when selection changes
     observe({
-      req(roi_config$selected_config_name(), values$configs)
-      if (roi_config$selected_config_name() %in% names(values$configs)) {
-        values$current_config <- values$configs[[roi_config$selected_config_name()]]
+      req(input$config_choice, values$configs)
+      if (input$config_choice %in% names(values$configs)) {
+        values$current_config <- values$configs[[input$config_choice]]
       } else {
         values$current_config <- NULL
       }
@@ -361,7 +361,7 @@ configurationServer <- function(id,
     # Return reactive values and functions
     return(list(
       current_config = reactive(values$current_config),
-      selected_config_name = reactive(roi_config$selected_config_name()),
+      selected_config_name = reactive(input$config_choice),
       all_configs = reactive(values$configs),
       reload_configs = reload_configs
     ))

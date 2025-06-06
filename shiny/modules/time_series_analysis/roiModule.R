@@ -268,7 +268,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Calculate ROI times based on configuration and nadir
     roi_times <- reactive({
-      req(sensor_selector$selected_sensor(), roi_times(), roi_values$current_config)
+      req(sensor_selector$selected_sensor(), roi_values$current_config)
       roi_config$selected_config_name()
       
       nadir <- nadir_info()

@@ -49,28 +49,28 @@ deploymentSidebarUI <- function(id) {
     
     configurationSidebarUI(ns("deployment_config"), config_type = "deployment", 
                            label = "Configuration:"),
-        hr(),
-        
-        # Create fluidRows with two columns each
-        lapply(input_pairs, function(pair) {
-          fluidRow(
-            lapply(pair, function(field) {
-              column(
-                width = 6,
-                div(
-                  style = "margin-bottom: 15px;",
-                  textInput(ns(field$id), label = field$label, value = "", 
-                            width = "100%", placeholder = field$placeholder)
-                )
-              )
-            })
+    hr(),
+    
+    # Create fluidRows with two columns each
+    lapply(input_pairs, function(pair) {
+      fluidRow(
+        lapply(pair, function(field) {
+          column(
+            width = 6,
+            div(
+              style = "margin-bottom: 15px;",
+              textInput(ns(field$id), label = field$label, value = "", 
+                        width = "100%", placeholder = field$placeholder)
+            )
           )
-        }),
-        
+        })
+      )
+    }),
+    
     br(),
     
     actionButton(ns("save_config_btn"), "Save Configuration", 
-                     class = "btn-success btn-block"),
+                 class = "btn-success btn-block"),
     
     fileSelectionControlsUI(
       ns("deployment_table"),
@@ -175,118 +175,61 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     # /// UI State management \\\ ####  
     # ============================= # 
     
-# Load deployment configurations and update dropdown ####
+    # Load deployment configurations and update dropdown ####
     deployment_config <- configurationServer("deployment_config",
                                              output_dir = output_dir,
                                              config_type = "deployment",
                                              sensor_name = reactive(NULL),  # No auto-select for deployment
                                              auto_select_sensor_config = FALSE)
     
-    # Use the config with "Blank" option
+    # Use the config
     observe({
-      all_configs <- deployment_config$all_configs()
-      selected_name <- deployment_config$selected_config_name()
-      
-      if (selected_name == "" || is.null(all_configs) || length(all_configs) == 0) {
-        deployment_values$current_config <- NULL
-        deployment_values$baseline_config <- NULL
-      } else {
-        deployment_values$current_config <- all_configs[[selected_name]]
-        deployment_values$baseline_config <- deployment_values$current_config
-      }
-      
-      deployment_values$inputs_changed <- FALSE
-    })
-    
-    observe({
-      all_configs <- deployment_config$all_configs()
-      
-      choices <- c("Blank" = "")
-      if (length(all_configs) > 0) {
-        config_names <- names(all_configs)
-        config_choices <- setNames(config_names, gsub("_", " ", config_names))
-        choices <- c(choices, config_choices)
-      }
-      
-      updateSelectInput(session, "deployment_config-config_choice", choices = choices)
-    })
-    
-# Update current config when dropdown selection changes ####
-    observe({
-      req(deployment_config$selected_config_name())  # Only require the input, not the configs
-      
-      if (deployment_config$selected_config_name() == "Blank") {
-        deployment_values$current_config <- NULL
-        deployment_values$baseline_config <- NULL
-      } else {
-        req(deployment_values$deployment_configs)
-        deployment_values$current_config <- deployment_values$deployment_configs[[deployment_config$selected_config_name()]]
-        deployment_values$baseline_config <- deployment_values$current_config
-      }
-      
+      deployment_values$current_config <- deployment_config$current_config()
+      deployment_values$baseline_config <- deployment_values$current_config
       deployment_values$inputs_changed <- FALSE
     })
     
     # Populate input fields from selected configuration
     observe({
-      if (deployment_config$selected_config_name() == "" || is.null(deployment_values$current_config)) {
-        # Populate with empty values for Blank option
-        isolate({
-          updateTextInput(session, "deployment_config_label", value = deployment_config$selected_config_name())
-          updateTextInput(session, "site_config_label", value = "")
-          updateTextInput(session, "deployment_id_config_label", value = "")
-          updateTextInput(session, "pump_turbine_config_label", value = "")
-          updateTextInput(session, "type_config_label", value = "")
-          updateTextInput(session, "rpm_config_label", value = "")
-          updateTextInput(session, "head_config_label", value = "")
-          updateTextInput(session, "flow_config_label", value = "")
-          updateTextInput(session, "point_bep_config_label", value = "")
-          updateTextInput(session, "treatment_config_label", value = "")
-          updateTextInput(session, "run_config_label", value = "")
-        })
-      } else {
-        # Populate with actual configuration values
-        req(deployment_values$current_config)
-        config <- deployment_values$current_config
-        
-        isolate({
-          updateTextInput(session, "deployment_config_label", value = deployment_config$selected_config_name())
-          updateTextInput(session, "site_config_label", value = config$site)
-          updateTextInput(session, "deployment_id_config_label", value = config$deployment_id)
-          updateTextInput(session, "pump_turbine_config_label", value = config$pump_turbine)
-          updateTextInput(session, "type_config_label", value = config$type)
-          updateTextInput(session, "rpm_config_label", value = as.character(config$rpm))
-          updateTextInput(session, "head_config_label", value = as.character(config$head))
-          updateTextInput(session, "flow_config_label", value = as.character(config$flow))
-          updateTextInput(session, "point_bep_config_label", value = as.character(config$point_bep))
-          updateTextInput(session, "treatment_config_label", value = config$treatment)
-          updateTextInput(session, "run_config_label", value = as.character(config$run))
-        })
-      }
+      config <- deployment_values$current_config
+      
+      isolate({
+        updateTextInput(session, "deployment_config_label", value = deployment_config$selected_config_name())
+        updateTextInput(session, "site_config_label", value = if(is.null(config)) "" else config$site)
+        updateTextInput(session, "deployment_id_config_label", value = if(is.null(config)) "" else config$deployment_id)
+        updateTextInput(session, "pump_turbine_config_label", value = if(is.null(config)) "" else config$pump_turbine)
+        updateTextInput(session, "type_config_label", value = if(is.null(config)) "" else config$type)
+        updateTextInput(session, "rpm_config_label", value = if(is.null(config)) "" else as.character(config$rpm))
+        updateTextInput(session, "head_config_label", value = if(is.null(config)) "" else as.character(config$head))
+        updateTextInput(session, "flow_config_label", value = if(is.null(config)) "" else as.character(config$flow))
+        updateTextInput(session, "point_bep_config_label", value = if(is.null(config)) "" else as.character(config$point_bep))
+        updateTextInput(session, "treatment_config_label", value = if(is.null(config)) "" else config$treatment)
+        updateTextInput(session, "run_config_label", value = if(is.null(config)) "" else as.character(config$run))
+      })
     })
     
-# Track changes in input fields ####
+    # Track changes in input fields ####
     observe({
       if (!is.null(deployment_values$baseline_config)) {
-        # Check changes against a real baseline config
+        # Check changes against baseline config
         config <- deployment_values$baseline_config
         
         inputs_changed <- (
-          input$site_config_label != config$site ||
-            input$deployment_id_config_label != config$deployment_id ||
-            input$pump_turbine_config_label != config$pump_turbine ||
-            input$type_config_label != config$type ||
-            input$rpm_config_label != as.character(config$rpm) ||
-            input$head_config_label != as.character(config$head) ||
-            input$flow_config_label != as.character(config$flow) ||
-            input$point_bep_config_label != as.character(config$point_bep) ||
-            input$treatment_config_label != config$treatment ||
-            input$run_config_label != as.character(config$run)
+          input$site_config_label != (config$site %||% "") ||
+            input$deployment_id_config_label != (config$deployment_id %||% "") ||
+            input$pump_turbine_config_label != (config$pump_turbine %||% "") ||
+            input$type_config_label != (config$type %||% "") ||
+            input$rpm_config_label != as.character(config$rpm %||% "") ||
+            input$head_config_label != as.character(config$head %||% "") ||
+            input$flow_config_label != as.character(config$flow %||% "") ||
+            input$point_bep_config_label != as.character(config$point_bep %||% "") ||
+            input$treatment_config_label != (config$treatment %||% "") ||
+            input$run_config_label != as.character(config$run %||% "")
         )
         
         deployment_values$inputs_changed <- inputs_changed
       } else {
-        # For blank config, check if any field has content
+        # For no config, check if any field has content
         inputs_changed <- (
           nchar(trimws(input$site_config_label)) > 0 ||
             nchar(trimws(input$deployment_id_config_label)) > 0 ||
@@ -304,7 +247,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       }
     })
     
-# Button state management ####
+    # Button state management ####
     observe({
       # Get selected sensors from table
       selected_sensors <- table_results$selected_items()
@@ -316,46 +259,12 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       
       manage_button_states(session, button_states)
     })
-
-# Auto-select configuration ####
-    observe({
-      selected_sensors <- table_results$selected_items()
-      
-      if (length(selected_sensors) == 0) {
-        # No sensors selected - show Blank
-        updateSelectInput(session, "deployment_config", selected = "Blank")
-        return()
-      }
-      
-      # Get configs for selected sensors
-      index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
-      if (is.null(index_df)) {
-        updateSelectInput(session, "deployment_config", selected = "Blank")
-        return()
-      }
-      
-      tryCatch({
-        sensor_rows <- index_df[index_df$file %in% selected_sensors, ]
-        configs <- unique(sensor_rows$deployment_config)
-        configs <- configs[!is.na(configs) & configs != "NA" & configs != ""]
-        
-        if (length(configs) == 1) {
-          # All sensors have same config - show it
-          updateSelectInput(session, "deployment_config", selected = configs[1])
-        } else {
-          # Multiple configs or no configs - show Blank
-          updateSelectInput(session, "deployment_config", selected = "Blank")
-        }
-      }, error = function(e) {
-        updateSelectInput(session, "deployment_config", selected = "Blank")
-      })
-    })
-
+    
     # ============================= #
     # /// Event handlers \\\ ####  
     # ============================= # 
-
-# Save configuration button ####
+    
+    # Save configuration button ####
     observeEvent(input$save_config_btn, {
       req(deployment_config$selected_config_name())
       
@@ -381,13 +290,13 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       }
     })
     
-# Confirm save configuration ####
+    # Confirm save configuration ####
     observeEvent(input$confirm_save_config, {
       removeModal()
       save_deployment_configuration()
     })
     
-# Add deployment information button ####
+    # Add deployment information button ####
     observeEvent(input$add_deploy_btn, {
       selected_sensors <- table_results$selected_items()
       
@@ -426,7 +335,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       apply_deployment_information()
     })
     
-# Confirm replace deployment information ####
+    # Confirm replace deployment information ####
     observeEvent(input$confirm_replace_deployment, {
       removeModal()
       apply_deployment_information()
@@ -436,7 +345,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     # /// Helper functions \\\ ####  
     # ============================= # 
     
-# Save deployment configuration function ####
+    # Save deployment configuration function ####
     save_deployment_configuration <- function() {
       config_name <- trimws(deployment_config$selected_config_name())
       
@@ -477,13 +386,13 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       }
     }
     
-# Apply deployment information to selected sensors ####
+    # Apply deployment information to selected sensors ####
     apply_deployment_information <- function() {
       selected_sensors <- table_results$selected_items()
       
       tryCatch({
         # Read values directly from input fields
-        config_name <- if (deployment_config$selected_config_name() == "Blank") "Custom" else deployment_config$selected_config_name()
+        config_name <- deployment_config$selected_config_name() %||% "Custom"
         
         success_count <- 0
         
@@ -532,7 +441,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
     # ============================= #
     # /// Output render \\\ ####  
     # ============================= #    
-# Deployment status display using shared function ####
+    # Deployment status display using shared function ####
     status_controls <- statusModuleServer("status_display",
                                           sensor_name_reactive = reactive({
                                             selected_sensors <- table_results$selected_items()
@@ -547,7 +456,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
                                           invalidation_trigger = reactive(deployment_values$data_updated),
                                           individual_outputs = TRUE)
     
-# Config change status ####
+    # Config change status ####
     output$config_change_status <- renderText({
       if (deployment_values$inputs_changed) {
         "Configuration has been modified - click Save Configuration to save changes"
@@ -556,7 +465,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       }
     })
     
-# Deployment summary ####
+    # Deployment summary ####
     output$deployment_summary <- renderText({
       selected_sensors <- table_results$selected_items()
       if (length(selected_sensors) == 0) {
@@ -580,7 +489,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       })
     })
     
-# Custom table formatting with dual highlighting ####
+    # Custom table formatting with dual highlighting ####
     custom_table_formatting <- function(dt, table_data) {
       if (is.null(table_data) || nrow(table_data) == 0) {
         return(DT::datatable(
@@ -620,7 +529,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete)
       return(dt)
     }
     
-# Table display with custom highlighting ####
+    # Table display with custom highlighting ####
     table_results <- fileSelectionTableServer(
       "deployment_table",
       sensor_data_reactive = reactive({
