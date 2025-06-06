@@ -94,7 +94,7 @@ rotationSidebarUI <- function(id) {
     div(class = "scrollable-sidebar", 
         style = "height: 90vh; overflow-y: auto; padding-right: 5px;",
         
-        h4("rotation controls"),
+        h4("Rotation controls"),
         
         div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
             "Select a sensor to begin rotation analysis."),
@@ -125,7 +125,7 @@ rotationSidebarUI <- function(id) {
                       default_show_roi_markers = TRUE,
                       default_show_legend = FALSE,
                       default_left_var = "pressure_kpa",
-                      default_right_var = "none"),    
+                      default_right_var = "rot_mag_degs"),    
         
         hr(),
         
@@ -280,7 +280,7 @@ rotationServer <- function(id, raw_data_path, output_dir, processing_complete) {
                                       show_legend = reactive(input$`rotation_plot-show_legend`),
                                       show_normalized = reactive(input$`rotation_plot-show_normalized`),
                                       show_roi_markers = reactive(input$`rotation_plot-show_roi_markers`),
-                                      title_prefix = "rotation Analysis",
+                                      title_prefix = "Rotation Analysis",
                                       plot_source = "rotation_plot"
     )
     return(list(

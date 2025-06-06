@@ -4,7 +4,7 @@ accelerationUI <- function(id) {
   tagList(
     # Introductory text at the top
     tagList(
-      h3("acceleration Analysis"),
+      h3("Acceleration Analysis"),
       plotModuleUI(ns("acceleration_plot"), height = "600px"),
       br(),
       
@@ -94,7 +94,7 @@ accelerationSidebarUI <- function(id) {
     div(class = "scrollable-sidebar", 
         style = "height: 90vh; overflow-y: auto; padding-right: 5px;",
         
-        h4("acceleration controls"),
+        h4("Acceleration controls"),
         
         div(style = "color: #666; font-style: italic; margin-bottom: 15px;",
             "Select a sensor to begin acceleration analysis."),
@@ -280,7 +280,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
                                       show_legend = reactive(input$`acceleration_plot-show_legend`),
                                       show_normalized = reactive(input$`acceleration_plot-show_normalized`),
                                       show_roi_markers = reactive(input$`acceleration_plot-show_roi_markers`),
-                                      title_prefix = "acceleration Analysis",
+                                      title_prefix = "Acceleration Analysis",
                                       plot_source = "acceleration_plot"
     )
     return(list(

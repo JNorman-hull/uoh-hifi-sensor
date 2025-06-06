@@ -27,4 +27,37 @@ server <- function(input, output, session) {
     processing$process_sensors()
   })
   
+  observe({
+    shinyjs::hide("sidebar_pressure")
+    shinyjs::hide("sidebar_acceleration")
+    shinyjs::hide("sidebar_rotation")
+    
+    if (input$InstrumentTabset == "pres_analysis") {
+      shinyjs::show("sidebar_pressure")
+    } else if (input$InstrumentTabset == "acc_analysis") {
+      shinyjs::show("sidebar_acceleration")
+    } else if (input$InstrumentTabset == "rot_analysis") {
+      shinyjs::show("sidebar_rotation")
+    }
+    
+    
+    shinyjs::hide("sidebar_roi")
+    shinyjs::hide("sidebar_plots")
+    
+    if (input$visualizationTabset == "roi_delineation") {
+      shinyjs::show("sidebar_roi")
+    } else if (input$visualizationTabset == "interactive_plots") {
+      shinyjs::show("sidebar_plots")
+    }
+    
+    shinyjs::hide("sidebar_raw")
+    shinyjs::hide("sidebar_deployment")
+    
+    if (input$processingTabset == "process_raw_data") {
+      shinyjs::show("sidebar_raw")
+    } else if (input$processingTabset == "add_deployment_info") {
+      shinyjs::show("sidebar_deployment")
+    }
+  })
+  
 }

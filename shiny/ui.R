@@ -4,6 +4,7 @@ ui <- navbarPage(
               tags$sub(style = "color: blue;  vertical-align: sup; font-style: italic; ; margin: 0; padding: 0;", "pro"))
   ),
   id = "mainTabset",
+  
   footer = tags$div(
     "Hull International Fisheries Institute (2025)", 
     style = "font-size: 12px; color: #666; text-align: center;"
@@ -29,8 +30,9 @@ ui <- navbarPage(
         // Can add additional UI feedback when processing completes
         console.log('Processing completed successfully');
       });
-    "))
-  ),
+    ")),
+    
+   ),
   
   ## Sensor index and Dashboard page ##
   tabPanel(
@@ -62,20 +64,12 @@ ui <- navbarPage(
     value = "sensor_processing",
     
     sidebarLayout(
+      
       sidebarPanel(
         width = 3,
-        
-        # Raw file selection Sidebar - show when roi_delineation tab is active
-        conditionalPanel(
-          condition = "input.processingTabset == 'process_raw_data'",
-          rawdataprocessingsidebarUI("raw_data")
-        ),
-        
-        # Processing Sidebar - show when deployment_info tab is active  
-        conditionalPanel(
-          condition = "input.processingTabset == 'add_deployment_info'",
-          deploymentSidebarUI("deployment_info")
-        )
+      
+        div(id = "sidebar_raw", rawdataprocessingsidebarUI("raw_data")),
+        div(id = "sidebar_deployment", deploymentSidebarUI("deployment_info"))
       ),
       
       mainPanel(
@@ -112,17 +106,8 @@ ui <- navbarPage(
       sidebarPanel(
         width = 3,
         
-        # ROI Sidebar - show when roi_delineation tab is active
-        conditionalPanel(
-          condition = "input.visualizationTabset == 'roi_delineation'",
-          roiSidebarUI("roi")
-        ),
-        
-        # Plots Sidebar - show when interactive_plots tab is active  
-        conditionalPanel(
-          condition = "input.visualizationTabset == 'interactive_plots'",
-          plotsSidebarUI("plots")
-        )
+        div(id = "sidebar_roi", roiSidebarUI("roi")),
+        div(id = "sidebar_plots", plotsSidebarUI("plots"))
       ),
       
       mainPanel(
@@ -156,27 +141,16 @@ ui <- navbarPage(
       sidebarPanel(
         width = 3,
         
-        conditionalPanel(
-          condition = "input.InstrumentTabset == 'pres_analysis'",
-          pressureSidebarUI("pressure")
-        ),
-        
-        conditionalPanel(
-          condition = "input.InstrumentTabset == 'acc_analysis'",
-          accelerationSidebarUI("acceleration")
-        ),
-        
-        conditionalPanel(
-          condition = "input.InstrumentTabset == 'rot_analysis'",
-          rotationSidebarUI("rotation")
-        )
+        div(id = "sidebar_pressure", pressureSidebarUI("pressure")),
+        div(id = "sidebar_acceleration", accelerationSidebarUI("acceleration")),
+        div(id = "sidebar_rotation", rotationSidebarUI("rotation"))
       ),
-      
       mainPanel(
         width = 9,
         
         tabsetPanel(
           id = "InstrumentTabset",
+          selected = "pres_analysis",
           
           tabPanel(
             title = "Pressure analysis",
