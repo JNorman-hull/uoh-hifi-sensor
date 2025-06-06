@@ -135,7 +135,7 @@ pressureSidebarUI <- function(id) {
                       default_show_roi_markers = TRUE,
                       default_show_legend = FALSE,
                       default_left_var = "pressure_kpa",
-                      default_right_var = "higacc_mag_g"),    
+                      default_right_var = "none"),    
         
         hr(),
         
@@ -259,6 +259,8 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete) {
     # ============================= #
     # /// Output render \\\ ####  
     # ============================= #    
+    
+    
     
 # Pressure status display ####
     status_controls <- statusModuleServer("status_display",

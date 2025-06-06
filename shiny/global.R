@@ -35,7 +35,8 @@ source("modules/time_series_analysis/roiModule.R")
 
 #instrument modules
 source("modules/instrument_analysis/pressureModule.R")
-
+source("modules/instrument_analysis/accelerationModule.R")
+source("modules/instrument_analysis/rotationModule.R")
 #post-process modules
 
 # ============================= #

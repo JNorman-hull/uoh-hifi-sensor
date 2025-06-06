@@ -164,15 +164,23 @@ get_status_check_definitions <- function() {
       )
     ),
     
-    rotation_processing = list(
-      name = "Rotation Analysis",
+    rot_processed = list(
+      name = "Rotation analysis",
       checks = list(
         list(condition = function(status) status$all_rot_processed,
              level = 4, message = "All rotation analysis complete"),
-        list(condition = function(status) status$rot_sum_processed,
-             level = 2, message = "Rotation summary calculated"),
         list(condition = function(status) !status$all_rot_processed,
-             level = 1, message = "Rotation analysis requires calculation")
+             level = 1, message = "Rotation processing incomplete ")
+      )
+    ),
+    
+    rot_processed_sum = list(
+      name = "Rotation analysis (summary)",
+      checks = list(
+        list(condition = function(status) status$rot_sum_processed,
+             level = 4, message = "Rotation summary calculated"),
+        list(condition = function(status) !status$rot_sum_processed,
+             level = 1, message = "Rotation summary requires calculation")
       )
     )
   )
@@ -180,10 +188,10 @@ get_status_check_definitions <- function() {
 
 ## Evaluate status checks ####
 evaluate_status_checks <- function(sensor_name, output_dir, 
-                                   check_types = c("bad_sens", "deployment_info", "delineation", "normalization",
+                                   check_types = c("bad_sensor", "deployment_info", "delineation", "normalization",
                                                    "passage_times", "pres_processed", "pres_processed_sum", "pres_processed_rpc",
                                                    "pres_processed_lrpc", "acc_processed", "acc_processed_sum", "acc_processed_peaks",
-                                                   "acc_processed_strikes", "acc_processed_collision", "rotation_processing"
+                                                   "acc_processed_strikes", "acc_processed_collision", "rot_processed", "rot_processed_sum"
                                    )) {
   if (is.null(sensor_name) || sensor_name == "") {
     return(list(
@@ -278,7 +286,8 @@ statusSidebarUI <- function(id,
                             show_acc_processed_peaks = FALSE,
                             show_acc_processed_strikes = FALSE,
                             show_acc_processed_collision = FALSE,
-                            show_rotation_processing = FALSE,
+                            show_rot_processed = FALSE,
+                            show_rot_processed_sum = FALSE,
                             label_prefix = "") {
   ns <- NS(id)
   
@@ -327,8 +336,11 @@ statusSidebarUI <- function(id,
   if (show_acc_processed_collision) {
     status_items[["acc_processed_collision"]] <- paste0(label_prefix, "Acceleration Collisions")
   }
-  if (show_rotation_processing) {
-    status_items[["rotation_processing"]] <- paste0(label_prefix, "Rotation Analysis")
+  if (show_rot_processed) {
+    status_items[["rot_processed"]] <- paste0(label_prefix, "Rotation Analysis")
+  }
+  if (show_rot_processed_sum) {
+    status_items[["rot_processed_sum"]] <- paste0(label_prefix, "Rotation Summary")
   }
   
   # Create UI elements for each status
