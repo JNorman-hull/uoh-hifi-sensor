@@ -19,6 +19,8 @@ server <- function(input, output, session) {
   roiServer("roi", output_dir, processing$summary_data, processing$processing_complete)
   deploymentServer("deployment_info", raw_data_path, output_dir, processing$processing_complete)
   pressureServer("pressure", raw_data_path, output_dir, processing$processing_complete)
+  accelerationServer("acceleration", raw_data_path, output_dir, processing$processing_complete)
+  rotationServer("rotation", raw_data_path, output_dir, processing$processing_complete)
   
   # Handle process button click here since it spans modules
   observeEvent(input$`file_selection-process_btn`, {

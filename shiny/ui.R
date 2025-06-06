@@ -156,19 +156,16 @@ ui <- navbarPage(
       sidebarPanel(
         width = 3,
         
-        # ROI Sidebar - show when roi_delineation tab is active
         conditionalPanel(
           condition = "input.InstrumentTabset == 'pres_analysis'",
           pressureSidebarUI("pressure")
         ),
         
-        # ROI Sidebar - show when roi_delineation tab is active
         conditionalPanel(
           condition = "input.InstrumentTabset == 'acc_analysis'",
           accelerationSidebarUI("acceleration")
         ),
         
-        # Plots Sidebar - show when interactive_plots tab is active  
         conditionalPanel(
           condition = "input.InstrumentTabset == 'rot_analysis'",
           rotationSidebarUI("rotation")
@@ -181,21 +178,18 @@ ui <- navbarPage(
         tabsetPanel(
           id = "InstrumentTabset",
           
-          # Pressure Tab
           tabPanel(
             title = "Pressure analysis",
             value = "pres_analysis",
             pressureUI("pressure")
           ),
           
-          # Plots Tab
           tabPanel(
             title = "Acceleration analysis",
             value = "acc_analysis",
             accelerationUI("acceleration")
           ),  
             
-          # Plots Tab
           tabPanel(
             title = "Rotation analysis",
             value = "rot_analysis",
