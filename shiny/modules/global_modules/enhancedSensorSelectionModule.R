@@ -70,16 +70,16 @@ enhancedSensorSelectionUI <- function(id, label = "Select Sensor:", show_filters
 
 ## Enhanced Sensor Selection Server ####
 enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = reactive(TRUE), 
-                                          status_filter_type = NULL, session_state = NULL) {
+                                          status_filter_type = NULL, session_state = NULL,
+                                          global_sensor_state, trigger_summary_update) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
     # Reactive values for tracking updates
     values <- reactiveValues(
-      index_updated = 0,
       current_sensor = NULL,
       expected_checkbox_value = NULL,
-      initialized = FALSE  # Add this flag
+      initialized = FALSE
     )
     
    
@@ -93,14 +93,14 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
     # Get sensor index data with invalidation trigger
     sensor_index_data <- reactive({
       processing_complete()  # Invalidate when processing completes
-      values$index_updated   # Invalidate when sensor status changes
+      global_sensor_state$summary_updated   # Use global trigger instead of values$index_updated
       get_sensor_index_file(output_dir(), read_data = TRUE)
     })
     
     # Get current sensor status using existing shared function
     sensor_status <- reactive({
       req(input$sensor_selection)
-      values$index_updated  # Invalidate when status changes
+      global_sensor_state$summary_updated  # Use global trigger instead of values$index_updated
       get_sensor_status(input$sensor_selection, output_dir())
     })
     
@@ -425,8 +425,8 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
       )
       
       if (success) {
-        # Force index reload
-        values$index_updated <- values$index_updated + 1
+        # Remove: values$index_updated <- values$index_updated + 1
+        trigger_summary_update()  # Use global trigger only
         
         # Update expected value
         values$expected_checkbox_value <- input$mark_sensor_bad

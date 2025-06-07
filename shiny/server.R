@@ -47,7 +47,8 @@ server <- function(input, output, session) {
   plotsServer("plots", output_dir, processing$summary_data, processing$processing_complete)
   roiServer("roi", output_dir, processing$summary_data, processing$processing_complete, 
             session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
-  deploymentServer("deployment_info", raw_data_path, output_dir, processing$processing_complete, session_state)
+  deploymentServer("deployment_info", raw_data_path, output_dir, processing$processing_complete, 
+                   session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
   pressureServer("pressure", raw_data_path, output_dir, processing$processing_complete, 
                  session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
   

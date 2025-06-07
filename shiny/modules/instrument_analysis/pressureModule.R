@@ -184,7 +184,9 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
     sensor_selector <- enhancedSensorSelectionServer("sensor_selector", output_dir, 
                                                      processing_complete, 
                                                      status_filter_type = "pres_processed",
-                                                     session_state = session_state)    
+                                                     session_state = session_state,
+                                                     global_sensor_state = global_sensor_state,
+                                                     trigger_summary_update = trigger_summary_update)  
     # Read selected sensor data
     selected_sensor_data <- reactive({
       req(sensor_selector$selected_sensor())
@@ -229,6 +231,9 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
     # Enable/disable normalized checkbox based on sensor status  
     observe({
       req(sensor_selector$selected_sensor())
+      global_sensor_state$summary_updated  # Add this line
+      global_sensor_state$data_updated     # Add this line
+      
       status <- get_sensor_status(sensor_selector$selected_sensor(), output_dir())
       
       if (status$delineated) {

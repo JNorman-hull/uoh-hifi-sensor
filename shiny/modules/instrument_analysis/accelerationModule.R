@@ -173,7 +173,9 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     sensor_selector <- enhancedSensorSelectionServer("sensor_selector", output_dir,
                                                      processing_complete,
                                                      status_filter_type = "acc_processed",
-                                                     session_state = session_state)
+                                                     session_state = session_state,
+                                                     global_sensor_state = global_sensor_state,
+                                                     trigger_summary_update = trigger_summary_update)
     
     # Read selected sensor data
     selected_sensor_data <- reactive({
@@ -206,6 +208,9 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     # Enable/disable normalized checkbox based on sensor status  
     observe({
       req(sensor_selector$selected_sensor())
+      global_sensor_state$summary_updated 
+      global_sensor_state$data_updated     
+      
       status <- get_sensor_status(sensor_selector$selected_sensor(), output_dir())
       
       if (status$normalized) {
@@ -219,6 +224,9 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     # Enable/disable normalized checkbox based on sensor status  
     observe({
       req(sensor_selector$selected_sensor())
+      global_sensor_state$summary_updated  
+      global_sensor_state$data_updated     
+      
       status <- get_sensor_status(sensor_selector$selected_sensor(), output_dir())
       
       if (status$delineated) {

@@ -86,7 +86,8 @@ deploymentSidebarUI <- function(id) {
   )
 }
 
-deploymentServer <- function(id, raw_data_path, output_dir, processing_complete, session_state = NULL) {
+deploymentServer <- function(id, raw_data_path, output_dir, processing_complete, session_state = NULL,
+                             global_sensor_state, trigger_data_update, trigger_summary_update) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -115,8 +116,8 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete,
     
     # Prepare table data with proper column structure
     processed_sensor_data <- reactive({
-      processing_complete()  # Trigger when processing completes
-      deployment_values$data_updated  # Trigger on updates
+      processing_complete()  
+      global_sensor_state$summary_updated 
       
       # Read directly from sensor index
       index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
@@ -143,7 +144,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete,
     
     # Get sensors with deployment info for highlighting
     sensors_with_deployment <- reactive({
-      deployment_values$data_updated  # Invalidate when data changes
+      global_sensor_state$summary_updated # Invalidate when data changes
       
       index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
       if (is.null(index_df)) return(character(0))
@@ -158,7 +159,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete,
     
     # Get sensors without deployment info for highlighting  
     sensors_without_deployment <- reactive({
-      deployment_values$data_updated  # Invalidate when data changes
+      global_sensor_state$summary_updated # Invalidate when data changes
       
       index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
       if (is.null(index_df)) return(character(0))
@@ -468,9 +469,9 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete,
           }
         }
         
-        if (success_count > 0) {
-          # Trigger data refresh
-          deployment_values$data_updated <- deployment_values$data_updated + 1
+        if (success) {
+          trigger_data_update()     # Use global trigger
+          trigger_summary_update()  # Use global trigger
           
           # Show success message
           if (success_count == length(selected_sensors)) {

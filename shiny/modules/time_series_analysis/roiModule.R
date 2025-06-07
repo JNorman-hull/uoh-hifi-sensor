@@ -230,7 +230,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     sensor_selector <- enhancedSensorSelectionServer("sensor_selector",
                                                      output_dir, processing_complete,
                                                      status_filter_type = "delineation",
-                                                     session_state = session_state)
+                                                     session_state = session_state,
+                                                     global_sensor_state = global_sensor_state,
+                                                     trigger_summary_update = trigger_summary_update)
     
 # Get nadir info using shared function
     nadir_info <- reactive({
@@ -384,6 +386,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Enable/disable normalized checkbox based on sensor status  
     observe({
       req(sensor_selector$selected_sensor())
+      global_sensor_state$summary_updated  # Add this line
+      global_sensor_state$data_updated     # Add this line
+      
       status <- get_sensor_status(sensor_selector$selected_sensor(), output_dir())
       
       if (status$normalized) {
