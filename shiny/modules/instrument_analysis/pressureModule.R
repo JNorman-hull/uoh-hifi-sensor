@@ -285,7 +285,10 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
     summary_table <- summarytableModuleServer("pressure_summary", 
                                               sensor_reactive = reactive(sensor_selector$selected_sensor()),
                                               output_dir_reactive = reactive(output_dir()),
-                                              instrument_variable = "pres")
+                                              instrument_variable = "pres",
+                                              global_sensor_state = global_sensor_state,
+                                              trigger_data_update = trigger_data_update,
+                                              trigger_summary_update = trigger_summary_update)
     
 # Pressure plot ####
     plot_controls <- plotModuleServer("pressure_plot", 

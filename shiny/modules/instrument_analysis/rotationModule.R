@@ -275,7 +275,10 @@ rotationServer <- function(id, raw_data_path, output_dir, processing_complete, s
     summary_table <- summarytableModuleServer("rotation_summary", 
                                               sensor_reactive = reactive(sensor_selector$selected_sensor()),
                                               output_dir_reactive = reactive(output_dir()),
-                                              instrument_variable = "rot")
+                                              instrument_variable = "rot",
+                                              global_sensor_state = global_sensor_state,
+                                              trigger_data_update = trigger_data_update,
+                                              trigger_summary_update = trigger_summary_update)
     
     # rotation plot ####
     plot_controls <- plotModuleServer("rotation_plot", 

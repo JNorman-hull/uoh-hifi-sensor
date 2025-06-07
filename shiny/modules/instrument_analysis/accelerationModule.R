@@ -275,7 +275,10 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     summary_table <- summarytableModuleServer("acceleration_summary", 
                                               sensor_reactive = reactive(sensor_selector$selected_sensor()),
                                               output_dir_reactive = reactive(output_dir()),
-                                              instrument_variable = "acc")
+                                              instrument_variable = "acc",
+                                              global_sensor_state = global_sensor_state,
+                                              trigger_data_update = trigger_data_update,
+                                              trigger_summary_update = trigger_summary_update)
     
     # acceleration plot ####
     plot_controls <- plotModuleServer("acceleration_plot", 

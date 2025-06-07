@@ -25,7 +25,8 @@ summarytableSidebarUI <- function(id) {
 }
 
 
-summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, instrument_variable = NULL) {
+summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, instrument_variable = NULL, 
+                                     global_sensor_state, trigger_data_update, trigger_summary_update) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -39,10 +40,10 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
     
     # Get sensor status
     sensor_status <- reactive({
-      req(sensor_selector$selected_sensor())
-      global_sensor_state$summary_updated  # Use global
-      global_sensor_state$data_updated     # Use global
-      get_sensor_status(sensor_selector$selected_sensor(), output_dir())
+      req(sensor_reactive())
+      global_sensor_state$summary_updated
+      global_sensor_state$data_updated
+      get_sensor_status(sensor_reactive(), output_dir_reactive())
     })
     
     # Read existing summary data from instrument index
