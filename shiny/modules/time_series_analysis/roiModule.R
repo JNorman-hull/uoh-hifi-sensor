@@ -185,7 +185,9 @@ roiSidebarUI <- function(id) {
   )
 }
 
-roiServer <- function(id, output_dir, summary_data, processing_complete = reactive(FALSE), session_state = NULL) {
+roiServer <- function(id, output_dir, summary_data, processing_complete = reactive(FALSE), 
+                      session_state = NULL, global_sensor_state, trigger_data_update, 
+                      trigger_summary_update) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -197,12 +199,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 
     # ROI configuration state
     roi_values <- reactiveValues(
-      roi_configs = NULL,          # All available ROI configurations
-      current_config = NULL,       # Currently selected configuration
-      summary_updated = 0,         # Counter to trigger summary data refresh
-      data_updated = 0            # Counter to trigger data refresh
+      roi_configs = NULL,
+      current_config = NULL
     )
-    
     # Nadir editing state
     nadir_values <- reactiveValues(
       edit_mode = FALSE,           # Whether nadir editing is active
@@ -236,24 +235,21 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 # Get nadir info using shared function
     nadir_info <- reactive({
       req(sensor_selector$selected_sensor())
-      roi_values$summary_updated
-      nadir_values$nadir_updated
+      global_sensor_state$summary_updated  # Use global
       get_nadir_info(sensor_selector$selected_sensor(), output_dir())
     })
-    
 # Get sensor status using shared function
     sensor_status <- reactive({
       req(sensor_selector$selected_sensor())
-      roi_values$summary_updated
-      roi_values$data_updated
-      
+      global_sensor_state$summary_updated  # Use global
+      global_sensor_state$data_updated     # Use global
       get_sensor_status(sensor_selector$selected_sensor(), output_dir())
     })
     
 # Read selected sensor data (with preference for delineated data)
     selected_sensor_data <- reactive({
       req(sensor_selector$selected_sensor())
-      roi_values$data_updated  # Invalidate when data changes
+      global_sensor_state$data_updated  # Invalidate when data changes
       
       # Check for delineated file first
       delineated_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
@@ -511,7 +507,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         )
         
         if (success) {
-          nadir_values$nadir_updated <- nadir_values$nadir_updated + 1
+          trigger_data_update()     # Use global trigger
+          trigger_summary_update()  # Use global trigger
           nadir_values$edit_mode <- FALSE
           nadir_values$selected_point <- NULL
           showNotification("Nadir updated successfully!", type = "message")
@@ -579,9 +576,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), list(trimmed = "Y"))
       
       if (success) {
-        # Trigger data refresh
-        roi_values$data_updated <- roi_values$data_updated + 1
-        roi_values$summary_updated <- roi_values$summary_updated + 1
+        trigger_data_update()     # Use global trigger
+        trigger_summary_update()  # Use global trigger
         
         showNotification("Sensor data trimmed successfully!", type = "message")
       } else {
@@ -617,9 +613,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       )
       
       if (success) {
-        # Trigger updates
-        roi_values$summary_updated <- roi_values$summary_updated + 1
-        roi_values$data_updated <- roi_values$data_updated + 1
+        trigger_data_update()     # Use global trigger
+        trigger_summary_update()  # Use global trigger
         
         updateCheckboxInput(session, "round_roi", value = FALSE)
         updateCheckboxInput(session, "match_pre_post", value = FALSE)
@@ -670,9 +665,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), list(normalized = "Y"))
         
         if (success) {
-          # Trigger data refresh
-          roi_values$data_updated <- roi_values$data_updated + 1
-          roi_values$summary_updated <- roi_values$summary_updated + 1
+          trigger_data_update()     # Use global trigger
+          trigger_summary_update()  # Use global trigger
           
           showNotification("Time series normalized successfully!", type = "message")
         } else {
@@ -732,8 +726,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         )
         
         if (success) {
-          # Trigger data refresh
-          roi_values$summary_updated <- roi_values$summary_updated + 1
+          trigger_data_update()     # Use global trigger
+          trigger_summary_update()  # Use global trigger
           
           showNotification("Passage times calculated successfully!", type = "message")
         } else {
@@ -1037,9 +1031,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         )
         
         if (success) {
-          # Trigger cache refresh by incrementing counter
-          roi_values$summary_updated <- roi_values$summary_updated + 1
-          roi_values$data_updated <- roi_values$data_updated + 1
+          trigger_data_update()     # Use global trigger
+          trigger_summary_update()  # Use global trigger
           
           showNotification("Delineated dataset created successfully!", type = "message")
         } else {
@@ -1070,7 +1063,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                           sensor_name_reactive = reactive(sensor_selector$selected_sensor()),
                                           output_dir_reactive = reactive(output_dir()),
                                           check_types = c("delineation", "normalization", "passage_times"),
-                                          invalidation_trigger = reactive(roi_values$summary_updated),
+                                          invalidation_trigger = reactive(global_sensor_state$summary_updated),
                                           individual_outputs = TRUE)
     
 # Nadir editing status display ####

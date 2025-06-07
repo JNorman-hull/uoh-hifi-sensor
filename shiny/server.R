@@ -14,6 +14,25 @@ server <- function(input, output, session) {
     last_active_tab = NULL
   )
   
+  global_sensor_state <- reactiveValues(
+    data_updated = 0,           # For any sensor data changes
+    summary_updated = 0,        # For summary/status changes
+    processing_updated = 0      # For processing completion
+  )
+  
+  # Global trigger functions
+  trigger_data_update <- function() {
+    global_sensor_state$data_updated <- global_sensor_state$data_updated + 1
+  }
+  
+  trigger_summary_update <- function() {
+    global_sensor_state$summary_updated <- global_sensor_state$summary_updated + 1
+  }
+  
+  trigger_processing_update <- function() {
+    global_sensor_state$processing_updated <- global_sensor_state$processing_updated + 1
+  }
+  
   # Create a default processing_complete for initial load
   default_processing_complete <- reactive(FALSE)
   
@@ -26,11 +45,17 @@ server <- function(input, output, session) {
   # Initialize other modules with real processing_complete
   processingresultsServer("processing_results", processing$newly_processed_sensors, processing$processing_complete)
   plotsServer("plots", output_dir, processing$summary_data, processing$processing_complete)
-  roiServer("roi", output_dir, processing$summary_data, processing$processing_complete, session_state)
+  roiServer("roi", output_dir, processing$summary_data, processing$processing_complete, 
+            session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
   deploymentServer("deployment_info", raw_data_path, output_dir, processing$processing_complete, session_state)
-  pressureServer("pressure", raw_data_path, output_dir, processing$processing_complete, session_state)
-  accelerationServer("acceleration", raw_data_path, output_dir, processing$processing_complete, session_state)
-  rotationServer("rotation", raw_data_path, output_dir, processing$processing_complete, session_state)
+  pressureServer("pressure", raw_data_path, output_dir, processing$processing_complete, 
+                 session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
+  
+  accelerationServer("acceleration", raw_data_path, output_dir, processing$processing_complete, 
+                     session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
+  
+  rotationServer("rotation", raw_data_path, output_dir, processing$processing_complete, 
+                 session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
   
   # Handle process button click here since it spans modules
   observeEvent(input$`file_selection-process_btn`, {

@@ -145,7 +145,9 @@ pressureSidebarUI <- function(id) {
   )
 }
 
-pressureServer <- function(id, raw_data_path, output_dir, processing_complete, session_state = NULL) {
+pressureServer <- function(id, raw_data_path, output_dir, processing_complete, 
+                           session_state = NULL, global_sensor_state, 
+                           trigger_data_update, trigger_summary_update) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -160,12 +162,19 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete, s
 
 # pressure state ####
     pressure_values <- reactiveValues(
-      data_updated = 0            # Counter to trigger data refresh
+      pressure_config = NULL          
     )
     
 # Get roi boundaries ####
     roi_boundaries <- reactive({
       get_roi_boundaries(sensor_selector$selected_sensor(), output_dir(), TRUE)
+    })
+    
+    sensor_status <- reactive({
+      req(sensor_selector$selected_sensor())
+      global_sensor_state$summary_updated  # Use global
+      global_sensor_state$data_updated     # Use global
+      get_sensor_status(sensor_selector$selected_sensor(), output_dir())
     })
     
     # ============================= #
@@ -194,7 +203,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete, s
     # Get nadir info using shared function
     nadir_info <- reactive({
       req(sensor_selector$selected_sensor())
-      pressure_values$data_updated 
+      global_sensor_state$summary_updated  # Use global
       get_nadir_info(sensor_selector$selected_sensor(), output_dir())
     })
     
@@ -269,7 +278,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete, s
                                           sensor_name_reactive = reactive(sensor_selector$selected_sensor()),
                                           output_dir_reactive = reactive(output_dir()),
                                           check_types = c("pres_processed", "pres_processed_sum"),
-                                          invalidation_trigger = reactive(pressure_values$data_updated),
+                                          invalidation_trigger = reactive(global_sensor_state$summary_updated),
                                           individual_outputs = TRUE)
     
 # Pressure summary display ####

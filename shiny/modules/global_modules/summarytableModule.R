@@ -33,25 +33,22 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
     # /// Reactive values \\\ ####  
     # ============================= #   
     
-    summary_values <- reactiveValues(
-      data_updated = 0
-    )
-    
-    # ============================= #
+     # ============================= #
     # /// Data loading & processing  \\\ ####  
     # ============================= # 
     
     # Get sensor status
     sensor_status <- reactive({
-      req(sensor_reactive())
-      summary_values$data_updated
-      get_sensor_status(sensor_reactive(), output_dir_reactive())
+      req(sensor_selector$selected_sensor())
+      global_sensor_state$summary_updated  # Use global
+      global_sensor_state$data_updated     # Use global
+      get_sensor_status(sensor_selector$selected_sensor(), output_dir())
     })
     
     # Read existing summary data from instrument index
     existing_summary_data <- reactive({
       req(sensor_reactive())
-      summary_values$data_updated
+      global_sensor_state$summary_updated 
       
       instrument_df <- get_instrument_index_file(output_dir_reactive(), read_data = TRUE)
       if (is.null(instrument_df)) return(NULL)
@@ -227,7 +224,8 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
         )
         
         if (success) {
-          summary_values$data_updated <- summary_values$data_updated + 1
+          trigger_data_update()     # Use global trigger
+          trigger_summary_update()  # Use global trigger
           showNotification(paste("Summary information calculated and saved for", sensor_reactive()), 
                            type = "message")
         } else {
