@@ -97,7 +97,6 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete,
     
     # Deployment state
     deployment_values <- reactiveValues(
-      data_updated = 0,            # Counter to trigger data refresh
       deployment_configs = NULL,   # All available deployment configurations  
       current_config = NULL,       # Currently selected configuration
       inputs_changed = FALSE,      # Track if inputs differ from config
@@ -503,7 +502,7 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete,
                                           }),
                                           output_dir_reactive = reactive(output_dir()),
                                           check_types = c("deployment_info"),
-                                          invalidation_trigger = reactive(deployment_values$data_updated),
+                                          invalidation_trigger = reactive(global_sensor_state$summary_updated),
                                           individual_outputs = TRUE)
     
     # Config change status ####

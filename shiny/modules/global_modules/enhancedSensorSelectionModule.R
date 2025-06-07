@@ -106,6 +106,7 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
     
     # Get available deployment IDs
     available_deployment_ids <- reactive({
+      global_sensor_state$summary_updated 
       index_df <- sensor_index_data()
       if (is.null(index_df)) return(character(0))
       
@@ -130,6 +131,7 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
     
     # Get available treatments based on deployment filter
     available_treatments <- reactive({
+      global_sensor_state$summary_updated 
       index_df <- sensor_index_data()
       if (is.null(index_df)) return(character(0))
       
@@ -170,6 +172,7 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
     
     # Get available runs based on filters
     available_runs <- reactive({
+      global_sensor_state$summary_updated 
       index_df <- sensor_index_data()
       if (is.null(index_df)) return(character(0))
       
