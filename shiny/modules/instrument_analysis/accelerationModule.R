@@ -180,7 +180,8 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     # Read selected sensor data
     selected_sensor_data <- reactive({
       req(sensor_selector$selected_sensor())
-      global_sensor_state$data_updated  
+      global_sensor_state$data_updated
+      global_sensor_state$summary_updated 
       
       
       # Check for delineated file first, fall back to minimal data
