@@ -1,41 +1,258 @@
-## Pressure helpers ####
+# Pressure Analysis Helper Functions
 
-# Function: rpc_find_max_pres 
 # Find max pressure 1s before nadir
-# Steps:
-# For selected sensor, get pres_min.time. and pres_min.kPa. value for roi = roi4_nadir
-# In the sensor data (_delineated), identify the maximum pressure_kpa 1 second before the nadir (2000 rows). Name values as pres_max_1s_nadir.kPa.and pres_max_1s_nadir.time.
+rpc_find_max_pres <- function(sensor_data, nadir_time) {
+  # Calculate 1 second before nadir (2000 rows at 2000Hz)
+  search_start <- nadir_time - 1.0
+  
+  # Filter data to 1 second before nadir
+  search_window <- sensor_data[sensor_data$time_s >= search_start & sensor_data$time_s < nadir_time, ]
+  
+  if (nrow(search_window) == 0) {
+    return(list(pres_max_1s_nadir.kPa. = NA, pres_max_1s_nadir.time. = NA))
+  }
+  
+  # Find maximum pressure in this window
+  max_idx <- which.max(search_window$pressure_kpa)
+  max_pressure <- search_window$pressure_kpa[max_idx]
+  max_time <- search_window$time_s[max_idx]
+  
+  return(list(
+    pres_max_1s_nadir.kPa. = round(max_pressure, 2),
+    pres_max_1s_nadir.time. = round(max_time, 2)
+  ))
+}
 
 # Function: rpc_calculate
 # Calculate the rate of pressure change
-# Steps: 
-# For selected sensor, use rpc_find_max_pres to Find max pressure 1s before nadir
-# Using values passed from rpc_find_max_pres, calculate rate pressure change as pres_min.kPa. - pres_max_1s_nadir.kPa. Name it as pres_rpc
+rpc_calculate <- function(nadir_pressure, max_pressure_1s_before) {
+  if (is.na(nadir_pressure) || is.na(max_pressure_1s_before)) {
+    return(NA)
+  }
+  
+  # Rate of pressure change = nadir - max_pressure_1s_before (pressure drop)
+  rpc <- max_pressure_1s_before - nadir_pressure
+  return(round(rpc, 2))
+}
 
 # Function: lrpc_get_acclim
 # Identify surface and depth acclimation values from the configuration
-# Steps: 
-# Retrieve the config values loaded from the configuration loader: acclim_pres_depth, acclim_pres_surface
+lrpc_get_acclim <- function(pressure_config) {
+  if (is.null(pressure_config)) {
+    return(list(acclim_pres_surface = NA, acclim_pres_depth = NA))
+  }
+  
+  return(list(
+    acclim_pres_surface = pressure_config$acclim_pres_surface,
+    acclim_pres_depth = pressure_config$acclim_pres_depth
+  ))
+}
 
-#Function lrpc_calculate
-# Retrieve the nadir value using value passed from rpc_find_max_pres
-# Calculate Log Ratio Pressure change for each acclimation (surface, depth) passed by lrpc_get_acclim. Name them pres_lrpc_surface	pres_lrpc_depth
-# Calculation is log(acclimation /nadir)
+# Function: lrpc_calculate
+# Calculate Log Ratio Pressure change for each acclimation
+lrpc_calculate <- function(nadir_pressure, acclim_surface, acclim_depth) {
+  results <- list()
+  
+  # Calculate LRPC for surface acclimation
+  if (!is.na(nadir_pressure) && !is.na(acclim_surface) && nadir_pressure > 0) {
+    results$pres_lrpc_surface <- round(log(acclim_surface / nadir_pressure), 4)
+  } else {
+    results$pres_lrpc_surface <- NA
+  }
+  
+  # Calculate LRPC for depth acclimation
+  if (!is.na(nadir_pressure) && !is.na(acclim_depth) && nadir_pressure > 0) {
+    results$pres_lrpc_depth <- round(log(acclim_depth / nadir_pressure), 4)
+  } else {
+    results$pres_lrpc_depth <- NA
+  }
+  
+  return(results)
+}
 
+# Function: get_roi4_nadir_info
+# Get nadir info specifically from ROI 4 in instrument index
+get_roi4_nadir_info <- function(sensor_name, output_dir) {
+  instrument_df <- get_instrument_index_file(output_dir, read_data = TRUE)
+  
+  if (is.null(instrument_df)) {
+    return(list(available = FALSE, value = NA, time = NA))
+  }
+  
+  tryCatch({
+    # Get ROI 4 nadir data specifically
+    roi4_row <- instrument_df[instrument_df$file == sensor_name & instrument_df$roi == "roi4_nadir", ]
+    
+    if (nrow(roi4_row) == 0) {
+      return(list(available = FALSE, value = NA, time = NA))
+    }
+    
+    nadir_pressure <- roi4_row$pres_min.kPa.
+    nadir_time <- roi4_row$pres_min.time.
+    
+    if (is.na(nadir_pressure) || is.na(nadir_time)) {
+      return(list(available = FALSE, value = NA, time = NA))
+    }
+    
+    return(list(
+      available = TRUE,
+      value = as.numeric(nadir_pressure),
+      time = as.numeric(nadir_time)
+    ))
+    
+  }, error = function(e) {
+    return(list(available = FALSE, value = NA, time = NA))
+  })
+}
 
 # Function: rate_ratio_analysis
-#Calculate Rate and Log ratio pressure change 
-# Use rpc_find_max_pres, rpc_calculate, lrpc_get_acclim and lrpc_calculate to calculate rate pressure change and ratio pressure change (surface, depth)
-# return the values and Safely update the global instrument index and trigger global state function
-#Use the status function to update the sensor status in the global index file, pres_rpc_processed,	pres_lrpc_processed we can also update all_pres_processed, as we require the pressure summary to be done ebfore rate/ratio
+# Calculate Rate and Log ratio pressure change
+rate_ratio_analysis <- function(sensor_name, output_dir, pressure_config) {
+  tryCatch({
+    # Read delineated data
+    sensor_data <- read_sensor_data(output_dir, sensor_name, "delineated")
+    
+    if (is.null(sensor_data)) {
+      stop("Failed to read delineated dataset")
+    }
+    
+    # Get ROI 4 nadir info from instrument index
+    roi4_nadir <- get_roi4_nadir_info(sensor_name, output_dir)
+    
+    if (!roi4_nadir$available) {
+      stop("ROI 4 nadir information not available. Please calculate pressure summary first.")
+    }
+    
+    # Get max pressure 1s before nadir
+    max_pres_results <- rpc_find_max_pres(sensor_data, roi4_nadir$time)
+    
+    # Calculate RPC
+    pres_rpc <- rpc_calculate(roi4_nadir$value, max_pres_results$pres_max_1s_nadir.kPa.)
+    
+    # Get acclimation values from config
+    acclim_values <- lrpc_get_acclim(pressure_config)
+    
+    # Calculate LRPC
+    lrpc_results <- lrpc_calculate(roi4_nadir$value, 
+                                   acclim_values$acclim_pres_surface, 
+                                   acclim_values$acclim_pres_depth)
+    
+    # Prepare updates for instrument index
+    updates <- list(
+      pres_max_1s_nadir.kPa. = max_pres_results$pres_max_1s_nadir.kPa.,
+      pres_max_1s_nadir.time. = max_pres_results$pres_max_1s_nadir.time.,
+      pres_rpc = pres_rpc,
+      pres_acclim_pres_surface = acclim_values$acclim_pres_surface,
+      pres_acclim_pres_depth = acclim_values$acclim_pres_depth,
+      pres_lrpc_surface = lrpc_results$pres_lrpc_surface,
+      pres_lrpc_depth = lrpc_results$pres_lrpc_depth
+    )
+    
+    # Save to instrument index for overall ROI
+    success <- safe_update_instrument_index(output_dir, sensor_name, "overall", updates)
+    
+    if (!success) {
+      stop("Failed to save RPC/LRPC results to instrument index")
+    }
+    
+    # Update sensor status flags
+    sensor_updates <- list(
+      pres_rpc_processed = "Y",
+      pres_lrpc_processed = "Y",
+      all_pres_processed = "Y",
+      pres_config = pressure_config$label
+    )
+    
+    success_sensor <- safe_update_sensor_index(output_dir, sensor_name, sensor_updates)
+    
+    if (!success_sensor) {
+      stop("Failed to update sensor status flags")
+    }
+    
+    return(list(success = TRUE, updates = updates))
+    
+  }, error = function(e) {
+    return(list(success = FALSE, error = e$message))
+  })
+}
 
 # Function: generate_pressure_text
 # Generate the output text used in the Sensor pressure summary box
-# Make sure global status tracked
-# Get the required information from the instrument index 
-# pres_lrpc_surface,	pres_lrpc_depth, pres_rpc, nadir = pres_min.kPa.(roi4_nadir)
-# populate text fields " Pressure nadir = x kPa" "Rate pressure change = x kPa/s-1", "Log ratio pressure change: Surface acclimated = x, Depth acclimated = x"
-
+generate_pressure_text <- function(sensor_name, output_dir) {
+  # Get instrument data for this sensor
+  instrument_df <- get_instrument_index_file(output_dir, read_data = TRUE)
+  
+  if (is.null(instrument_df)) {
+    return(list(
+      nadir_text = "Pressure data not available",
+      rpc_text = "",
+      lrpc_surface_text = "",
+      lrpc_depth_text = ""
+    ))
+  }
+  
+  tryCatch({
+    # Get overall ROI data for this sensor
+    sensor_row <- instrument_df[instrument_df$file == sensor_name & instrument_df$roi == "overall", ]
+    
+    if (nrow(sensor_row) == 0) {
+      return(list(
+        nadir_text = "Pressure analysis not completed",
+        rpc_text = "",
+        lrpc_surface_text = "",
+        lrpc_depth_text = ""
+      ))
+    }
+    
+    # Extract values - use ROI 4 nadir if available, otherwise show empty
+    roi4_nadir <- get_roi4_nadir_info(sensor_name, output_dir)
+    
+    nadir_pressure <- if (roi4_nadir$available) roi4_nadir$value else NA
+    rpc_value <- sensor_row$pres_rpc
+    lrpc_surface <- sensor_row$pres_lrpc_surface
+    lrpc_depth <- sensor_row$pres_lrpc_depth
+    
+    # Format text outputs
+    nadir_text <- if (!is.na(nadir_pressure)) {
+      paste("Pressure nadir =", round(nadir_pressure, 2), "kPa")
+    } else {
+      "Pressure nadir: Not available"
+    }
+    
+    rpc_text <- if (!is.na(rpc_value)) {
+      paste("Rate pressure change =", round(rpc_value, 2), "kPa")
+    } else {
+      ""
+    }
+    
+    lrpc_surface_text <- if (!is.na(lrpc_surface)) {
+      paste("Surface acclimated LRPC =", round(lrpc_surface, 4))
+    } else {
+      ""
+    }
+    
+    lrpc_depth_text <- if (!is.na(lrpc_depth)) {
+      paste("Depth acclimated LRPC =", round(lrpc_depth, 4))
+    } else {
+      ""
+    }
+    
+    return(list(
+      nadir_text = nadir_text,
+      rpc_text = rpc_text,
+      lrpc_surface_text = lrpc_surface_text,
+      lrpc_depth_text = lrpc_depth_text
+    ))
+    
+  }, error = function(e) {
+    return(list(
+      nadir_text = "Error reading pressure data",
+      rpc_text = "",
+      lrpc_surface_text = "",
+      lrpc_depth_text = ""
+    ))
+  })
+}
 
 pressureUI <- function(id) {
   ns <- NS(id)
@@ -47,42 +264,32 @@ pressureUI <- function(id) {
       plotModuleUI(ns("pressure_plot"), height = "600px"),
       br(),
     
-    # Two smaller boxes side by side
-    fluidRow(
-      column(
-        width = 6,
-        div(
-          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
-                   border-radius: 5px; margin-bottom: 20px; margin-right: 10px;",
-          tags$h4("Empty", style = "margin-top: 0; color: #333;"),
-          p("Empty")
+      fluidRow(
+        column(
+          width = 12,
+          div(
+            style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 15px; 
+                   border-radius: 5px; margin-top: 20px;",
+            fluidRow(
+              column(
+                width = 8,
+                summarytableModuleUI(ns("pressure_summary"))
+              ),
+              column(
+                width = 4,
+                 tags$h4("Sensor pressure summary", style = "margin-top: 0; color: #333;"),
+                tags$p(textOutput(ns("pressure_nadir_text"))),
+                tags$p(textOutput(ns("rpc_text"))),
+                tags$p(textOutput(ns("lrpc_surface_text"))),
+                tags$p(textOutput(ns("lrpc_depth_text")))
+              )
+            )
+          )
         )
       ),
-      column(
-        width = 6,
-        div(
-          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
-                   border-radius: 5px; margin-bottom: 20px;",
-        summarytableModuleUI(ns("pressure_summary"))
-        )
-      )
-    ),
-    
-    fluidRow(
-      column(
-        width = 6,
-        div(
-          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
-                   border-radius: 5px; margin-bottom: 20px; margin-right: 10px;",
-          tags$h4("Sensor pressure summary", style = "margin-top: 0; color: #333;"),
-          p("Provide all the summary information for the currently selected sensor here. RPC, LRPC (surface, depth), pressure nadir, ."),
-          #tags$p(textOutput(ns("pressure_nadir_text"))),
-          #tags$p(textOutput(ns("rpc_text"))),
-          #tags$p(textOutput(ns("lrpc_surface_text")),
-          #tags$p(textOutput(ns("lrpc_depth_text"))
-        )
-      ),
-      column(
+      br(),
+      fluidRow(
+            column(
         width = 6,
         div(
           style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
@@ -220,11 +427,6 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
                            trigger_data_update, trigger_summary_update) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
-    #needs to load the instrument index and get all the pressure variables, perhaps should be a global function to load instrument data? not sure
-    # needs to be able to write back to the instrument index, same logic as reading/writing the sensor index file for each operation we do
-    # so perhaps has a global function which loads instrument index, identifies the necessary instrument variables (pres_ acc_, rot_), 
-    # then any function we need can read and write the relevant instrument_var = for any operation required
     
     # ============================= #
     # /// Reactive values \\\ ####  
@@ -374,72 +576,38 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
       }
     })  
     
-    #Modify this button state management from summarytableModule
-    ## Requires pres_sum_processed status to be Y (e.g., use status function) before button is available
-    # rpc_lrpc_btn only available when status$pres_sum_processed
-    # if instrument_variable, "pres_rpc_processed" and "pres_lrpc_processed", then button state is "Recalculate RPC and LRPC"
-    # observe({
-    #   req(sensor_reactive(), instrument_variable)
-    #   status <- sensor_status()
-    #   
-    #   # Check if summary already processed
-    #   status_col <- paste0(instrument_variable, "_sum_processed")
-    #   already_processed <- status[[status_col]] %||% FALSE
-    #   
-    #   # Button state: enabled when delineated and trimmed
-    #   can_process <- status$delineated && status$trimmed
-    #   
-    #   button_states <- list(
-    #     "process_summary" = can_process
-    #   )
-    #   
-    #   manage_button_states(session, button_states)
-    #   
-    #   # Update button appearance and text
-    #   if (already_processed) {
-    #     updateActionButton(session, "process_summary", 
-    #                        label = "Recalculate summary information")
-    #     shinyjs::removeClass("process_summary", "btn-success")
-    #     shinyjs::addClass("process_summary", "btn-warning")
-    #   } else {
-    #     updateActionButton(session, "process_summary", 
-    #                        label = "Process summary information")
-    #     shinyjs::removeClass("process_summary", "btn-warning") 
-    #     shinyjs::addClass("process_summary", "btn-success")
-    #   }
-    # })
-    
-    #Modify this button state management from summarytableModule
-    #if instrument_variable, "pres_rpc_processed" and "pres_lrpc_processed", then give modal to say "RPC and LRPC already calculated. Replace existing calculations?"
-    
-    # observeEvent(input$process_summary, {
-    #   req(sensor_reactive(), instrument_variable)
-    #   
-    #   # Check if data already exists
-    #   status <- sensor_status()
-    #   status_col <- paste0(instrument_variable, "_sum_processed")
-    #   already_processed <- status[[status_col]] %||% FALSE
-    #   
-    #   if (already_processed) {
-    #     showModal(modalDialog(
-    #       title = "Summary Data Exists",
-    #       paste("Summary data already exists for", sensor_reactive(), 
-    #             ". Replace existing summary data?"),
-    #       footer = tagList(
-    #         modalButton("Cancel"),
-    #         actionButton(ns("confirm_replace_summary"), "Replace", class = "btn-warning")
-    #       )
-    #     ))
-    #   } else {
-    #     calculate_and_save_summary()
-    #   }
-    # })
-    # 
-    # observeEvent(input$confirm_replace_summary, {
-    #   removeModal()
-    #   calculate_and_save_summary()
-    # })
-    
+    # Button state management for RPC/LRPC
+    observe({
+      req(sensor_selector$selected_sensor())
+      status <- sensor_status()
+      
+      # Check if RPC and LRPC already processed
+      rpc_processed <- status$pres_rpc_processed %||% FALSE
+      lrpc_processed <- status$pres_lrpc_processed %||% FALSE
+      both_processed <- rpc_processed && lrpc_processed
+      
+      # Button enabled when summary is processed but RPC/LRPC not yet done
+      can_process_rpc_lrpc <- status$pres_sum_processed && !is.null(pressure_values$pressure_config)
+      
+      button_states <- list(
+        "rpc_lrpc_btn" = can_process_rpc_lrpc
+      )
+      
+      manage_button_states(session, button_states)
+      
+      # Update button appearance and text
+      if (both_processed) {
+        updateActionButton(session, "rpc_lrpc_btn", 
+                           label = "Recalculate RPC and LRPC")
+        shinyjs::removeClass("rpc_lrpc_btn", "btn-primary")
+        shinyjs::addClass("rpc_lrpc_btn", "btn-warning")
+      } else {
+        updateActionButton(session, "rpc_lrpc_btn", 
+                           label = "Calculate RPC and LRPC")
+        shinyjs::removeClass("rpc_lrpc_btn", "btn-warning") 
+        shinyjs::addClass("rpc_lrpc_btn", "btn-primary")
+      }
+    })
  
     # ============================= #
     # /// Event handlers \\\ ####  
@@ -507,6 +675,36 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
       }
     })
     
+    # RPC and LRPC calculation button
+    observeEvent(input$rpc_lrpc_btn, {
+      req(sensor_selector$selected_sensor())
+      
+      # Check if data already exists
+      status <- sensor_status()
+      rpc_processed <- status$pres_rpc_processed %||% FALSE
+      lrpc_processed <- status$pres_lrpc_processed %||% FALSE
+      
+      if (rpc_processed && lrpc_processed) {
+        showModal(modalDialog(
+          title = "RPC and LRPC Data Exists",
+          paste("RPC and LRPC calculations already exist for", sensor_selector$selected_sensor(), 
+                ". Replace existing calculations?"),
+          footer = tagList(
+            modalButton("Cancel"),
+            actionButton(ns("confirm_replace_rpc_lrpc"), "Replace", class = "btn-warning")
+          )
+        ))
+      } else {
+        calculate_and_save_rpc_lrpc()
+      }
+    })
+    
+    # Confirm replace RPC/LRPC
+    observeEvent(input$confirm_replace_rpc_lrpc, {
+      removeModal()
+      calculate_and_save_rpc_lrpc()
+    })
+    
     # ============================= #
     # /// Helper functions \\\ ####  
     # ============================= # 
@@ -550,36 +748,78 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
       }
     }
     
+    # Calculate and save RPC/LRPC function
+    calculate_and_save_rpc_lrpc <- function() {
+      tryCatch({
+        # Get required data
+        sensor_name <- sensor_selector$selected_sensor()
+        config <- pressure_values$pressure_config
+        
+        # Validate inputs
+        if (is.null(config)) {
+          showNotification("Please select a pressure configuration first", type = "error")
+          return()
+        }
+        
+        # Perform calculation using helper function (removed nadir parameter)
+        result <- rate_ratio_analysis(sensor_name, output_dir(), config)
+        
+        if (result$success) {
+          trigger_data_update()
+          trigger_summary_update()
+          
+          showNotification(paste("RPC and LRPC calculated and saved for", sensor_name), 
+                           type = "message")
+        } else {
+          showNotification(paste("Error calculating RPC/LRPC:", result$error), type = "error")
+        }
+        
+      }, error = function(e) {
+        showNotification(paste("Error calculating RPC/LRPC:", e$message), type = "error")
+      })
+    }
+    
     # ============================= #
     # /// Output render \\\ ####  
     # ============================= #   
     
-    # Modify these outputs to use the helper function for pressure summary text
-    # output$passage_duration_text <- renderText({
-    #   generate_duration_text("passage_duration.mm.ss.", "Overall passage duration")
-    # })
-    # 
-    # output$ingress_nadir_text <- renderText({
-    #   generate_duration_text("ingress_nadir_duration.mm.ss.", "Sensor ingress to nadir")
-    # })
-    # 
-    # output$nadir_outgress_text <- renderText({
-    #   generate_duration_text("nadir_outgress_duration.mm.ss.", "Nadir to sensor outgress")
-    # })
+    # Pressure summary text outputs
+    pressure_summary_text <- reactive({
+      req(sensor_selector$selected_sensor())
+      global_sensor_state$summary_updated  # Invalidate when data changes
+      generate_pressure_text(sensor_selector$selected_sensor(), output_dir())
+    })
     
+    output$pressure_nadir_text <- renderText({
+      pressure_summary_text()$nadir_text
+    })
     
-    #Modify this to be output status for RPC and LRPC calculation
-    # output$current_rpc_lrpc <- renderText({
-    #   req(sensor_reactive(), instrument_variable)
-    #   status <- sensor_status()
-    #   status_col <- paste0(instrument_variable, "_sum_processed")
-    #   
-    #   if (status[[status_col]] %||% FALSE) {
-    #     paste("Summary information calculated for", sensor_reactive())
-    #   } else {
-    #     ""
-    #   }
-    # })
+    output$rpc_text <- renderText({
+      pressure_summary_text()$rpc_text
+    })
+    
+    output$lrpc_surface_text <- renderText({
+      pressure_summary_text()$lrpc_surface_text
+    })
+    
+    output$lrpc_depth_text <- renderText({
+      pressure_summary_text()$lrpc_depth_text
+    })
+    
+    # RPC/LRPC status output
+    output$current_rpc_lrpc <- renderText({
+      req(sensor_selector$selected_sensor())
+      status <- sensor_status()
+      
+      rpc_processed <- status$pres_rpc_processed %||% FALSE
+      lrpc_processed <- status$pres_lrpc_processed %||% FALSE
+      
+      if (rpc_processed && lrpc_processed) {
+        paste("RPC and LRPC calculated for", sensor_selector$selected_sensor())
+      } else {
+        ""
+      }
+    })
     
     # Pressure config status
     output$pressure_config_status <- renderText({
@@ -594,7 +834,8 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
     status_controls <- statusModuleServer("status_display",
                                           sensor_name_reactive = reactive(sensor_selector$selected_sensor()),
                                           output_dir_reactive = reactive(output_dir()),
-                                          check_types = c("pres_processed", "pres_processed_sum"),
+                                          check_types = c("pres_processed", "pres_processed_sum",
+                                                          "pres_processed_rpc", "pres_processed_lrpc"),
                                           invalidation_trigger = reactive(global_sensor_state$summary_updated),
                                           individual_outputs = TRUE)
     
