@@ -69,27 +69,20 @@ load_config_file <- function(output_dir, config_type) {
     return(config_list)
   }
   
-  else if (config_type %in% c("acc", "rot")) {
+  else if (config_type == "acc") {
     config_list <- list()
-    
     for (line in lines) {
-      if (grepl("=", line)) {
-        # Handle threshold lines (key = value)
-        parts <- strsplit(line, "=")[[1]]
-        key <- trimws(parts[1])
-        value <- trimws(paste(parts[-1], collapse = "="))
-        config_list[[key]] <- type_convert(value)
-      }
-      else if (grepl(",", line)) {
-        # Handle configuration lines (name, val1, val2, val3)
+      if (grepl(",", line)) {
         parts <- strsplit(line, ",")[[1]]
         parts <- trimws(parts)
-        if (length(parts) == 4 && grepl("configuration", parts[1])) {
+        if (length(parts) == 6) {  # 5 values + name
           config_list[[parts[1]]] <- list(
             label = parts[1],
-            param1 = as.numeric(parts[2]),
-            param2 = as.numeric(parts[3]), 
-            param3 = as.numeric(parts[4])
+            height = as.numeric(parts[2]),
+            prominence = as.numeric(parts[3]),
+            interpeak = as.numeric(parts[4]),
+            strike_threshold = as.numeric(parts[5]),
+            collision_threshold = as.numeric(parts[6])
           )
         }
       }
@@ -98,16 +91,43 @@ load_config_file <- function(output_dir, config_type) {
   }
   
   else if (config_type == "pres") {
-    config <- list()
+    config_list <- list()
     for (line in lines) {
-      if (grepl("=", line)) {
-        parts <- strsplit(line, "=")[[1]]
-        key <- trimws(parts[1])
-        value <- trimws(paste(parts[-1], collapse = "="))
-        config[[key]] <- type_convert(value)
+      if (grepl(",", line)) {
+        parts <- strsplit(line, ",")[[1]]
+        parts <- trimws(parts)
+        if (length(parts) == 4) {  # 3 values + name
+          config_list[[parts[1]]] <- list(
+            label = parts[1],
+            acclim_pres_surface = as.numeric(parts[2]),
+            acclim_pres_depth = as.numeric(parts[3]),
+            hydrostatic_pressure = as.numeric(parts[4])
+          )
+        }
       }
     }
-    return(config)
+    return(config_list)
+  }
+  
+  else if (config_type == "rot") {
+    config_list <- list()
+    for (line in lines) {
+      if (grepl(",", line)) {
+        parts <- strsplit(line, ",")[[1]]
+        parts <- trimws(parts)
+        if (length(parts) == 6) {  # 5 values + name
+          config_list[[parts[1]]] <- list(
+            label = parts[1],
+            height = as.numeric(parts[2]),
+            prominence = as.numeric(parts[3]),
+            interpeak = as.numeric(parts[4]),
+            direct_strike_threshold = as.numeric(parts[5]),
+            indirect_strike_threshold = as.numeric(parts[6])
+          )
+        }
+      }
+    }
+    return(config_list)
   }
   
   else if (config_type == "directory") {
@@ -179,31 +199,31 @@ save_config_value <- function(output_dir, config_type, key, value, append = TRUE
       }
     }
     
-    else if (config_type %in% c("acc", "rot")) {
-      if (grepl("configuration", key)) {
-        # Configuration line format: name, val1, val2, val3
-        if (is.list(value)) {
-          line <- paste(key, value$param1, value$param2, value$param3, sep = ", ")
-        } else if (length(value) == 3) {
-          line <- paste(key, paste(value, collapse = ", "), sep = ", ")
-        } else {
-          stop("Configuration requires exactly 3 numeric values")
-        }
-      } else {
-        # Threshold line format: key = value
-        line <- paste(key, "=", value)
-      }
+    else if (config_type == "acc") {
+      if (length(value) != 5) stop("Acceleration config requires exactly 5 values")
+      line <- paste(key, paste(value, collapse = ", "), sep = ", ")
       
       if (append && file.exists(config_file)) {
         lines <- readLines(config_file)
-        if (grepl("configuration", key)) {
-          # Look for configuration line
-          key_line <- grep(paste0("^\\s*", key, "\\s*,"), lines)
+        key_line <- grep(paste0("^\\s*", key, "\\s*,"), lines)
+        if (length(key_line) > 0) {
+          lines[key_line[1]] <- line
         } else {
-          # Look for threshold line
-          key_line <- grep(paste0("^\\s*", key, "\\s*="), lines)
+          lines <- c(lines, line)
         }
-        
+        writeLines(lines, config_file)
+      } else {
+        writeLines(line, config_file)
+      }
+    }
+    
+    else if (config_type == "rot") {
+      if (length(value) != 5) stop("Rotation config requires exactly 5 values")
+      line <- paste(key, paste(value, collapse = ", "), sep = ", ")
+      
+      if (append && file.exists(config_file)) {
+        lines <- readLines(config_file)
+        key_line <- grep(paste0("^\\s*", key, "\\s*,"), lines)
         if (length(key_line) > 0) {
           lines[key_line[1]] <- line
         } else {
@@ -216,11 +236,12 @@ save_config_value <- function(output_dir, config_type, key, value, append = TRUE
     }
     
     else if (config_type == "pres") {
-      line <- paste(key, "=", value)
+      if (length(value) != 3) stop("Pressure config requires exactly 3 values")
+      line <- paste(key, paste(value, collapse = ", "), sep = ", ")
       
       if (append && file.exists(config_file)) {
         lines <- readLines(config_file)
-        key_line <- grep(paste0("^\\s*", key, "\\s*="), lines)
+        key_line <- grep(paste0("^\\s*", key, "\\s*,"), lines)
         if (length(key_line) > 0) {
           lines[key_line[1]] <- line
         } else {

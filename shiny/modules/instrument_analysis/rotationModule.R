@@ -108,6 +108,40 @@ rotationSidebarUI <- function(id) {
         
         summarytableSidebarUI(ns("rotation_summary")),
         
+        hr(),
+        configurationSidebarUI(ns("rotation_config"), config_type = "rot", 
+                               label = "Rotation configuration:"),
+        
+        h4("Rotation Parameters"),
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("height"), "Height:", 
+                         value = NULL, min = 0, max = 1000, step = 1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("prominence"), "Prominence:", 
+                         value = NULL, min = 0, max = 100, step = 0.1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("interpeak"), "Interpeak:", 
+                         value = NULL, min = 0, max = 1, step = 0.001, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("direct_strike_threshold"), "Direct strike threshold:", 
+                         value = NULL, min = 0, max = 1000, step = 1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("indirect_strike_threshold"), "Indirect strike threshold:", 
+                         value = NULL, min = 0, max = 1000, step = 1, width = "100%")),
+        
+        div(style = "margin-bottom: 15px;",
+            textInput(ns("rotation_config_label"), "Configuration label:", 
+                      value = "", width = "100%", placeholder = "e.g., Custom_rotation_config")),
+        
+        actionButton(ns("save_rotation_config"), "Save Configuration", 
+                     class = "btn-success btn-block"),
+        
+        textOutput(ns("rotation_config_status")),
+        
         hr(), h4("Plot controls"),
         plotSidebarUI(ns("rotation_plot"), 
                       show_left_var = TRUE,   
@@ -150,9 +184,11 @@ rotationServer <- function(id, raw_data_path, output_dir, processing_complete, s
     # /// Reactive values \\\ ####  
     # ============================= #   
     
-    # rotation state ####
+    # Rotation configuration state
     rotation_values <- reactiveValues(
-      rotation_config = NULL          
+      rotation_config = NULL,
+      baseline_config = NULL,
+      inputs_changed = FALSE
     )
     
     # Get roi boundaries ####
@@ -180,7 +216,8 @@ rotationServer <- function(id, raw_data_path, output_dir, processing_complete, s
     # Read selected sensor data
     selected_sensor_data <- reactive({
       req(sensor_selector$selected_sensor())
-      global_sensor_state$data_updated  
+      global_sensor_state$data_updated
+      global_sensor_state$summary_updated
       
       
       # Check for delineated file first, fall back to minimal data
@@ -197,6 +234,77 @@ rotationServer <- function(id, raw_data_path, output_dir, processing_complete, s
       req(sensor_selector$selected_sensor())
       global_sensor_state$summary_updated  # Use global
       get_nadir_info(sensor_selector$selected_sensor(), output_dir())
+    })
+    
+    # ============================= #
+    # /// Rotation configuration \\\ ####  
+    # ============================= #
+    
+    # Load rotation configurations
+    rotation_config <- configurationServer("rotation_config",
+                                           output_dir = output_dir,
+                                           config_type = "rot",
+                                           sensor_name = reactive(sensor_selector$selected_sensor()),
+                                           auto_select_sensor_config = TRUE)
+    
+    # Store current config and populate inputs
+    observe({
+      rotation_values$rotation_config <- rotation_config$current_config()
+      rotation_values$baseline_config <- rotation_values$rotation_config
+      rotation_values$inputs_changed <- FALSE
+      
+      config <- rotation_values$rotation_config
+      if (!is.null(config)) {
+        updateTextInput(session, "rotation_config_label", value = config$label)
+        updateNumericInput(session, "height", value = config$height)
+        updateNumericInput(session, "prominence", value = config$prominence)
+        updateNumericInput(session, "interpeak", value = config$interpeak)
+        updateNumericInput(session, "direct_strike_threshold", value = config$direct_strike_threshold)
+        updateNumericInput(session, "indirect_strike_threshold", value = config$indirect_strike_threshold)
+      }
+    })
+    
+    # Track changes in inputs
+    observe({
+      if (!is.null(rotation_values$baseline_config)) {
+        config <- rotation_values$baseline_config
+        
+        inputs_changed <- (
+          input$rotation_config_label != (config$label %||% "") ||
+            input$height != (config$height %||% 0) ||
+            input$prominence != (config$prominence %||% 0) ||
+            input$interpeak != (config$interpeak %||% 0) ||
+            input$direct_strike_threshold != (config$direct_strike_threshold %||% 0) ||
+            input$indirect_strike_threshold != (config$indirect_strike_threshold %||% 0)
+        )
+        
+        rotation_values$inputs_changed <- inputs_changed
+      } else {
+        # For no config, check if any field has content
+        inputs_changed <- (
+          nchar(trimws(input$rotation_config_label)) > 0 ||
+            !is.null(input$height) ||
+            !is.null(input$prominence) ||
+            !is.null(input$interpeak) ||
+            !is.null(input$direct_strike_threshold) ||
+            !is.null(input$indirect_strike_threshold)
+        )
+        
+        rotation_values$inputs_changed <- inputs_changed
+      }
+    })
+    
+    # Button state management for save rotation config
+    observe({
+      can_save <- rotation_values$inputs_changed && 
+        !is.null(input$rotation_config_label) && 
+        nchar(trimws(input$rotation_config_label)) > 0
+      
+      if (can_save) {
+        shinyjs::enable("save_rotation_config")
+      } else {
+        shinyjs::disable("save_rotation_config")
+      }
     })
     
     # ============================= #
@@ -259,16 +367,97 @@ rotationServer <- function(id, raw_data_path, output_dir, processing_complete, s
       }
     })
     
+    # Save rotation configuration
+    observeEvent(input$save_rotation_config, {
+      config_name <- trimws(input$rotation_config_label)
+      
+      if (nchar(config_name) == 0) {
+        showNotification("Please enter a configuration label", type = "error")
+        return()
+      }
+      
+      # Check if config already exists
+      existing_configs <- rotation_config$all_configs()
+      if (!is.null(existing_configs) && config_name %in% names(existing_configs)) {
+        showModal(modalDialog(
+          title = "Configuration Exists",
+          paste("Configuration '", config_name, "' already exists. Replace existing configuration?"),
+          footer = tagList(
+            modalButton("Cancel"),
+            actionButton(ns("confirm_save_rotation_config"), "Replace", class = "btn-warning")
+          ),
+          size = "m"
+        ))
+      } else {
+        save_rotation_configuration()
+      }
+    })
+    
+    # Confirm save rotation configuration
+    observeEvent(input$confirm_save_rotation_config, {
+      removeModal()
+      save_rotation_configuration()
+    })
+    
     # ============================= #
     # /// Helper functions \\\ ####  
     # ============================= # 
     
-    # Add helper functions here as needed
+    # Save rotation configuration function
+    save_rotation_configuration <- function() {
+      config_name <- trimws(input$rotation_config_label)
+      
+      # Create rotation configuration values
+      rotation_config_values <- c(
+        input$height,
+        input$prominence,
+        input$interpeak,
+        input$direct_strike_threshold,
+        input$indirect_strike_threshold
+      )
+      
+      # Save configuration using shared function
+      success <- save_config_value(
+        output_dir = output_dir(),
+        config_type = "rot",
+        key = config_name,
+        value = rotation_config_values
+      )
+      
+      if (success) {
+        # Reload configurations and trigger global updates
+        rotation_config$reload_configs()
+        trigger_summary_update()
+        
+        # Reset change tracking
+        rotation_values$inputs_changed <- FALSE
+        rotation_values$baseline_config <- list(
+          label = config_name,
+          height = input$height,
+          prominence = input$prominence,
+          interpeak = input$interpeak,
+          direct_strike_threshold = input$direct_strike_threshold,
+          indirect_strike_threshold = input$indirect_strike_threshold
+        )
+        
+        showNotification("Rotation configuration saved successfully!", type = "message")
+      } else {
+        showNotification("Failed to save rotation configuration", type = "error")
+      }
+    }
     
     # ============================= #
     # /// Output render \\\ ####  
     # ============================= #    
     
+    # Rotation config status
+    output$rotation_config_status <- renderText({
+      if (rotation_values$inputs_changed) {
+        "Configuration modified - click Save Configuration to save changes"
+      } else {
+        ""
+      }
+    })
     
     
     # rotation status display ####

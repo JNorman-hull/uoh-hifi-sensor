@@ -108,6 +108,42 @@ accelerationSidebarUI <- function(id) {
         
         summarytableSidebarUI(ns("acceleration_summary")),
         
+        hr(),
+        configurationSidebarUI(ns("acceleration_config"), config_type = "acc", 
+                               label = "Acceleration configuration:"),
+        
+        h4("Acceleration Parameters"),
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("height"), "Height:", 
+                         value = NULL, min = 0, max = 1000, step = 1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("prominence"), "Prominence:", 
+                         value = NULL, min = 0, max = 100, step = 0.1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("interpeak"), "Interpeak:", 
+                         value = NULL, min = 0, max = 1, step = 0.001, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("strike_threshold"), "Strike threshold:", 
+                         value = NULL, min = 0, max = 1000, step = 1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("collision_threshold"), "Collision threshold:", 
+                         value = NULL, min = 0, max = 1000, step = 1, width = "100%")),
+        
+        div(style = "margin-bottom: 15px;",
+            textInput(ns("acceleration_config_label"), "Configuration label:", 
+                      value = "", width = "100%", placeholder = "e.g., Custom_acceleration_config")),
+        
+        actionButton(ns("save_acceleration_config"), "Save Configuration", 
+                     class = "btn-success btn-block"),
+        
+        textOutput(ns("acceleration_config_status")),
+        
+        hr(),
+        
         hr(), h4("Plot controls"),
         plotSidebarUI(ns("acceleration_plot"), 
                       show_left_var = TRUE,   
@@ -152,7 +188,9 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     
     # acceleration state ####
     acceleration_values <- reactiveValues(
-      data_updated = 0            # Counter to trigger data refresh
+      acceleration_config = NULL,
+      baseline_config = NULL,
+      inputs_changed = FALSE
     )
     
     # Get roi boundaries ####
@@ -246,7 +284,76 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     })
     
     
+    # ============================= #
+    # /// Acceleration configuration \\\ ####  
+    # ============================= #
     
+    # Load acceleration configurations
+    acceleration_config <- configurationServer("acceleration_config",
+                                               output_dir = output_dir,
+                                               config_type = "acc",
+                                               sensor_name = reactive(sensor_selector$selected_sensor()),
+                                               auto_select_sensor_config = TRUE)
+    
+    # Store current config and populate inputs
+    observe({
+      acceleration_values$acceleration_config <- acceleration_config$current_config()
+      acceleration_values$baseline_config <- acceleration_values$acceleration_config
+      acceleration_values$inputs_changed <- FALSE
+      
+      config <- acceleration_values$acceleration_config
+      if (!is.null(config)) {
+        updateTextInput(session, "acceleration_config_label", value = config$label)
+        updateNumericInput(session, "height", value = config$height)
+        updateNumericInput(session, "prominence", value = config$prominence)
+        updateNumericInput(session, "interpeak", value = config$interpeak)
+        updateNumericInput(session, "strike_threshold", value = config$strike_threshold)
+        updateNumericInput(session, "collision_threshold", value = config$collision_threshold)
+      }
+    })
+    
+    # Track changes in inputs
+    observe({
+      if (!is.null(acceleration_values$baseline_config)) {
+        config <- acceleration_values$baseline_config
+        
+        inputs_changed <- (
+          input$acceleration_config_label != (config$label %||% "") ||
+            input$height != (config$height %||% 0) ||
+            input$prominence != (config$prominence %||% 0) ||
+            input$interpeak != (config$interpeak %||% 0) ||
+            input$strike_threshold != (config$strike_threshold %||% 0) ||
+            input$collision_threshold != (config$collision_threshold %||% 0)
+        )
+        
+        acceleration_values$inputs_changed <- inputs_changed
+      } else {
+        # For no config, check if any field has content
+        inputs_changed <- (
+          nchar(trimws(input$acceleration_config_label)) > 0 ||
+            !is.null(input$height) ||
+            !is.null(input$prominence) ||
+            !is.null(input$interpeak) ||
+            !is.null(input$strike_threshold) ||
+            !is.null(input$collision_threshold)
+        )
+        
+        acceleration_values$inputs_changed <- inputs_changed
+      }
+    })
+    
+    # Button state management for save acceleration config
+    observe({
+      can_save <- acceleration_values$inputs_changed && 
+        !is.null(input$acceleration_config_label) && 
+        nchar(trimws(input$acceleration_config_label)) > 0
+      
+      if (can_save) {
+        shinyjs::enable("save_acceleration_config")
+      } else {
+        shinyjs::disable("save_acceleration_config")
+      }
+    })
     # ============================= #
     # /// Event handlers \\\ ####  
     # ============================= # 
@@ -259,18 +366,96 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
         showNotification("Please select a sensor first", type = "warning")
       }
     })
+    # Save acceleration configuration
+    observeEvent(input$save_acceleration_config, {
+      config_name <- trimws(input$acceleration_config_label)
+      
+      if (nchar(config_name) == 0) {
+        showNotification("Please enter a configuration label", type = "error")
+        return()
+      }
+      
+      # Check if config already exists
+      existing_configs <- acceleration_config$all_configs()
+      if (!is.null(existing_configs) && config_name %in% names(existing_configs)) {
+        showModal(modalDialog(
+          title = "Configuration Exists",
+          paste("Configuration '", config_name, "' already exists. Replace existing configuration?"),
+          footer = tagList(
+            modalButton("Cancel"),
+            actionButton(ns("confirm_save_acceleration_config"), "Replace", class = "btn-warning")
+          ),
+          size = "m"
+        ))
+      } else {
+        save_acceleration_configuration()
+      }
+    })
     
+    # Confirm save acceleration configuration
+    observeEvent(input$confirm_save_acceleration_config, {
+      removeModal()
+      save_acceleration_configuration()
+    })
     # ============================= #
     # /// Helper functions \\\ ####  
     # ============================= # 
     
-    # Add helper functions here as needed
+    # Save acceleration configuration function
+    save_acceleration_configuration <- function() {
+      config_name <- trimws(input$acceleration_config_label)
+      
+      # Create acceleration configuration values
+      acceleration_config_values <- c(
+        input$height,
+        input$prominence,
+        input$interpeak,
+        input$strike_threshold,
+        input$collision_threshold
+      )
+      
+      # Save configuration using shared function
+      success <- save_config_value(
+        output_dir = output_dir(),
+        config_type = "acc",
+        key = config_name,
+        value = acceleration_config_values
+      )
+      
+      if (success) {
+        # Reload configurations and trigger global updates
+        acceleration_config$reload_configs()
+        trigger_summary_update()
+        
+        # Reset change tracking
+        acceleration_values$inputs_changed <- FALSE
+        acceleration_values$baseline_config <- list(
+          label = config_name,
+          height = input$height,
+          prominence = input$prominence,
+          interpeak = input$interpeak,
+          strike_threshold = input$strike_threshold,
+          collision_threshold = input$collision_threshold
+        )
+        
+        showNotification("Acceleration configuration saved successfully!", type = "message")
+      } else {
+        showNotification("Failed to save acceleration configuration", type = "error")
+      }
+    }
     
     # ============================= #
     # /// Output render \\\ ####  
     # ============================= #    
     
-    
+    # Acceleration config status
+    output$acceleration_config_status <- renderText({
+      if (acceleration_values$inputs_changed) {
+        "Configuration modified - click Save Configuration to save changes"
+      } else {
+        ""
+      }
+    })
     
     # acceleration status display ####
     status_controls <- statusModuleServer("status_display",

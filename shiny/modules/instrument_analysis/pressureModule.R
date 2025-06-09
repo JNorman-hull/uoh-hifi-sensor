@@ -118,6 +118,33 @@ pressureSidebarUI <- function(id) {
         
         summarytableSidebarUI(ns("pressure_summary")),
         
+        hr(),
+        configurationSidebarUI(ns("pressure_config"), config_type = "pres", 
+                               label = "Pressure configuration:"),
+        
+        h4("Pressure Parameters"),
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("acclim_pres_surface"), "Surface acclimation (kPa):", 
+                         value = NULL, min = 0, max = 200, step = 0.1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("acclim_pres_depth"), "Depth acclimation (kPa):", 
+                         value = NULL, min = 0, max = 200, step = 0.1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("hydrostatic_pressure"), "Hydrostatic pressure:", 
+                         value = NULL, min = 0, max = 20, step = 0.01, width = "100%")),
+        
+        div(style = "margin-bottom: 15px;",
+            textInput(ns("pressure_config_label"), "Configuration label:", 
+                      value = "", width = "100%", placeholder = "e.g., Custom_depth_config")),
+        
+        actionButton(ns("save_pressure_config"), "Save Configuration", 
+                     class = "btn-success btn-block"),
+        
+        textOutput(ns("pressure_config_status")),
+        
+
         hr(), h4("Plot controls"),
         plotSidebarUI(ns("pressure_plot"), 
                       show_left_var = TRUE,   
@@ -162,7 +189,9 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
 
 # pressure state ####
     pressure_values <- reactiveValues(
-      pressure_config = NULL          
+      pressure_config = NULL,
+      baseline_config = NULL,
+      inputs_changed = FALSE
     )
     
 # Get roi boundaries ####
@@ -211,10 +240,67 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
     })
     
     # ============================= #
+    # /// Pressure configuration \\\ ####  
+    # ============================= #
+    
+    # Load pressure configurations
+    pressure_config <- configurationServer("pressure_config",
+                                           output_dir = output_dir,
+                                           config_type = "pres",
+                                           sensor_name = reactive(sensor_selector$selected_sensor()),
+                                           auto_select_sensor_config = TRUE)
+    
+    # Store current config and populate inputs
+    observe({
+      pressure_values$pressure_config <- pressure_config$current_config()
+      pressure_values$baseline_config <- pressure_values$pressure_config
+      pressure_values$inputs_changed <- FALSE
+      
+      config <- pressure_values$pressure_config
+      if (!is.null(config)) {
+        updateTextInput(session, "pressure_config_label", value = config$label)
+        updateNumericInput(session, "acclim_pres_surface", value = config$acclim_pres_surface)
+        updateNumericInput(session, "acclim_pres_depth", value = config$acclim_pres_depth)
+        updateNumericInput(session, "hydrostatic_pressure", value = config$hydrostatic_pressure)
+      }
+    })
+    
+    # Track changes in inputs
+    observe({
+      if (!is.null(pressure_values$baseline_config)) {
+        config <- pressure_values$baseline_config
+        
+        inputs_changed <- (
+          input$pressure_config_label != (config$label %||% "") ||
+            input$acclim_pres_surface != (config$acclim_pres_surface %||% 0) ||
+            input$acclim_pres_depth != (config$acclim_pres_depth %||% 0) ||
+            input$hydrostatic_pressure != (config$hydrostatic_pressure %||% 0)
+        )
+        
+        pressure_values$inputs_changed <- inputs_changed
+      } else {
+        # For no config, check if any field has content
+        inputs_changed <- (
+          nchar(trimws(input$pressure_config_label)) > 0 ||
+            !is.null(input$acclim_pres_surface) ||
+            !is.null(input$acclim_pres_depth) ||
+            !is.null(input$hydrostatic_pressure)
+        )
+        
+        pressure_values$inputs_changed <- inputs_changed
+      }
+    })
+    
+    # ============================= #
     # /// UI State management \\\ ####  
     # ============================= # 
     
-
+    
+    # Store current config in reactive values
+    observe({
+      pressure_values$pressure_config <- pressure_config$current_config()
+    })
+    
 
     # Enable/disable normalized checkbox based on sensor status  
     observe({
@@ -245,6 +331,11 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
       }
     })  
     
+ 
+    # ============================= #
+    # /// Event handlers \\\ ####  
+    # ============================= # 
+    
     # Auto-uncheck nadir when normalized is checked
     observeEvent(input$`pressure_plot-show_normalized`, {
       if (input$`pressure_plot-show_normalized`) {
@@ -252,11 +343,6 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
       }
     })
     
-    
-    
-    # ============================= #
-    # /// Event handlers \\\ ####  
-    # ============================= # 
     
     # Handle pressure info addition
     observeEvent(input$add_deploy_btn, {
@@ -267,18 +353,107 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
       }
     })
     
+    # Save pressure configuration
+    observeEvent(input$save_pressure_config, {
+      config_name <- trimws(input$pressure_config_label)
+      
+      if (nchar(config_name) == 0) {
+        showNotification("Please enter a configuration label", type = "error")
+        return()
+      }
+      
+      # Check if config already exists
+      existing_configs <- pressure_config$all_configs()
+      if (!is.null(existing_configs) && config_name %in% names(existing_configs)) {
+        showModal(modalDialog(
+          title = "Configuration Exists",
+          paste("Configuration '", config_name, "' already exists. Replace existing configuration?"),
+          footer = tagList(
+            modalButton("Cancel"),
+            actionButton(ns("confirm_save_pressure_config"), "Replace", class = "btn-warning")
+          ),
+          size = "m"
+        ))
+      } else {
+        save_pressure_configuration()
+      }
+    })
+    
+    # Confirm save pressure configuration
+    observeEvent(input$confirm_save_pressure_config, {
+      removeModal()
+      save_pressure_configuration()
+    })
+    
+    # Button state management for save pressure config
+    observe({
+      can_save <- pressure_values$inputs_changed && 
+        !is.null(input$pressure_config_label) && 
+        nchar(trimws(input$pressure_config_label)) > 0
+      
+      if (can_save) {
+        shinyjs::enable("save_pressure_config")
+      } else {
+        shinyjs::disable("save_pressure_config")
+      }
+    })
+    
     # ============================= #
     # /// Helper functions \\\ ####  
     # ============================= # 
     
-    # Add helper functions here as needed
+    # Save pressure configuration function
+    save_pressure_configuration <- function() {
+      config_name <- trimws(input$pressure_config_label)
+      
+      # Create pressure configuration values
+      pressure_config_values <- c(
+        input$acclim_pres_surface,
+        input$acclim_pres_depth,
+        input$hydrostatic_pressure
+      )
+      
+      # Save configuration using shared function
+      success <- save_config_value(
+        output_dir = output_dir(),
+        config_type = "pres",
+        key = config_name,
+        value = pressure_config_values
+      )
+      
+      if (success) {
+        # Reload configurations and trigger global updates
+        pressure_config$reload_configs()
+        trigger_summary_update()
+        
+        # Reset change tracking
+        pressure_values$inputs_changed <- FALSE
+        pressure_values$baseline_config <- list(
+          label = config_name,
+          acclim_pres_surface = input$acclim_pres_surface,
+          acclim_pres_depth = input$acclim_pres_depth,
+          hydrostatic_pressure = input$hydrostatic_pressure
+        )
+        
+        showNotification("Pressure configuration saved successfully!", type = "message")
+      } else {
+        showNotification("Failed to save pressure configuration", type = "error")
+      }
+    }
     
     # ============================= #
     # /// Output render \\\ ####  
-    # ============================= #    
+    # ============================= #   
     
-    
-    
+    # Pressure config status
+    output$pressure_config_status <- renderText({
+      if (pressure_values$inputs_changed) {
+        "Configuration modified - click Save Configuration to save changes"
+      } else {
+        ""
+      }
+    })
+  
 # Pressure status display ####
     status_controls <- statusModuleServer("status_display",
                                           sensor_name_reactive = reactive(sensor_selector$selected_sensor()),
