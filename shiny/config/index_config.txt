@@ -32,7 +32,6 @@ pres_lrpc_processed = N
 acc_config = NA
 all_acc_processed = N
 acc_sum_processed = N
-acc_peak_config = NA
 acc_hig_peaks_processed = N
 acc_strike_processed = N
 acc_collision_processed = N

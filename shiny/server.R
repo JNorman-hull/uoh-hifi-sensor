@@ -59,7 +59,7 @@ server <- function(input, output, session) {
                  session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
   
   # Handle process button click here since it spans modules
-  observeEvent(input$`file_selection-process_btn`, {
+  observeEvent(input$`raw_data-process_btn`, {
     processing$process_sensors()
   })
   
