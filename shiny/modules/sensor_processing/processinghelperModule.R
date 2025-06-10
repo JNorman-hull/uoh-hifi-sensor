@@ -2,6 +2,18 @@ processinghelperUI <- function(id) {
   ns <- NS(id)
   
   tagList(
+    # Add CSS to prevent greying out
+    tags$style(HTML(paste0("
+      #", ns("process_log"), " {
+        opacity: 1 !important;
+        color: #000 !important;
+      }
+      #", ns("process_log"), ".recalculating {
+        opacity: 1 !important;
+        color: #000 !important;
+      }
+    "))),
+    
     verbatimTextOutput(ns("process_log")) %>%
       tagAppendAttributes(style = "height: 250px; overflow-y: auto;
                           overflow-x: auto; white-space: pre-wrap;
@@ -17,9 +29,18 @@ processinghelperUI <- function(id) {
 create_log_updater <- function(reactive_values, session) {
   function(message) {
     reactive_values$log_messages <- c(reactive_values$log_messages, message)
-    # Send custom message to immediately update UI
-    session$sendCustomMessage("updateProcessLog", 
-                              list(text = paste(reactive_values$log_messages, collapse = "\n")))
+    
+    # Get the namespaced ID for the log element
+    log_id <- session$ns("process_log")
+    
+    # Update DOM directly, bypassing Shiny's message queue
+    shinyjs::runjs(paste0("
+      var logElement = document.getElementById('", log_id, "');
+      if (logElement) {
+        logElement.textContent = '", paste(reactive_values$log_messages, collapse = "\\n"), "';
+        logElement.scrollTop = logElement.scrollHeight;
+      }
+    "))
   }
 }
 processinghelperServer <- function(id, selected_sensors, raw_data_path, output_dir) {
