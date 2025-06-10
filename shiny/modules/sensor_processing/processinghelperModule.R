@@ -2,8 +2,7 @@ processinghelperUI <- function(id) {
   ns <- NS(id)
   
   tagList(
-    verbatimTextOutput(ns("process_log"), 
-                       placeholder = FALSE) %>%
+    verbatimTextOutput(ns("process_log")) %>%
       tagAppendAttributes(style = "height: 250px; overflow-y: auto;
                           overflow-x: auto; white-space: pre-wrap;
                           font-family: monospace; font-size: 12px;
@@ -15,14 +14,9 @@ processinghelperUI <- function(id) {
 }
 
 # Helper function to create consistent log updater
-create_log_updater <- function(session, reactive_values) {
+create_log_updater <- function(reactive_values) {
   function(message) {
     reactive_values$log_messages <- c(reactive_values$log_messages, message)
-    session$sendCustomMessage("updateProcessLog", 
-                              list(text = paste(reactive_values$log_messages, collapse = "\n")))
-    # Force immediate update by invalidating reactives
-    shiny::invalidateLater(10, session)
-    Sys.sleep(0.1)  # Small delay to allow UI to update
   }
 }
 
@@ -32,7 +26,7 @@ processinghelperServer <- function(id, selected_sensors, raw_data_path, output_d
     
     # Reactive values
     values <- reactiveValues(
-      log_messages = character(0),
+      log_messages = 'This is the processing log. Processing progress messages will be printed here.',
       summary_data = NULL,
       is_processing = FALSE,
       processing_complete = FALSE,
@@ -40,25 +34,14 @@ processinghelperServer <- function(id, selected_sensors, raw_data_path, output_d
       sensors_actually_processed = character(0)
     )
     
-    # Create the log updater
-    update_log <- create_log_updater(session, values)
-    
-    observe({
-      # Only set initial message if log is empty
-      if (length(values$log_messages) == 0) {
-        isolate({
-          values$log_messages <- 'This is the processing log. Processing progress messages will be printed here.'
-        })
-      }
-    })
+    # CORRECTED: Create the log updater with only one argument
+    update_log <- create_log_updater(values)
     
     # Display processing log
     output$process_log <- renderText({
-      if (length(values$log_messages) == 0) {
-        return('Loading...')  # Fallback message
-      }
       paste(values$log_messages, collapse = "\n")
     })
+    
     # Get summary data from sensor index file using shared function
     summary_data_from_index <- reactive({
       values$processing_complete  # Invalidate when processing completes
