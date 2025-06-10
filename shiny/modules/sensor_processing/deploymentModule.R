@@ -549,31 +549,15 @@ deploymentServer <- function(id, raw_data_path, output_dir, processing_complete,
         ))
       }
       
-      # Get sensors with and without deployment info
-      sensors_with <- sensors_with_deployment()
-      sensors_without <- sensors_without_deployment()
-      
-      # Get row indices for highlighting
-      green_rows <- which(table_data$Filename %in% sensors_with)
-      orange_rows <- which(table_data$Filename %in% sensors_without)
-      
-      # Apply green highlighting for sensors with deployment info
-      if (length(green_rows) > 0) {
-        dt <- dt %>% DT::formatStyle(
-          columns = 1:ncol(table_data),
-          target = 'row',
-          backgroundColor = DT::styleRow(green_rows, 'lightgreen')
+      # Apply conditional formatting based on Status column values
+      dt <- dt %>% DT::formatStyle(
+        "Status",  # Target the Status column
+        target = 'row',  # Apply to entire row
+        backgroundColor = DT::styleEqual(
+          c("Complete", "Required"), 
+          c("lightgreen", "orange")
         )
-      }
-      
-      # Apply orange highlighting for sensors without deployment info
-      if (length(orange_rows) > 0) {
-        dt <- dt %>% DT::formatStyle(
-          columns = 1:ncol(table_data),
-          target = 'row',
-          backgroundColor = DT::styleRow(orange_rows, 'orange')
-        )
-      }
+      )
       
       return(dt)
     }
