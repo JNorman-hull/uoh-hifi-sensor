@@ -15,4 +15,4 @@ LaTeX: pdfLaTeX
 
 PythonType: conda
 PythonVersion: 3.10.14
-PythonPath: C:/Users/591302/AppData/Local/r-miniconda/envs/r-reticulate/python.exe
+PythonPath: C:/Users/591302/AppData/Local/r-miniconda/envs/rap_pro/python.exe
