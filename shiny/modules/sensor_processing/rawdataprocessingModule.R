@@ -47,6 +47,7 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
+    
     # Prepare sensor data
     sensor_data <- reactive({
       req(raw_data_path())
@@ -105,14 +106,29 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
       selection_mode = 'multiple'
     )
     
-    # Return values
+    observeEvent(input$process_btn, {
+      processing_helper$process_sensors()
+    })
+    
+    selected_sensors <- table_results$selected_items
+    
+    # Then call processinghelperServer
+    processing_helper <- processinghelperServer("processing_helper", 
+                                                selected_sensors, 
+                                                raw_data_path, 
+                                                output_dir)
+    
     return(list(
       selected_sensors = table_results$selected_items,
       sensor_names = reactive({
         data <- sensor_data()
         if (is.null(data)) character(0) else data$Filename
       }),
-      process_trigger = reactive(input$process_btn)
+      process_trigger = reactive(input$process_btn),
+      # Return processing helper outputs
+      processing_complete = processing_helper$processing_complete,
+      newly_processed_sensors = processing_helper$newly_processed_sensors,
+      summary_data = processing_helper$summary_data
     ))
   })
 }

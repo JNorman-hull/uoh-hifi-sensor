@@ -36,32 +36,31 @@ server <- function(input, output, session) {
   # Create a default processing_complete for initial load
   default_processing_complete <- reactive(FALSE)
   
-  # Initialize file_selection first with default
-  file_selection <- rawdataprocessingServer("raw_data", raw_data_path, output_dir, default_processing_complete)
+  raw_processing <- rawdataprocessingServer("raw_data", raw_data_path, output_dir, default_processing_complete)
   
-  # Then processing with selected sensors
-  processing <- processinghelperServer("processing_helper", file_selection$selected_sensors, raw_data_path, output_dir)
+  # Initialize other modules using outputs from raw_processing
+  processingresultsServer("processing_results", 
+                          raw_processing$newly_processed_sensors, 
+                          raw_processing$processing_complete)
   
   # Initialize other modules with real processing_complete
-  processingresultsServer("processing_results", processing$newly_processed_sensors, processing$processing_complete)
-  plotsServer("plots", output_dir, processing$summary_data, processing$processing_complete)
-  roiServer("roi", output_dir, processing$summary_data, processing$processing_complete, 
+  plotsServer("plots", output_dir, raw_processing$summary_data, raw_processing$processing_complete)
+  
+  roiServer("roi", output_dir, raw_processing$summary_data, raw_processing$processing_complete, 
             session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
-  deploymentServer("deployment_info", raw_data_path, output_dir, processing$processing_complete, 
+  
+  deploymentServer("deployment_info", raw_data_path, output_dir, raw_processing$processing_complete, 
                    session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
-  pressureServer("pressure", raw_data_path, output_dir, processing$processing_complete, 
+  
+  pressureServer("pressure", raw_data_path, output_dir, raw_processing$processing_complete, 
                  session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
   
-  accelerationServer("acceleration", raw_data_path, output_dir, processing$processing_complete, 
+  accelerationServer("acceleration", raw_data_path, output_dir, raw_processing$processing_complete, 
                      session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
   
-  rotationServer("rotation", raw_data_path, output_dir, processing$processing_complete, 
+  rotationServer("rotation", raw_data_path, output_dir, raw_processing$processing_complete, 
                  session_state, global_sensor_state, trigger_data_update, trigger_summary_update)
   
-  # Handle process button click here since it spans modules
-  observeEvent(input$`raw_data-process_btn`, {
-    processing$process_sensors()
-  })
   
   observe({
     shinyjs::hide("sidebar_pressure")

@@ -20,6 +20,8 @@ create_log_updater <- function(session, reactive_values) {
     reactive_values$log_messages <- c(reactive_values$log_messages, message)
     session$sendCustomMessage("updateProcessLog", 
                               list(text = paste(reactive_values$log_messages, collapse = "\n")))
+    # Force immediate update by invalidating reactives
+    shiny::invalidateLater(10, session)
     Sys.sleep(0.1)  # Small delay to allow UI to update
   }
 }
