@@ -259,7 +259,8 @@ processinghelperServer <- function(id, selected_sensors, raw_data_path, output_d
       summary_data = summary_data_from_index,
       processing_complete = reactive(values$processing_complete),
       newly_processed_sensors = newly_processed_sensors,
-      process_sensors = process_sensors
+      process_sensors = process_sensors,
+       is_processing = reactive(values$is_processing) 
     ))
   })
 }

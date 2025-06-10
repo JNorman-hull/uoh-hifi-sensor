@@ -110,6 +110,25 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
       processing_helper$process_sensors()
     })
     
+    observe({
+      selected_sensors <- table_results$selected_items()
+      is_processing <- processing_helper$is_processing()
+      
+      # Enable button only when sensors are selected AND not processing
+      can_process <- length(selected_sensors) > 0 && !is_processing
+      
+      if (can_process) {
+        shinyjs::enable("process_btn")
+      } else {
+        shinyjs::disable("process_btn")
+      }
+    })
+    
+    observeEvent(input$process_btn, {
+      shinyjs::disable("process_btn")  # Disable immediately on click
+      processing_helper$process_sensors()
+    })
+    
     selected_sensors <- table_results$selected_items
     
     # Then call processinghelperServer
