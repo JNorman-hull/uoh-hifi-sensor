@@ -1,9 +1,3 @@
----
-editor_options: 
-  markdown: 
-    wrap: 72
----
-
 # RAP Pro - Robust Autonomous Pressure and Inertial Devices (RAPID) analysis suite
 
 A Shiny web application for processing and analyzing hydraulic passage
