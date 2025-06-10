@@ -43,14 +43,38 @@ rawdataprocessingsidebarUI <- function(id) {
   )
 }
 
-rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_complete = reactive(FALSE)) {
+rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_complete = reactive(FALSE),
+                                    global_sensor_state, trigger_data_update, trigger_summary_update) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
+    # Get processed sensors
+    processed_sensors <- reactive({
+      if (is.null(output_dir)) return(character(0))
+      
+      global_sensor_state$processing_updated
+      global_sensor_state$data_updated
+      
+      tryCatch({
+        processing_complete()
+      }, error = function(e) {})
+      
+      index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
+      if (is.null(index_df)) {
+        return(character(0))
+      }
+      
+      tryCatch({
+        return(index_df$file)
+      }, error = function(e) {
+        return(character(0))
+      })
+    })
     
     # Prepare sensor data
     sensor_data <- reactive({
       req(raw_data_path())
+      global_sensor_state$processing_updated
       
       sensor_names <- get_sensor_names(raw_data_path())
       
@@ -71,40 +95,25 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
       tibble(
         No. = seq_along(sensor_names),
         Filename = sensor_names,
-        Sensor = map_chr(sensor_info, "sensor"),
-        Date = map_chr(sensor_info, "date_deploy"),
-        Time = map_chr(sensor_info, "time_deploy")
+        Sensor = map_chr(sensor_info, ~ .x$sensor %||% "Unknown"),
+        Date = map_chr(sensor_info, ~ .x$date_deploy %||% "Unknown"),
+        Time = map_chr(sensor_info, ~ .x$time_deploy %||% "Unknown"),
+        Status = ifelse(sensor_names %in% processed, "Processed", "Requires Processing")
       )
     })
     
-    # Get processed sensors
-    processed_sensors <- reactive({
-      if (is.null(output_dir)) return(character(0))
-      
-      tryCatch({
-        processing_complete()
-      }, error = function(e) {})
-      
-      index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
-      if (is.null(index_df)) {
-        return(character(0))
-      }
-      
-      tryCatch({
-        return(index_df$file)
-      }, error = function(e) {
-        return(character(0))
-      })
-    })
+    
     
     # Use the shared table module
     table_results <- fileSelectionTableServer(
       "sensor_table",
       sensor_data_reactive = sensor_data,
-      highlight_sensors_reactive = processed_sensors,
+      highlight_sensors_reactive = processed_sensors(), 
       enable_selection = TRUE,
       selection_mode = 'multiple'
     )
+    
+  
     
     observeEvent(input$process_btn, {
       processing_helper$process_sensors()
@@ -135,7 +144,10 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
     processing_helper <- processinghelperServer("processing_helper", 
                                                 selected_sensors, 
                                                 raw_data_path, 
-                                                output_dir)
+                                                output_dir,
+                                                global_sensor_state,
+                                                trigger_data_update,
+                                                trigger_summary_update)
     
     return(list(
       selected_sensors = table_results$selected_items,

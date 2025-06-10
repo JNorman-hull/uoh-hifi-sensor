@@ -43,7 +43,8 @@ create_log_updater <- function(reactive_values, session) {
     "))
   }
 }
-processinghelperServer <- function(id, selected_sensors, raw_data_path, output_dir) {
+processinghelperServer <- function(id, selected_sensors, raw_data_path, output_dir,
+                                   global_sensor_state, trigger_data_update, trigger_summary_update) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -205,6 +206,11 @@ processinghelperServer <- function(id, selected_sensors, raw_data_path, output_d
       # Update completion state
       values$processing_complete <- TRUE
       values$is_processing <- FALSE
+      
+      if (exists("global_sensor_state")) {
+        global_sensor_state$processing_updated <- global_sensor_state$processing_updated + 1
+        global_sensor_state$data_updated <- global_sensor_state$data_updated + 1
+      }
       
       # Send completion notification
       session$sendCustomMessage("processingComplete", list(success = TRUE))
