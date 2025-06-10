@@ -99,26 +99,46 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
         Sensor = map_chr(sensor_info, ~ .x$sensor %||% "Unknown"),
         Date = map_chr(sensor_info, ~ .x$date_deploy %||% "Unknown"),
         Time = map_chr(sensor_info, ~ .x$time_deploy %||% "Unknown"),
-        Status = ifelse(sensor_names %in% processed, "Processed", "Requires Processing")
+        Status = ifelse(sensor_names %in% processed_sensors(), "Processed", "Requires Processing")
       )
     })
     
     
     
     # Use the shared table module
+    # Add custom formatting function
+    custom_table_formatting <- function(dt, table_data) {
+      if (is.null(table_data) || nrow(table_data) == 0) {
+        return(DT::datatable(
+          data.frame(Message = "No raw sensor data found. Add .IMP and .HIG files to ./raw_sens_data"),
+          options = list(dom = 't', ordering = FALSE),
+          rownames = FALSE,
+          selection = 'none'
+        ))
+      }
+      
+      # Apply conditional formatting based on Status column values
+      dt <- dt %>% DT::formatStyle(
+        "Status",  # Target the Status column
+        target = 'row',  # Apply to entire row
+        backgroundColor = DT::styleEqual(
+          c("Processed", "Requires Processing"), 
+          c("lightgreen", "orange")
+        )
+      )
+      
+      return(dt)
+    }
+    
+    # Use custom formatting instead of highlight_sensors_reactive
     table_results <- fileSelectionTableServer(
       "sensor_table",
       sensor_data_reactive = sensor_data,
-      highlight_sensors_reactive = processed_sensors(), 
+      highlight_sensors_reactive = reactive(NULL),  # No longer needed
       enable_selection = TRUE,
-      selection_mode = 'multiple'
+      selection_mode = 'multiple',
+      custom_formatting = custom_table_formatting
     )
-    
-  
-    
-    observeEvent(input$process_btn, {
-      processing_helper$process_sensors()
-    })
     
     observe({
       selected_sensors <- table_results$selected_items()
@@ -137,6 +157,14 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
     observeEvent(input$process_btn, {
       shinyjs::disable("process_btn")  # Disable immediately on click
       processing_helper$process_sensors()
+    })
+    
+    observe({
+      if (processing_helper$processing_complete()) {
+        # Clear selection by updating the table proxy
+        DT::dataTableProxy('sensor_table-selection_table', session = session) %>%
+          DT::selectRows(integer(0))
+      }
     })
     
     selected_sensors <- table_results$selected_items
