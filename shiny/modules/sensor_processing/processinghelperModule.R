@@ -14,12 +14,14 @@ processinghelperUI <- function(id) {
 }
 
 # Helper function to create consistent log updater
-create_log_updater <- function(reactive_values) {
+create_log_updater <- function(reactive_values, session) {
   function(message) {
     reactive_values$log_messages <- c(reactive_values$log_messages, message)
+    # Send custom message to immediately update UI
+    session$sendCustomMessage("updateProcessLog", 
+                              list(text = paste(reactive_values$log_messages, collapse = "\n")))
   }
 }
-
 processinghelperServer <- function(id, selected_sensors, raw_data_path, output_dir) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -34,8 +36,8 @@ processinghelperServer <- function(id, selected_sensors, raw_data_path, output_d
       sensors_actually_processed = character(0)
     )
     
-    # CORRECTED: Create the log updater with only one argument
-    update_log <- create_log_updater(values)
+
+    update_log <- create_log_updater(values, session)
     
     # Display processing log
     output$process_log <- renderText({
@@ -70,72 +72,85 @@ processinghelperServer <- function(id, selected_sensors, raw_data_path, output_d
     })
     
     # Processing function with consistent logging
+    # Processing function with real-time updates
     process_sensors_step_by_step <- function(selected_sensors, raw_data_path, output_dir) {
-      update_log(paste("Processing", length(selected_sensors), "selected sensors"))
-      
-      # Initialize counters for summary statistics
-      counters <- list(
-        n_files_w_time = 0,
-        n_files_w_hig = 0,
-        n_files_w_pres = 0,
-        n_processed = 0,
-        n_failed = 0
-      )
-      
-      # Process each sensor one at a time
-      for (i in seq_along(selected_sensors)) {
-        sensor_name <- selected_sensors[i]
-        update_log(paste("Processing sensor", i, "/", length(selected_sensors), ":", sensor_name))
+      withProgress(message = 'Processing sensors...', value = 0, {
+        update_log(paste("Processing", length(selected_sensors), "selected sensors"))
         
-        # Check if files exist
-        imp_file <- file.path(raw_data_path, paste0(sensor_name, ".IMP"))
-        hig_file <- file.path(raw_data_path, paste0(sensor_name, ".HIG"))
+        # Initialize counters for summary statistics
+        counters <- list(
+          n_files_w_time = 0,
+          n_files_w_hig = 0,
+          n_files_w_pres = 0,
+          n_processed = 0,
+          n_failed = 0
+        )
         
-        if (file.exists(imp_file) && file.exists(hig_file)) {
-          tryCatch({
-            result <- py$process_imp_hig_direct(imp_file, hig_file, output_dir)
-            combined_data <- result[[1]]
-            summary_info <- result[[2]]
-            
-            # Count error types for summary
-            if (grepl("TIME:", summary_info$messages)) {
-              counters$n_files_w_time <- counters$n_files_w_time + 1
-            }
-            if (grepl("HIG:", summary_info$messages)) {
-              counters$n_files_w_hig <- counters$n_files_w_hig + 1
-            }
-            if (grepl("PRES:", summary_info$messages)) {
-              counters$n_files_w_pres <- counters$n_files_w_pres + 1
-            }
-            
-            counters$n_processed <- counters$n_processed + 1
-            update_log(paste(sensor_name, "processed successfully"))
-            
-          }, error = function(e) {
-            counters$n_failed <<- counters$n_failed + 1
-            error_msg <- paste("Error processing", sensor_name, ":", e$message)
-            update_log(error_msg)
-          })
-        } else {
-          counters$n_failed <- counters$n_failed + 1
-          missing_msg <- paste("Missing IMP or HIG file for sensor:", sensor_name)
-          update_log(missing_msg)
+        # Process each sensor one at a time
+        for (i in seq_along(selected_sensors)) {
+          sensor_name <- selected_sensors[i]
+          
+          # Update progress bar and log
+          incProgress(1/length(selected_sensors), 
+                      detail = paste("Processing", sensor_name))
+          update_log(paste("Processing sensor", i, "/", length(selected_sensors), ":", sensor_name))
+          
+          # Force UI update by yielding control briefly
+          Sys.sleep(0.01)
+          
+          # Check if files exist
+          imp_file <- file.path(raw_data_path, paste0(sensor_name, ".IMP"))
+          hig_file <- file.path(raw_data_path, paste0(sensor_name, ".HIG"))
+          
+          if (file.exists(imp_file) && file.exists(hig_file)) {
+            tryCatch({
+              result <- py$process_imp_hig_direct(imp_file, hig_file, output_dir)
+              combined_data <- result[[1]]
+              summary_info <- result[[2]]
+              
+              # Count error types for summary
+              if (grepl("TIME:", summary_info$messages)) {
+                counters$n_files_w_time <- counters$n_files_w_time + 1
+              }
+              if (grepl("HIG:", summary_info$messages)) {
+                counters$n_files_w_hig <- counters$n_files_w_hig + 1
+              }
+              if (grepl("PRES:", summary_info$messages)) {
+                counters$n_files_w_pres <- counters$n_files_w_pres + 1
+              }
+              
+              counters$n_processed <- counters$n_processed + 1
+              update_log(paste(sensor_name, "processed successfully"))
+              
+            }, error = function(e) {
+              counters$n_failed <<- counters$n_failed + 1
+              error_msg <- paste("Error processing", sensor_name, ":", e$message)
+              update_log(error_msg)
+            })
+          } else {
+            counters$n_failed <- counters$n_failed + 1
+            missing_msg <- paste("Missing IMP or HIG file for sensor:", sensor_name)
+            update_log(missing_msg)
+          }
+          
+          # Another brief yield to allow UI updates
+          Sys.sleep(0.01)
         }
-      }
-      
-      # Final summary
-      update_log("Sensor processing complete.")
-      update_log(paste(counters$n_processed, "total sensors processed successfully"))
-      if (counters$n_failed > 0) {
-        update_log(paste(counters$n_failed, "sensors failed to process"))
-      }
-      if (counters$n_processed > 0) {
-        update_log(paste(counters$n_files_w_pres, "/", counters$n_processed, "sensors contain pressure data errors"))
-        update_log(paste(counters$n_files_w_time, "/", counters$n_processed, "sensors contain time series errors"))
-        update_log(paste(counters$n_files_w_hig, "/", counters$n_processed, "sensors contain strike/collision event (HIG ≥ 400g)"))
-      }
-      
-      return(list(counters = counters))
+        
+        # Final summary
+        update_log("Sensor processing complete.")
+        update_log(paste(counters$n_processed, "total sensors processed successfully"))
+        if (counters$n_failed > 0) {
+          update_log(paste(counters$n_failed, "sensors failed to process"))
+        }
+        if (counters$n_processed > 0) {
+          update_log(paste(counters$n_files_w_pres, "/", counters$n_processed, "sensors contain pressure data errors"))
+          update_log(paste(counters$n_files_w_time, "/", counters$n_processed, "sensors contain time series errors"))
+          update_log(paste(counters$n_files_w_hig, "/", counters$n_processed, "sensors contain strike/collision event (HIG ≥ 400g)"))
+        }
+        
+        return(list(counters = counters))
+      })
     }
     
     # Move the actual processing logic to a separate function
