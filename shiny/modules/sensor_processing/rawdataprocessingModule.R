@@ -44,7 +44,7 @@ rawdataprocessingsidebarUI <- function(id) {
 }
 
 rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_complete = reactive(FALSE),
-                                    global_sensor_state, trigger_data_update, trigger_summary_update) {
+                                    global_sensor_state, trigger_data_update, trigger_summary_update, trigger_processing_update) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -52,8 +52,9 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
     processed_sensors <- reactive({
       if (is.null(output_dir)) return(character(0))
       
+      # Add global state invalidation
+      global_sensor_state$summary_updated
       global_sensor_state$processing_updated
-      global_sensor_state$data_updated
       
       tryCatch({
         processing_complete()
@@ -147,7 +148,8 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
                                                 output_dir,
                                                 global_sensor_state,
                                                 trigger_data_update,
-                                                trigger_summary_update)
+                                                trigger_summary_update,
+                                                trigger_processing_update)
     
     return(list(
       selected_sensors = table_results$selected_items,

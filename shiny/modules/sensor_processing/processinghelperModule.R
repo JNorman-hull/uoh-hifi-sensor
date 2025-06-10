@@ -44,7 +44,7 @@ create_log_updater <- function(reactive_values, session) {
   }
 }
 processinghelperServer <- function(id, selected_sensors, raw_data_path, output_dir,
-                                   global_sensor_state, trigger_data_update, trigger_summary_update) {
+                                   global_sensor_state, trigger_data_update, trigger_summary_update, trigger_processing_update) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -161,6 +161,9 @@ processinghelperServer <- function(id, selected_sensors, raw_data_path, output_d
         
         # Final summary
         update_log("Sensor processing complete.")
+        trigger_data_update()
+        trigger_summary_update()
+        trigger_processing_update() 
         update_log(paste(counters$n_processed, "total sensors processed successfully"))
         if (counters$n_failed > 0) {
           update_log(paste(counters$n_failed, "sensors failed to process"))

@@ -37,7 +37,7 @@ server <- function(input, output, session) {
   default_processing_complete <- reactive(FALSE)
   
   raw_processing <- rawdataprocessingServer("raw_data", raw_data_path, output_dir, default_processing_complete,
-                                            global_sensor_state, trigger_data_update, trigger_summary_update)
+                                            global_sensor_state, trigger_data_update, trigger_summary_update, trigger_processing_update)
   
   # Initialize other modules using outputs from raw_processing
   processingresultsServer("processing_results", 
