@@ -1170,7 +1170,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
 # Helper function to generate duration text
     generate_duration_text <- function(duration_col, prefix_text) {
       req(sensor_selector$selected_sensor())
-      roi_values$summary_updated
+      global_sensor_state$summary_updated
       
       index_df <- get_sensor_index_file(output_dir(), read_data = TRUE)
       if (is.null(index_df)) return(paste0(prefix_text, ": Not calculated"))

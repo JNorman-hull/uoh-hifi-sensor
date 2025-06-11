@@ -3,11 +3,25 @@
 rawdataprocessingUI <- function(id) {
   ns <- NS(id)
   
-  fileSelectionTableUI(
-    ns("sensor_table"),
-    title = "RAW Rapid data index",
-    help_text = "Index of RAW RAPID data files. Green = sensor processed. Orange = sensor requires processing."
+  tagList(
+    # Add folder navigation section
+    fluidRow(
+      column(12,
+             div(id = ns("breadcrumb_container"),
+                 style = "margin-bottom: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
+                 uiOutput(ns("breadcrumb_nav"))
+             ),
+             div(id = ns("folder_container"),
+                 style = "margin-bottom: 15px;",
+                 uiOutput(ns("folder_browser"))
+             )
+      )
+    ),
     
+    fileSelectionTableUI(
+      ns("sensor_table"),
+      help_text = "Index of RAW RAPID data files. Green = sensor processed. Orange = sensor requires processing."
+    )
   )
 }
 
@@ -48,6 +62,35 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
+    # Add folder navigation state
+    folder_state <- reactiveValues(
+      current_path = "",  # Relative path from raw_data_path
+      folder_history = character(0)
+    )
+    
+    # Get current full path
+    current_full_path <- reactive({
+      base_path <- raw_data_path()
+      if (folder_state$current_path == "") {
+        return(base_path)
+      } else {
+        return(file.path(base_path, folder_state$current_path))
+      }
+    })
+    
+    # Get folders in current directory
+    current_folders <- reactive({
+      req(current_full_path())
+      
+      if (!dir.exists(current_full_path())) {
+        return(character(0))
+      }
+      
+      all_items <- list.files(current_full_path(), full.names = FALSE, include.dirs = TRUE)
+      folders <- all_items[file.info(file.path(current_full_path(), all_items))$isdir]
+      return(folders[!is.na(folders)])
+    })
+    
     # Get processed sensors
     processed_sensors <- reactive({
       if (is.null(output_dir)) return(character(0))
@@ -74,10 +117,10 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
     
     # Prepare sensor data
     sensor_data <- reactive({
-      req(raw_data_path())
+      req(current_full_path())
       global_sensor_state$processing_updated
       
-      sensor_names <- get_sensor_names(raw_data_path())
+      sensor_names <- get_sensor_names(current_full_path())
       
       if (length(sensor_names) == 0) return(NULL)
       
@@ -172,12 +215,79 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
     # Then call processinghelperServer
     processing_helper <- processinghelperServer("processing_helper", 
                                                 selected_sensors, 
-                                                raw_data_path, 
+                                                current_full_path,
                                                 output_dir,
                                                 global_sensor_state,
                                                 trigger_data_update,
                                                 trigger_summary_update,
                                                 trigger_processing_update)
+    
+    
+    # Render breadcrumb navigation
+    output$breadcrumb_nav <- renderUI({
+      path_parts <- if (folder_state$current_path == "") {
+        "Raw sensor data"
+      } else {
+        strsplit(folder_state$current_path, "/")[[1]]
+      }
+      
+      breadcrumb_items <- list()
+      breadcrumb_items[[1]] <- actionLink(ns("nav_root"), "Raw sensor data", style = "color: #007bff;")
+      
+      if (length(path_parts) > 0 && path_parts[1] != "Raw sensor data") {
+        for (i in seq_along(path_parts)) {
+          cumulative_path <- paste(path_parts[1:i], collapse = "/")
+          breadcrumb_items[[i + 1]] <- span(" / ")
+          breadcrumb_items[[i + 2]] <- actionLink(ns(paste0("nav_", i)), path_parts[i], 
+                                                  onclick = paste0("Shiny.setInputValue('", ns("navigate_to"), "', '", cumulative_path, "', {priority: 'event'});"),
+                                                  style = "color: #007bff;")
+        }
+      }
+      
+      do.call(tagList, breadcrumb_items)
+    })
+    
+    # Render folder browser
+    output$folder_browser <- renderUI({
+      folders <- current_folders()
+      
+      if (length(folders) == 0) {
+        return(p("No subfolders found", style = "color: #666; font-style: italic;"))
+      }
+      
+      folder_buttons <- map(folders, function(folder) {
+        actionButton(ns(paste0("folder_", folder)), 
+                     folder,
+                     icon = icon("folder"),
+                     class = "btn-outline-primary btn-sm",
+                     style = "margin: 2px;",
+                     onclick = paste0("Shiny.setInputValue('", ns("enter_folder"), "', '", folder, "', {priority: 'event'});"))
+      })
+      
+      tagList(
+        p("Raw RAPID data index:", style = "margin-bottom: 5px; font-weight: bold;"),
+        do.call(tagList, folder_buttons)
+      )
+    })
+    
+    # Handle folder navigation
+    observeEvent(input$enter_folder, {
+      new_path <- if (folder_state$current_path == "") {
+        input$enter_folder
+      } else {
+        file.path(folder_state$current_path, input$enter_folder)
+      }
+      folder_state$current_path <- new_path
+    })
+    
+    observeEvent(input$nav_root, {
+      folder_state$current_path <- ""
+    })
+    
+    observeEvent(input$navigate_to, {
+      folder_state$current_path <- input$navigate_to
+    })
+    
     
     return(list(
       selected_sensors = table_results$selected_items,
