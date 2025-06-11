@@ -753,15 +753,22 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
       tryCatch({
         # Get required data
         sensor_name <- sensor_selector$selected_sensor()
-        config <- pressure_values$pressure_config
+        
+        # Create config from current input values instead of saved config
+        config <- list(
+          label = input$pressure_config_label %||% "Current_values",
+          acclim_pres_surface = input$acclim_pres_surface,
+          acclim_pres_depth = input$acclim_pres_depth,
+          hydrostatic_pressure = input$hydrostatic_pressure
+        )
         
         # Validate inputs
-        if (is.null(config)) {
-          showNotification("Please select a pressure configuration first", type = "error")
+        if (is.null(config$acclim_pres_surface) || is.null(config$acclim_pres_depth)) {
+          showNotification("Please enter surface and depth acclimation values", type = "error")
           return()
         }
         
-        # Perform calculation using helper function (removed nadir parameter)
+        # Perform calculation using helper function
         result <- rate_ratio_analysis(sensor_name, output_dir(), config)
         
         if (result$success) {

@@ -1,56 +1,146 @@
+#Acceleration peak finding functions
+# Follow all existing rules for global state management (always updating global state), safe reading/writing index file and instrument file
+# Manage button states, update generated text
+
+#function: get_peak_params
+# Steps: 
+# Retrieve the config values loaded from the configuration loader: height, prominence, interpeak
+
+
+# function: find_acceleration_peak
+# For selected sensor find acceleration peaks in the 'higacc_mag_g' of the _delineated file
+# Steps: use params from get_peak_params to detect acceleration peaks in the acceleration time series
+# takes the parameters height (e.g., the threshold value of 95g), prominence (e.g., 25g, must rise by 25g above local baseline, scan left and right), interpeak distance (e.g.,  0.002, 4 rows (2 milliseconds). 
+# After the peaks are found (peak_list), they are sorted by time series sequentially and apply a prominence filter to ensure peaks satisfy prominence criteria,
+# neighboring peaks that don't meet interpeak distance removed by evaluation the distance and keeping the maximum peak
+# the peak are listed  as acc_peak_1.time., acc_peak_1.g.
+
+
+#function: evaluate_peak_type
+# Classify each peak as collision or shear based on duration above 70% threshold
+# Compute peak duration: For each event, compute the duration above 70% of the peak amplitude
+#Classify collision vs shear: Compare the duration to 0.0075 s: shorter means collision, longer means shear
+# we run a second filter to determine peak type for each valid peak by compute threshold =  0.7  x peak amplitude, 
+# measure duration above threshold, classify collision if duration < 0.0075s. (e.g., 16 rows), Shear if duration ≥ 0.0075s.
+
+
+#function: generate_peak_text
+# Peak text shows number of peaks found and lists each peak value, time and type
+# Use placeholder textoutputs in UI
+
+#In summary (with example values from config):
+# we 
+# Identify candidate peaks by scanning higacc_mag_g and locate maxima that exceed a height (95).
+# To validate peak candidate, we ensure it is prominent from local acceleration by scanning left and right and saying it must be at least 25g above local
+# To avoid over-counting, we require each peak to be separated by interpeak distance of 0.002 (e.g., 2 milliseconds)
+# For each peak now available, we compute the duration above 70% of the peak amplitude
+# We classify duration of < 0.0075 as collision, and > 0.0075 as shear
+
+# rough example function, do not copy, but it gives you an idea of what we're aiming for 
+# find_acceleration_peaks <- function(accel, timestamps, height = 95, prominence = 25, interpeak_samples = 4, duration_threshold_samples = 15) {
+#   stopifnot(length(accel) == length(timestamps))
+#   
+#   # Step 1: Identify candidate peaks (local maxima above `height`)
+#   peaks <- which(diff(sign(diff(accel))) == -2) + 1  # local maxima
+#   peaks <- peaks[accel[peaks] >= height]  # apply height filter
+#   
+#   # Step 2: Apply prominence filter
+#   valid_peaks <- peaks[
+#     sapply(peaks, function(p) {
+#       left_min <- min(accel[max(1, p - interpeak_samples):p])
+#       right_min <- min(accel[p:min(length(accel), p + interpeak_samples)])
+#       peak_val <- accel[p]
+#       (peak_val - max(left_min, right_min)) >= prominence
+#     })
+#   ]
+#   
+#   # Step 3: Enforce inter-peak distance by removing close neighbors (keep highest peak in neighborhood)
+#   if (length(valid_peaks) > 1) {
+#     to_keep <- logical(length(valid_peaks))
+#     sorted_peaks <- valid_peaks[order(valid_peaks)]
+#     i <- 1
+#     while (i <= length(sorted_peaks)) {
+#       p <- sorted_peaks[i]
+#       window <- which((sorted_peaks > p) & (sorted_peaks <= p + interpeak_samples))
+#       close_group <- c(i, window)
+#       best_peak <- sorted_peaks[close_group][which.max(accel[sorted_peaks[close_group]])]
+#       to_keep[which(sorted_peaks == best_peak)] <- TRUE
+#       i <- max(close_group) + 1
+#     }
+#     valid_peaks <- sorted_peaks[to_keep]
+#   }
+#   
+#   # Step 4: Classify each peak as collision or shear based on duration above 70% threshold
+#   peak_results <- lapply(valid_peaks, function(p) {
+#     peak_val <- accel[p]
+#     threshold <- 0.7 * peak_val
+#     
+#     # walk left and right until accel drops below threshold
+#     left <- p
+#     while (left > 1 && accel[left] >= threshold) left <- left - 1
+#     right <- p
+#     while (right < length(accel) && accel[right] >= threshold) right <- right + 1
+#     
+#     duration_samples <- right - left
+#     peak_type <- if (duration_samples < duration_threshold_samples) "collision" else "shear"
+#     
+#     list(
+#       peak_time = timestamps[p],
+#       peak = peak_val,
+#       peak_type = peak_type
+#     )
+#   })
+#   
+#   do.call(rbind, lapply(peak_results, as.data.frame))
+# }
+
 accelerationUI <- function(id) {
   ns <- NS(id)
   
   tagList(
-    # Introductory text at the top
     tagList(
       h3("Acceleration Analysis"),
       plotModuleUI(ns("acceleration_plot"), height = "600px"),
       br(),
       
-      # Two smaller boxes side by side
       fluidRow(
         column(
-          width = 6,
+          width = 12,
           div(
-            style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
-                   border-radius: 5px; margin-bottom: 20px; margin-right: 10px;",
-            tags$h4("Strike calculator", style = "margin-top: 0; color: #333;"),
-            p("Build strike tool here and peak finding here")
-          )
-        ),
-        column(
-          width = 6,
-          div(
-            style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
-                   border-radius: 5px; margin-bottom: 20px;",
-            summarytableModuleUI(ns("acceleration_summary"))
+            style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 15px; 
+                   border-radius: 5px; margin-top: 20px;",
+            fluidRow(
+              column(
+                width = 8,
+                summarytableModuleUI(ns("acceleration_summary"))
+              ),
+              column(
+                width = 4,
+                tags$h4("Sensor acceleration summary", style = "margin-top: 0; color: #333;"),
+                #tags$p(textOutput(ns("placeholder"))),
+                #tags$p(textOutput(ns("placeholder"))),
+                #tags$p(textOutput(ns("placeholder"))),
+                #tags$p(textOutput(ns("placeholder")))
+              )
+            )
           )
         )
       ),
-      
+      br(),
       fluidRow(
         column(
           width = 6,
           div(
             style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
-                   border-radius: 5px; margin-bottom: 20px; margin-right: 10px;",
-            tags$h4("Sensor acceleration summary", style = "margin-top: 0; color: #333;"),
-            p("Provide all the summary information for the currently selected sensor here.")
-          )
-        ),
-        column(
-          width = 6,
-          div(
-            style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
                    border-radius: 5px; margin-bottom: 20px;",
-            tags$h4("Acceleration", style = "margin-top: 0; color: #333;"),
-            p("Misc box")
+            tags$h4("Empty box", style = "margin-top: 0; color: #333;"),
+            p("Not sure what's going here, yet.")
           )
         )
       )
     ))
 }
+
 
 
 
@@ -102,11 +192,17 @@ accelerationSidebarUI <- function(id) {
         #status display
         statusSidebarUI(ns("status_display"),
                         show_acc_processed = TRUE,
-                        show_acc_processed_sum = TRUE),
+                        show_acc_processed_sum = TRUE,
+                        show_acc_processed_peaks = TRUE),
         
         enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "acc_processed"),
         
         summarytableSidebarUI(ns("acceleration_summary")),
+        
+        actionButton(ns("acc_peak_btn"), "Calculate acceleration peaks", 
+                     class = "btn-primary btn-block"),
+        
+        textOutput(ns("current_peaks")),
         
         hr(),
         configurationSidebarUI(ns("acceleration_config"), config_type = "acc", 
@@ -161,12 +257,7 @@ accelerationSidebarUI <- function(id) {
                       default_show_roi_markers = TRUE,
                       default_show_legend = FALSE,
                       default_left_var = "pressure_kpa",
-                      default_right_var = "higacc_mag_g"),    
-        
-        hr(),
-        
-        actionButton(ns("add_deploy_btn"), "Add acceleration Information", 
-                     class = "btn-primary btn-block")
+                      default_right_var = "higacc_mag_g")
     )
   )
 }
@@ -176,11 +267,6 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
                                trigger_data_update, trigger_summary_update) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
-    #needs to load the instrument index and get all the acceleration variables, perhaps should be a global function to load instrument data? not sure
-    # needs to be able to write back to the instrument index, same logic as reading/writing the sensor index file for each operation we do
-    # so perhaps has a global function which loads instrument index, identifies the necessary instrument variables (pres_ acc_, rot_), 
-    # then any function we need can read and write the relevant instrument_var = for any operation required
     
     # ============================= #
     # /// Reactive values \\\ ####  
@@ -284,6 +370,45 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     })
     
     
+    # Button state management for acceleration peaks
+    # use framework from pressure module for same functionality here
+    # check if peaks already processed, enable button when summary processed
+    # If peaks already processed, button is Recalculate peaks
+    #EXAMPLE FUNCTION FROM PRESSURE
+    # observe({
+    #   req(sensor_selector$selected_sensor())
+    #   status <- sensor_status()
+    #   
+    #   # Check if RPC and LRPC already processed
+    #   rpc_processed <- status$pres_rpc_processed %||% FALSE
+    #   lrpc_processed <- status$pres_lrpc_processed %||% FALSE
+    #   both_processed <- rpc_processed && lrpc_processed
+    #   
+    #   # Button enabled when summary is processed but RPC/LRPC not yet done
+    #   can_process_rpc_lrpc <- status$pres_sum_processed && !is.null(pressure_values$pressure_config)
+    #   
+    #   button_states <- list(
+    #     "rpc_lrpc_btn" = can_process_rpc_lrpc
+    #   )
+    #   
+    #   manage_button_states(session, button_states)
+    #   
+    #   # Update button appearance and text
+    #   if (both_processed) {
+    #     updateActionButton(session, "rpc_lrpc_btn", 
+    #                        label = "Recalculate RPC and LRPC")
+    #     shinyjs::removeClass("rpc_lrpc_btn", "btn-primary")
+    #     shinyjs::addClass("rpc_lrpc_btn", "btn-warning")
+    #   } else {
+    #     updateActionButton(session, "rpc_lrpc_btn", 
+    #                        label = "Calculate RPC and LRPC")
+    #     shinyjs::removeClass("rpc_lrpc_btn", "btn-warning") 
+    #     shinyjs::addClass("rpc_lrpc_btn", "btn-primary")
+    #   }
+    # })
+    
+    
+    
     # ============================= #
     # /// Acceleration configuration \\\ ####  
     # ============================= #
@@ -358,6 +483,38 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     # /// Event handlers \\\ ####  
     # ============================= # 
     
+    
+    # Acceleration peaks button
+    #Follow principles of example from pressure module, Check if already processed, show modal, confirm replacement etc 
+    # observeEvent(input$rpc_lrpc_btn, {
+    #   req(sensor_selector$selected_sensor())
+    #   
+    #   # Check if data already exists
+    #   status <- sensor_status()
+    #   rpc_processed <- status$pres_rpc_processed %||% FALSE
+    #   lrpc_processed <- status$pres_lrpc_processed %||% FALSE
+    #   
+    #   if (rpc_processed && lrpc_processed) {
+    #     showModal(modalDialog(
+    #       title = "RPC and LRPC Data Exists",
+    #       paste("RPC and LRPC calculations already exist for", sensor_selector$selected_sensor(), 
+    #             ". Replace existing calculations?"),
+    #       footer = tagList(
+    #         modalButton("Cancel"),
+    #         actionButton(ns("confirm_replace_rpc_lrpc"), "Replace", class = "btn-warning")
+    #       )
+    #     ))
+    #   } else {
+    #     calculate_and_save_rpc_lrpc()
+    #   }
+    # })
+    # 
+    # # Confirm replace RPC/LRPC
+    # observeEvent(input$confirm_replace_rpc_lrpc, {
+    #   removeModal()
+    #   calculate_and_save_rpc_lrpc()
+    # })
+    
     # Handle acceleration info addition
     observeEvent(input$add_deploy_btn, {
       if (!is.null(sensor_selector$selected_sensor()) && sensor_selector$selected_sensor() != "") {
@@ -400,6 +557,49 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     # ============================= #
     # /// Helper functions \\\ ####  
     # ============================= # 
+    
+    
+    # Calculate and save acceleration peaks
+    # build similar function to this for acceleration peaks
+    # Each peak identified is appended to the instrument index as acc_peak_1.time., acc_peak_1.g., acc_peak_1_type where 1 is the peak number for the 'overall' roi
+    
+    # calculate_and_save_rpc_lrpc <- function() {
+    #   tryCatch({
+    #     # Get required data
+    #     sensor_name <- sensor_selector$selected_sensor()
+    #     
+    #     # Create config from current input values instead of saved config
+    #     config <- list(
+    #       label = input$pressure_config_label %||% "Current_values",
+    #       acclim_pres_surface = input$acclim_pres_surface,
+    #       acclim_pres_depth = input$acclim_pres_depth,
+    #       hydrostatic_pressure = input$hydrostatic_pressure
+    #     )
+    #     
+    #     # Validate inputs
+    #     if (is.null(config$acclim_pres_surface) || is.null(config$acclim_pres_depth)) {
+    #       showNotification("Please enter surface and depth acclimation values", type = "error")
+    #       return()
+    #     }
+    #     
+    #     # Perform calculation using helper function
+    #     result <- rate_ratio_analysis(sensor_name, output_dir(), config)
+    #     
+    #     if (result$success) {
+    #       trigger_data_update()
+    #       trigger_summary_update()
+    #       
+    #       showNotification(paste("RPC and LRPC calculated and saved for", sensor_name), 
+    #                        type = "message")
+    #     } else {
+    #       showNotification(paste("Error calculating RPC/LRPC:", result$error), type = "error")
+    #     }
+    #     
+    #   }, error = function(e) {
+    #     showNotification(paste("Error calculating RPC/LRPC:", e$message), type = "error")
+    #   })
+    # }
+    
     
     # Save acceleration configuration function
     save_acceleration_configuration <- function() {
@@ -448,6 +648,47 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     # /// Output render \\\ ####  
     # ============================= #    
     
+    
+    
+    # acceleration summary text outputs
+    # just template from pressure module for example, replace with text outputs for acceleration peaks
+    # pressure_summary_text <- reactive({
+    #   req(sensor_selector$selected_sensor())
+    #   global_sensor_state$summary_updated  # Invalidate when data changes
+    #   generate_pressure_text(sensor_selector$selected_sensor(), output_dir())
+    # })
+    # 
+    # output$pressure_nadir_text <- renderText({
+    #   pressure_summary_text()$nadir_text
+    # })
+    # 
+    # output$rpc_text <- renderText({
+    #   pressure_summary_text()$rpc_text
+    # })
+    # 
+    # output$lrpc_surface_text <- renderText({
+    #   pressure_summary_text()$lrpc_surface_text
+    # })
+    # 
+    # output$lrpc_depth_text <- renderText({
+    #   pressure_summary_text()$lrpc_depth_text
+    # })
+    # 
+    # # RPC/LRPC status output
+    # output$current_rpc_lrpc <- renderText({
+    #   req(sensor_selector$selected_sensor())
+    #   status <- sensor_status()
+    #   
+    #   rpc_processed <- status$pres_rpc_processed %||% FALSE
+    #   lrpc_processed <- status$pres_lrpc_processed %||% FALSE
+    #   
+    #   if (rpc_processed && lrpc_processed) {
+    #     paste("RPC and LRPC calculated for", sensor_selector$selected_sensor())
+    #   } else {
+    #     ""
+    #   }
+    # })
+    
     # Acceleration config status
     output$acceleration_config_status <- renderText({
       if (acceleration_values$inputs_changed) {
@@ -461,7 +702,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     status_controls <- statusModuleServer("status_display",
                                           sensor_name_reactive = reactive(sensor_selector$selected_sensor()),
                                           output_dir_reactive = reactive(output_dir()),
-                                          check_types = c("acc_processed", "acc_processed_sum"),
+                                          check_types = c("acc_processed", "acc_processed_sum", "acc_processed_peaks"),
                                           invalidation_trigger = reactive(global_sensor_state$summary_updated),
                                           individual_outputs = TRUE)
     
