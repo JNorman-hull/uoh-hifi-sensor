@@ -91,6 +91,38 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
       return(folders[!is.na(folders)])
     })
     
+    folder_stats <- reactive({
+      folders <- current_folders()
+      processed <- processed_sensors()
+      
+      map(folders, function(folder) {
+        folder_path <- file.path(current_full_path(), folder)
+        
+        # Count sensor files (.IMP files)
+        imp_files <- list.files(folder_path, pattern = "\\.IMP$", full.names = TRUE, recursive = TRUE)
+        sensor_count <- length(imp_files)
+        
+        # Calculate total size
+        if (sensor_count > 0) {
+          file_sizes <- file.info(imp_files)$size
+          total_size_mb <- round(sum(file_sizes, na.rm = TRUE) / (1024^2), 1)
+        } else {
+          total_size_mb <- 0
+        }
+        
+        # Get sensor names and count processed
+        sensor_names <- tools::file_path_sans_ext(basename(imp_files))
+        processed_count <- sum(sensor_names %in% processed)
+        
+        list(
+          folder = folder,
+          sensor_count = sensor_count,
+          total_size_mb = total_size_mb,
+          processed_count = processed_count
+        )
+      })
+    })
+    
     # Get processed sensors
     processed_sensors <- reactive({
       if (is.null(output_dir)) return(character(0))
@@ -250,23 +282,143 @@ rawdataprocessingServer <- function(id, raw_data_path, output_dir, processing_co
     # Render folder browser
     output$folder_browser <- renderUI({
       folders <- current_folders()
+      stats <- folder_stats()
       
-      if (length(folders) == 0) {
-        return(p("No subfolders found", style = "color: #666; font-style: italic;"))
+      # Create navigation elements
+      nav_elements <- list()
+      
+      # Add "Back to Parent" button if not in root
+      if (folder_state$current_path != "") {
+        parent_path <- if (grepl("/", folder_state$current_path)) {
+          dirname(folder_state$current_path)
+        } else {
+          ""
+        }
+        
+        nav_elements <- append(nav_elements, list(
+          div(
+            class = "parent-nav-tile",
+            style = "
+          border: 2px solid #6c757d;
+          border-radius: 8px;
+          padding: 15px;
+          margin: 8px;
+          background-color: #f8f9fa;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          min-width: 200px;
+          display: inline-block;
+          vertical-align: top;
+        ",
+            onclick = paste0("Shiny.setInputValue('", ns("navigate_to"), "', '", parent_path, "', {priority: 'event'});"),
+            onmouseover = "this.style.backgroundColor = '#e9ecef'; this.style.transform = 'translateY(-2px)';",
+            onmouseout = "this.style.backgroundColor = '#f8f9fa'; this.style.transform = 'translateY(0px)';",
+            
+            # Back icon and title
+            div(
+              style = "margin-bottom: 8px;",
+              icon("arrow-left", style = "color: #6c757d; font-size: 24px; margin-right: 8px;"),
+              span("Back to Parent", style = "font-weight: bold; font-size: 16px; color: #333;")
+            ),
+            
+            # Parent directory info
+            div(
+              if (parent_path == "") "Return to root directory" else paste("Return to", basename(parent_path)),
+              style = "font-style: italic; color: #666; font-size: 13px;"
+            )
+          )
+        ))
       }
       
-      folder_buttons <- map(folders, function(folder) {
-        actionButton(ns(paste0("folder_", folder)), 
-                     folder,
-                     icon = icon("folder"),
-                     class = "btn-outline-primary btn-sm",
-                     style = "margin: 2px;",
-                     onclick = paste0("Shiny.setInputValue('", ns("enter_folder"), "', '", folder, "', {priority: 'event'});"))
-      })
+      # Add folder tiles if any exist
+      if (length(folders) > 0) {
+        folder_tiles <- map(stats, function(stat) {
+          # Create content summary
+          content_text <- if (stat$sensor_count > 0) {
+            paste0(stat$sensor_count, " sensor files. Total size = ", stat$total_size_mb, "MB")
+          } else {
+            "No sensor files"
+          }
+          
+          # Create processing status
+          process_text <- if (stat$sensor_count > 0) {
+            paste0(stat$processed_count, "/", stat$sensor_count, " sensor files processed")
+          } else {
+            ""
+          }
+          
+          # Create tile
+          div(
+            class = "folder-tile",
+            style = "
+          border: 2px solid #007bff;
+          border-radius: 8px;
+          padding: 15px;
+          margin: 8px;
+          background-color: #f8f9fa;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          min-width: 200px;
+          display: inline-block;
+          vertical-align: top;
+        ",
+            onclick = paste0("
+          Shiny.setInputValue('", ns("enter_folder"), "', '", stat$folder, "', {priority: 'event'});
+          this.style.backgroundColor = '#e3f2fd';
+          setTimeout(() => this.style.backgroundColor = '#f8f9fa', 200);
+        "),
+            onmouseover = "this.style.backgroundColor = '#e7f3ff'; this.style.transform = 'translateY(-2px)';",
+            onmouseout = "this.style.backgroundColor = '#f8f9fa'; this.style.transform = 'translateY(0px)';",
+            
+            # Folder icon and title
+            div(
+              style = "margin-bottom: 8px;",
+              icon("folder", style = "color: #007bff; font-size: 24px; margin-right: 8px;"),
+              span(stat$folder, style = "font-weight: bold; font-size: 16px; color: #333;")
+            ),
+            
+            # Content summary
+            if (content_text != "") {
+              div(
+                content_text,
+                style = "font-style: italic; color: #666; font-size: 13px; margin-bottom: 5px;"
+              )
+            },
+            
+            # Processing status
+            if (process_text != "") {
+              div(
+                process_text,
+                style = paste0(
+                  "font-size: 12px; font-weight: 500; color: ",
+                  if (stat$processed_count == stat$sensor_count) "#28a745" else "#6c757d",
+                  ";"
+                )
+              )
+            }
+          )
+        })
+        
+        nav_elements <- append(nav_elements, folder_tiles)
+      }
+      
+      # Show message if no folders and in subdirectory
+      if (length(folders) == 0 && folder_state$current_path != "") {
+        nav_elements <- append(nav_elements, list(
+          p("No subfolders in this directory", style = "color: #666; font-style: italic; margin: 8px;")
+        ))
+      } else if (length(folders) == 0 && folder_state$current_path == "") {
+        nav_elements <- append(nav_elements, list(
+          p("No subfolders found", style = "color: #666; font-style: italic; margin: 8px;")
+        ))
+      }
       
       tagList(
-        p("Raw RAPID data index:", style = "margin-bottom: 5px; font-weight: bold;"),
-        do.call(tagList, folder_buttons)
+        p("Raw RAPID data index:", style = "margin-bottom: 15px; font-weight: bold;"),
+        div(
+          style = "display: flex; flex-wrap: wrap; gap: 5px;",
+          nav_elements
+        )
       )
     })
     
