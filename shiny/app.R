@@ -11,3 +11,5 @@ source("server.R")  # This loads the server function
 
 # Launch the Shiny app 
 shinyApp(ui, server)
+
+#Because this is an renv project, always use renv::install() for new packages, and create new snapshot with renv::snapshot()
