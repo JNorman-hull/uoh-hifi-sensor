@@ -1,2 +1,2 @@
 #label, height, prominence, interpeak, strike_threshold, collision_threshold
-Default_configuration, 95, 47.5, 0.005, 400, 400
+Default_configuration, 95, 25, 0.002, 400, 400

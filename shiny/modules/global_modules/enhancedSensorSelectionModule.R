@@ -42,7 +42,7 @@ enhancedSensorSelectionUI <- function(id, label = "Select Sensor:", show_filters
         div(style = "margin-bottom: 10px;",
             selectInput(ns("quality_filter"), "Data quality:", 
                         choices = c("Show all" = "all", "Good" = "good", "Bad" = "bad"), 
-                        selected = "all", width = "100%")),
+                        selected = "good", width = "100%")),
         
         if (!is.null(status_filter_type)) {
           div(style = "margin-bottom: 10px;",

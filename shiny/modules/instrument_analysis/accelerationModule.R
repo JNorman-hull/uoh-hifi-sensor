@@ -245,7 +245,8 @@ accelerationSidebarUI <- function(id) {
                       show_right_var = TRUE,    
                       show_normalized = TRUE,   
                       show_nadir = TRUE,      
-                      show_roi_markers = TRUE,   
+                      show_roi_markers = TRUE,
+                      show_acceleration_peaks = TRUE,
                       show_legend = TRUE,
                       show_plot_width = TRUE,
                       show_plot_height = TRUE,
@@ -254,6 +255,7 @@ accelerationSidebarUI <- function(id) {
                       default_show_normalized = FALSE,
                       default_show_nadir = TRUE,
                       default_show_roi_markers = TRUE,
+                      default_show_acceleration_peaks = FALSE, 
                       default_show_legend = FALSE,
                       default_left_var = "pressure_kpa",
                       default_right_var = "higacc_mag_g")
@@ -400,7 +402,20 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
       }
     })
     
-    
+    observe({
+      req(sensor_selector$selected_sensor())
+      global_sensor_state$summary_updated  
+      global_sensor_state$data_updated     
+      
+      status <- get_sensor_status(sensor_selector$selected_sensor(), output_dir())
+      
+      if (status$acc_hig_peaks_processed) {
+        shinyjs::enable(paste0("acceleration_plot-show_acceleration_peaks"))
+      } else {
+        shinyjs::disable(paste0("acceleration_plot-show_acceleration_peaks"))
+        updateCheckboxInput(session, "acceleration_plot-show_acceleration_peaks", value = FALSE)
+      }
+    })
     
     # ============================= #
     # /// Acceleration configuration \\\ ####  
@@ -639,7 +654,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
         
         tibble(
           peak_number = i,
-          peak_time = round(peak_time, 3),
+          peak_time = round(peak_time, 4),
           peak_value = round(peak_val, 1),
           peak_type = peak_type,
           duration_samples = duration_samples
@@ -909,6 +924,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
                                       sensor_data = selected_sensor_data,
                                       sensor_name = reactive(sensor_selector$selected_sensor()),
                                       nadir_info = nadir_info,
+                                      output_dir = reactive(output_dir()),
                                       roi_boundaries = roi_boundaries,
                                       right_var = reactive(input$`acceleration_plot-right_y_var`),
                                       left_var = reactive(input$`acceleration_plot-left_y_var`),
@@ -918,6 +934,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
                                       show_legend = reactive(input$`acceleration_plot-show_legend`),
                                       show_normalized = reactive(input$`acceleration_plot-show_normalized`),
                                       show_roi_markers = reactive(input$`acceleration_plot-show_roi_markers`),
+                                      show_acceleration_peaks = reactive(input$`acceleration_plot-show_acceleration_peaks`),
                                       title_prefix = "Acceleration Analysis",
                                       plot_source = "acceleration_plot"
     )

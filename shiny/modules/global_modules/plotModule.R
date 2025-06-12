@@ -73,6 +73,7 @@ plotSidebarUI <- function(id,
                           show_normalized = TRUE,
                           show_nadir = TRUE,
                           show_roi_markers = TRUE,
+                          show_acceleration_peaks = FALSE,
                           show_legend = TRUE,
                           show_plot_width = TRUE,
                           show_plot_height = TRUE,
@@ -81,6 +82,7 @@ plotSidebarUI <- function(id,
                           default_show_normalized = FALSE,
                           default_show_nadir = TRUE,
                           default_show_roi_markers = FALSE,
+                          default_show_acceleration_peaks = FALSE,
                           default_show_legend = FALSE,
                           default_left_var = "pressure_kpa",
                           default_right_var = "none") {
@@ -125,6 +127,10 @@ plotSidebarUI <- function(id,
       checkboxInput(ns("show_nadir"), "Show Pressure Nadir", value = default_show_nadir)
     },
     
+    if (show_acceleration_peaks) {
+      checkboxInput(ns("show_acceleration_peaks"), "Show acceleration peaks", value = default_show_acceleration_peaks)
+    },
+    
     if (show_roi_markers) {
       checkboxInput(ns("show_roi_markers"), "Show ROI markers", value = default_show_roi_markers)
     },
@@ -138,6 +144,7 @@ plotSidebarUI <- function(id,
 plotModuleServer <- function(id, 
                              sensor_data,
                              sensor_name,
+                             output_dir,
                              nadir_info = reactive(NULL),
                              selected_nadir = reactive(NULL),
                              roi_boundaries = reactive(NULL),
@@ -147,6 +154,7 @@ plotModuleServer <- function(id,
                              show_legend = reactive(FALSE),
                              show_normalized = reactive(FALSE),
                              show_roi_markers = reactive(FALSE),
+                             show_acceleration_peaks = reactive(FALSE),
                              plot_width = reactive(16*37.8),
                              plot_height = reactive(8*37.8),
                              plot_source = "plot",
@@ -181,6 +189,74 @@ plotModuleServer <- function(id,
       
       user_wants_roi && has_boundaries && not_suppressed
     })
+    
+    # Get acceleration peaks data
+    get_acceleration_peaks_data <- function(sensor_name, output_dir) {
+      if (is.null(sensor_name) || sensor_name == "") {
+        return(NULL)
+      }
+      
+      instrument_df <- get_instrument_index_file(output_dir, read_data = TRUE)
+      if (is.null(instrument_df)) {
+        return(NULL)
+      }
+      
+      tryCatch({
+        sensor_row <- instrument_df[instrument_df$file == sensor_name & instrument_df$roi == "overall", ]
+        
+        if (nrow(sensor_row) == 0) {
+          return(NULL)
+        }
+        
+        # Find all acceleration peak columns
+        peak_cols <- names(sensor_row)[grepl("^acc_peak_\\d+\\.", names(sensor_row))]
+        
+        if (length(peak_cols) == 0) {
+          return(NULL)
+        }
+        
+        # Extract peak numbers
+        peak_numbers <- unique(gsub("^acc_peak_(\\d+)\\..*", "\\1", peak_cols))
+        peak_numbers <- as.numeric(peak_numbers)
+        peak_numbers <- peak_numbers[!is.na(peak_numbers)]
+        peak_numbers <- sort(peak_numbers)
+        
+        if (length(peak_numbers) == 0) {
+          return(NULL)
+        }
+        
+        # Build peak data
+        peaks_data <- map_dfr(peak_numbers, function(i) {
+          time_col <- paste0("acc_peak_", i, ".time.")
+          value_col <- paste0("acc_peak_", i, ".g.")
+          type_col <- paste0("acc_peak_", i, "_type")
+          
+          peak_time <- sensor_row[[time_col]]
+          peak_value <- sensor_row[[value_col]]
+          peak_type <- sensor_row[[type_col]]
+          
+          if (!is.na(peak_time) && !is.na(peak_value) && !is.na(peak_type)) {
+            tibble(
+              peak_number = i,
+              time = as.numeric(peak_time),
+              value = as.numeric(peak_value),
+              type = as.character(peak_type)
+            )
+          } else {
+            NULL
+          }
+        })
+        
+        if (nrow(peaks_data) == 0) {
+          return(NULL)
+        }
+        
+        return(peaks_data)
+        
+      }, error = function(e) {
+        return(NULL)
+      })
+    }
     
     # Render the plot
     output$plot <- renderPlotly({
@@ -281,6 +357,53 @@ plotModuleServer <- function(id,
         )
       }
       
+      if (show_acceleration_peaks()) {
+        peaks_data <- get_acceleration_peaks_data(sensor_name(), output_dir())
+        
+        if (!is.null(peaks_data) && nrow(peaks_data) > 0) {
+          # Determine which y-axis to use (only show on acceleration axis)
+          peaks_yaxis <- NULL
+          if (current_left_var == "higacc_mag_g") {
+            peaks_yaxis <- "y"
+          } else if (has_right_axis && current_right_var == "higacc_mag_g") {
+            peaks_yaxis <- "y2"
+          }
+          
+          # Only show peaks if acceleration is being plotted
+          if (!is.null(peaks_yaxis)) {
+            # Color mapping for peak types
+            peak_colors <- c("collision" = "red", "shear" = "orange")
+            
+            # Add markers for each peak type
+            for (peak_type in unique(peaks_data$type)) {
+              type_data <- peaks_data[peaks_data$type == peak_type, ]
+              
+              if (nrow(type_data) > 0) {
+                p <- p %>% add_trace(
+                  x = type_data$time,
+                  y = type_data$value,
+                  name = paste("Acceleration", tools::toTitleCase(peak_type)),
+                  type = "scatter",
+                  mode = "markers",
+                  marker = list(
+                    color = peak_colors[peak_type], 
+                    size = 8,
+                    symbol = if (peak_type == "collision") "circle" else "triangle-up"
+                  ),
+                  yaxis = peaks_yaxis,
+                  hovertemplate = paste0(
+                    "<b>", tools::toTitleCase(peak_type), " Peak</b><br>",
+                    "Time: %{x:.3f}s<br>",
+                    "Acceleration: %{y:.1f}g<br>",
+                    "<extra></extra>"
+                  )
+                )
+              }
+            }
+          }
+        }
+      }
+      
       # Add nadir marker if configured and available
       if (show_nadir() && !is.null(nadir_info()) && nadir_info()$available) {
         nadir_yaxis <- NULL
@@ -371,7 +494,8 @@ plotModuleServer <- function(id,
       show_normalized = reactive(input$show_normalized),
       show_nadir = reactive(input$show_nadir),
       show_roi_markers = reactive(input$show_roi_markers),
-      show_legend = reactive(input$show_legend)
+      show_legend = reactive(input$show_legend),
+      show_acceleration_peaks = reactive(input$show_acceleration_peaks)
     ))
   })
 }
