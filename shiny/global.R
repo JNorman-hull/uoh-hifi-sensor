@@ -111,6 +111,7 @@ get_instrument_index_file <- function(output_dir, read_data = FALSE) {
 }
 
 ## Safe update instrument index ####
+## Safe update instrument index ####
 safe_update_instrument_index <- function(output_dir, sensor_name, roi, updates) {
   index_df <- get_instrument_index_file(output_dir, read_data = TRUE)
   if (is.null(index_df)) return(FALSE)
@@ -123,7 +124,12 @@ safe_update_instrument_index <- function(output_dir, sensor_name, roi, updates) 
       # Update existing row
       for (col in names(updates)) {
         if (col %in% names(index_df)) {
+          # Update existing column
           index_df[row_idx, col] <- updates[[col]]
+        } else {
+          # Add new column
+          index_df[[col]] <- NA  # Initialize column with NA
+          index_df[row_idx, col] <- updates[[col]]  # Set the value
         }
       }
     } else {
@@ -135,7 +141,12 @@ safe_update_instrument_index <- function(output_dir, sensor_name, roi, updates) 
       
       for (col in names(updates)) {
         if (col %in% names(index_df)) {
+          # Update existing column
           new_row[col] <- updates[[col]]
+        } else {
+          # Add new column to entire dataframe
+          index_df[[col]] <- NA
+          new_row[[col]] <- updates[[col]]
         }
       }
       

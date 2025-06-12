@@ -117,10 +117,9 @@ accelerationUI <- function(id) {
               column(
                 width = 4,
                 tags$h4("Sensor acceleration summary", style = "margin-top: 0; color: #333;"),
-                #tags$p(textOutput(ns("placeholder"))),
-                #tags$p(textOutput(ns("placeholder"))),
-                #tags$p(textOutput(ns("placeholder"))),
-                #tags$p(textOutput(ns("placeholder")))
+                tags$p(textOutput(ns("acceleration_peaks_text"))),
+                tags$p(textOutput(ns("acceleration_events_text"))),
+                tags$p(textOutput(ns("acceleration_collisions_text")))
               )
             )
           )
@@ -371,41 +370,35 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     
     
     # Button state management for acceleration peaks
-    # use framework from pressure module for same functionality here
-    # check if peaks already processed, enable button when summary processed
-    # If peaks already processed, button is Recalculate peaks
-    #EXAMPLE FUNCTION FROM PRESSURE
-    # observe({
-    #   req(sensor_selector$selected_sensor())
-    #   status <- sensor_status()
-    #   
-    #   # Check if RPC and LRPC already processed
-    #   rpc_processed <- status$pres_rpc_processed %||% FALSE
-    #   lrpc_processed <- status$pres_lrpc_processed %||% FALSE
-    #   both_processed <- rpc_processed && lrpc_processed
-    #   
-    #   # Button enabled when summary is processed but RPC/LRPC not yet done
-    #   can_process_rpc_lrpc <- status$pres_sum_processed && !is.null(pressure_values$pressure_config)
-    #   
-    #   button_states <- list(
-    #     "rpc_lrpc_btn" = can_process_rpc_lrpc
-    #   )
-    #   
-    #   manage_button_states(session, button_states)
-    #   
-    #   # Update button appearance and text
-    #   if (both_processed) {
-    #     updateActionButton(session, "rpc_lrpc_btn", 
-    #                        label = "Recalculate RPC and LRPC")
-    #     shinyjs::removeClass("rpc_lrpc_btn", "btn-primary")
-    #     shinyjs::addClass("rpc_lrpc_btn", "btn-warning")
-    #   } else {
-    #     updateActionButton(session, "rpc_lrpc_btn", 
-    #                        label = "Calculate RPC and LRPC")
-    #     shinyjs::removeClass("rpc_lrpc_btn", "btn-warning") 
-    #     shinyjs::addClass("rpc_lrpc_btn", "btn-primary")
-    #   }
-    # })
+    observe({
+      req(sensor_selector$selected_sensor())
+      status <- sensor_status()
+      
+      # Check if peaks already processed
+      peaks_processed <- status$acc_hig_peaks_processed %||% FALSE
+      
+      # Button enabled when summary is processed
+      can_process_peaks <- status$acc_sum_processed
+      
+      button_states <- list(
+        "acc_peak_btn" = can_process_peaks
+      )
+      
+      manage_button_states(session, button_states)
+      
+      # Update button appearance and text
+      if (peaks_processed) {
+        updateActionButton(session, "acc_peak_btn", 
+                           label = "Recalculate acceleration peaks")
+        shinyjs::removeClass("acc_peak_btn", "btn-primary")
+        shinyjs::addClass("acc_peak_btn", "btn-warning")
+      } else {
+        updateActionButton(session, "acc_peak_btn", 
+                           label = "Calculate acceleration peaks")
+        shinyjs::removeClass("acc_peak_btn", "btn-warning") 
+        shinyjs::addClass("acc_peak_btn", "btn-primary")
+      }
+    })
     
     
     
@@ -485,35 +478,33 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     
     
     # Acceleration peaks button
-    #Follow principles of example from pressure module, Check if already processed, show modal, confirm replacement etc 
-    # observeEvent(input$rpc_lrpc_btn, {
-    #   req(sensor_selector$selected_sensor())
-    #   
-    #   # Check if data already exists
-    #   status <- sensor_status()
-    #   rpc_processed <- status$pres_rpc_processed %||% FALSE
-    #   lrpc_processed <- status$pres_lrpc_processed %||% FALSE
-    #   
-    #   if (rpc_processed && lrpc_processed) {
-    #     showModal(modalDialog(
-    #       title = "RPC and LRPC Data Exists",
-    #       paste("RPC and LRPC calculations already exist for", sensor_selector$selected_sensor(), 
-    #             ". Replace existing calculations?"),
-    #       footer = tagList(
-    #         modalButton("Cancel"),
-    #         actionButton(ns("confirm_replace_rpc_lrpc"), "Replace", class = "btn-warning")
-    #       )
-    #     ))
-    #   } else {
-    #     calculate_and_save_rpc_lrpc()
-    #   }
-    # })
-    # 
-    # # Confirm replace RPC/LRPC
-    # observeEvent(input$confirm_replace_rpc_lrpc, {
-    #   removeModal()
-    #   calculate_and_save_rpc_lrpc()
-    # })
+    observeEvent(input$acc_peak_btn, {
+      req(sensor_selector$selected_sensor())
+      
+      # Check if data already exists
+      status <- sensor_status()
+      peaks_processed <- status$acc_hig_peaks_processed %||% FALSE
+      
+      if (peaks_processed) {
+        showModal(modalDialog(
+          title = "Acceleration Peaks Data Exists",
+          paste("Acceleration peaks already exist for", sensor_selector$selected_sensor(), 
+                ". Replace existing peaks?"),
+          footer = tagList(
+            modalButton("Cancel"),
+            actionButton(ns("confirm_replace_peaks"), "Replace", class = "btn-warning")
+          )
+        ))
+      } else {
+        calculate_and_save_peaks()
+      }
+    })
+    
+    # Confirm replace peaks
+    observeEvent(input$confirm_replace_peaks, {
+      removeModal()
+      calculate_and_save_peaks()
+    })
     
     # Handle acceleration info addition
     observeEvent(input$add_deploy_btn, {
@@ -559,46 +550,251 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     # ============================= # 
     
     
-    # Calculate and save acceleration peaks
-    # build similar function to this for acceleration peaks
-    # Each peak identified is appended to the instrument index as acc_peak_1.time., acc_peak_1.g., acc_peak_1_type where 1 is the peak number for the 'overall' roi
+    # Get peak parameters from configuration
+    get_peak_params <- function(config) {
+      return(list(
+        height = config$height,
+        prominence = config$prominence,
+        interpeak = config$interpeak,
+        collision_threshold = config$collision_threshold
+      ))
+    }
     
-    # calculate_and_save_rpc_lrpc <- function() {
-    #   tryCatch({
-    #     # Get required data
-    #     sensor_name <- sensor_selector$selected_sensor()
-    #     
-    #     # Create config from current input values instead of saved config
-    #     config <- list(
-    #       label = input$pressure_config_label %||% "Current_values",
-    #       acclim_pres_surface = input$acclim_pres_surface,
-    #       acclim_pres_depth = input$acclim_pres_depth,
-    #       hydrostatic_pressure = input$hydrostatic_pressure
-    #     )
-    #     
-    #     # Validate inputs
-    #     if (is.null(config$acclim_pres_surface) || is.null(config$acclim_pres_depth)) {
-    #       showNotification("Please enter surface and depth acclimation values", type = "error")
-    #       return()
-    #     }
-    #     
-    #     # Perform calculation using helper function
-    #     result <- rate_ratio_analysis(sensor_name, output_dir(), config)
-    #     
-    #     if (result$success) {
-    #       trigger_data_update()
-    #       trigger_summary_update()
-    #       
-    #       showNotification(paste("RPC and LRPC calculated and saved for", sensor_name), 
-    #                        type = "message")
-    #     } else {
-    #       showNotification(paste("Error calculating RPC/LRPC:", result$error), type = "error")
-    #     }
-    #     
-    #   }, error = function(e) {
-    #     showNotification(paste("Error calculating RPC/LRPC:", e$message), type = "error")
-    #   })
-    # }
+    # Find acceleration peaks
+    find_acceleration_peaks <- function(sensor_data, params) {
+      if (!"higacc_mag_g" %in% names(sensor_data)) {
+        stop("higacc_mag_g column not found in sensor data")
+      }
+      
+      accel <- sensor_data$higacc_mag_g
+      timestamps <- sensor_data$time_s
+      
+      # Calculate sampling frequency from data
+      fs <- round(1 / median(diff(timestamps), na.rm = TRUE))
+      
+      # Convert time-based parameters to samples
+      interpeak_samples <- round(params$interpeak * fs)
+      
+      # Use collision_threshold to determine duration classification
+      duration_threshold_samples <- params$collision_threshold
+      
+      # Step 1: Find local maxima above height threshold
+      if (length(accel) < 3) return(data.frame())
+      
+      # Find local maxima
+      peaks <- which(diff(sign(diff(accel))) == -2) + 1
+      peaks <- peaks[accel[peaks] >= params$height]
+      
+      if (length(peaks) == 0) return(data.frame())
+      
+      # Step 2: Apply prominence filter
+      valid_peaks <- peaks[sapply(peaks, function(p) {
+        left_start <- max(1, p - interpeak_samples)
+        right_end <- min(length(accel), p + interpeak_samples)
+        
+        left_min <- min(accel[left_start:p])
+        right_min <- min(accel[p:right_end])
+        peak_val <- accel[p]
+        
+        prominence <- peak_val - max(left_min, right_min)
+        return(prominence >= params$prominence)
+      })]
+      
+      if (length(valid_peaks) == 0) return(data.frame())
+      
+      # Step 3: Enforce inter-peak distance
+      if (length(valid_peaks) > 1) {
+        to_keep <- logical(length(valid_peaks))
+        sorted_peaks <- valid_peaks[order(valid_peaks)]
+        i <- 1
+        
+        while (i <= length(sorted_peaks)) {
+          p <- sorted_peaks[i]
+          window <- which((sorted_peaks >= p) & (sorted_peaks <= p + interpeak_samples))
+          best_peak_idx <- window[which.max(accel[sorted_peaks[window]])]
+          to_keep[best_peak_idx] <- TRUE
+          i <- max(window) + 1
+        }
+        
+        valid_peaks <- sorted_peaks[to_keep]
+      }
+      
+      if (length(valid_peaks) == 0) return(data.frame())
+      
+      # Step 4: Classify peaks and create results
+      peak_results <- map_dfr(seq_along(valid_peaks), function(i) {
+        p <- valid_peaks[i]
+        peak_val <- accel[p]
+        peak_time <- timestamps[p]
+        threshold <- 0.7 * peak_val
+        
+        # Find duration above 70% threshold
+        left <- p
+        while (left > 1 && accel[left] >= threshold) left <- left - 1
+        right <- p
+        while (right < length(accel) && accel[right] >= threshold) right <- right + 1
+        
+        duration_samples <- right - left
+        peak_type <- if (duration_samples < duration_threshold_samples) "collision" else "shear"
+        
+        tibble(
+          peak_number = i,
+          peak_time = round(peak_time, 3),
+          peak_value = round(peak_val, 1),
+          peak_type = peak_type,
+          duration_samples = duration_samples
+        )
+      })
+      
+      return(peak_results)
+    }
+    
+    # Calculate and save acceleration peaks
+    calculate_and_save_peaks <- function() {
+      tryCatch({
+        sensor_name <- sensor_selector$selected_sensor()
+        
+        # Create config from current input values
+        config <- list(
+          label = input$acceleration_config_label %||% "Current_values",
+          height = input$height,
+          prominence = input$prominence,
+          interpeak = input$interpeak,
+          collision_threshold = input$collision_threshold
+        )
+        
+        # Validate inputs
+        if (is.null(config$height) || is.null(config$prominence) || is.null(config$interpeak)) {
+          showNotification("Please enter height, prominence, and interpeak values", type = "error")
+          return()
+        }
+        
+        if (is.null(config$collision_threshold)) {
+          showNotification("Please enter collision threshold value", type = "error")
+          return()
+        }
+        
+        # Read delineated data
+        sensor_data <- read_sensor_data(output_dir(), sensor_name, "delineated")
+        if (is.null(sensor_data)) {
+          showNotification("Failed to read delineated dataset", type = "error")
+          return()
+        }
+        
+        # Get peak parameters
+        params <- get_peak_params(config)
+        
+        # Find peaks
+        peak_results <- find_acceleration_peaks(sensor_data, params)
+        
+        # Prepare updates for instrument index
+        updates <- list()
+        
+        if (nrow(peak_results) > 0) {
+          # Add individual peak data
+          for (i in seq_len(nrow(peak_results))) {
+            peak <- peak_results[i, ]
+            updates[[paste0("acc_peak_", i, ".time.")]] <- peak$peak_time
+            updates[[paste0("acc_peak_", i, ".g.")]] <- peak$peak_value
+            updates[[paste0("acc_peak_", i, "_type")]] <- peak$peak_type
+          }
+          
+          # Add event counts - all using threshold-based counting
+          updates$acc_event_95g <- sum(peak_results$peak_value >= 95)
+          updates$acc_event_200g <- sum(peak_results$peak_value >= 200)
+          updates$acc_event_400g <- sum(peak_results$peak_value >= 400)
+          
+          # Add collision count
+          updates$acc_collision <- sum(peak_results$peak_type == "collision")
+        } else {
+          # No peaks found
+          updates$acc_event_95g <- 0
+          updates$acc_event_200g <- 0
+          updates$acc_event_400g <- 0
+          updates$acc_collision <- 0
+        }
+        
+        # Save to instrument index for overall ROI
+        success <- safe_update_instrument_index(output_dir(), sensor_name, "overall", updates)
+        
+        if (!success) {
+          showNotification("Failed to save peak results to instrument index", type = "error")
+          return()
+        }
+        
+        # Update sensor status flags
+        sensor_updates <- list(
+          acc_hig_peaks_processed = "Y",
+          acc_collision_processed = "Y",
+          all_acc_processed = "Y",
+          acc_config = config$label
+        )
+        
+        success_sensor <- safe_update_sensor_index(output_dir(), sensor_name, sensor_updates)
+        
+        if (success_sensor) {
+          trigger_data_update()
+          trigger_summary_update()
+          
+          showNotification(paste("Acceleration peaks calculated and saved for", sensor_name, 
+                                 "- Found", nrow(peak_results), "peaks"), type = "message")
+        } else {
+          showNotification("Warning: Peaks calculated but failed to update sensor status", type = "warning")
+        }
+        
+      }, error = function(e) {
+        showNotification(paste("Error calculating peaks:", e$message), type = "error")
+      })
+    }
+    
+    # Generate acceleration summary text
+    generate_acceleration_text <- function(sensor_name, output_dir) {
+      instrument_df <- get_instrument_index_file(output_dir, read_data = TRUE)
+      
+      if (is.null(instrument_df)) {
+        return(list(
+          peaks_text = "Acceleration data not available",
+          events_text = "",
+          collisions_text = ""
+        ))
+      }
+      
+      tryCatch({
+        sensor_row <- instrument_df[instrument_df$file == sensor_name & instrument_df$roi == "overall", ]
+        
+        if (nrow(sensor_row) == 0) {
+          return(list(
+            peaks_text = "Acceleration analysis not completed",
+            events_text = "",
+            collisions_text = ""
+          ))
+        }
+        
+        # Extract values
+        event_95g <- sensor_row$acc_event_95g %||% 0
+        event_200g <- sensor_row$acc_event_200g %||% 0
+        event_400g <- sensor_row$acc_event_400g %||% 0
+        collisions <- sensor_row$acc_collision %||% 0
+        
+        # Format text outputs
+        peaks_text <- paste("Events ≥95g =", event_95g)
+        events_text <- paste("Events ≥200g =", event_200g, "| Events ≥400g =", event_400g)
+        collisions_text <- paste("Collision events =", collisions)
+        
+        return(list(
+          peaks_text = peaks_text,
+          events_text = events_text,
+          collisions_text = collisions_text
+        ))
+        
+      }, error = function(e) {
+        return(list(
+          peaks_text = "Error reading acceleration data",
+          events_text = "",
+          collisions_text = ""
+        ))
+      })
+    }
     
     
     # Save acceleration configuration function
@@ -650,44 +846,38 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     
     
     
-    # acceleration summary text outputs
-    # just template from pressure module for example, replace with text outputs for acceleration peaks
-    # pressure_summary_text <- reactive({
-    #   req(sensor_selector$selected_sensor())
-    #   global_sensor_state$summary_updated  # Invalidate when data changes
-    #   generate_pressure_text(sensor_selector$selected_sensor(), output_dir())
-    # })
-    # 
-    # output$pressure_nadir_text <- renderText({
-    #   pressure_summary_text()$nadir_text
-    # })
-    # 
-    # output$rpc_text <- renderText({
-    #   pressure_summary_text()$rpc_text
-    # })
-    # 
-    # output$lrpc_surface_text <- renderText({
-    #   pressure_summary_text()$lrpc_surface_text
-    # })
-    # 
-    # output$lrpc_depth_text <- renderText({
-    #   pressure_summary_text()$lrpc_depth_text
-    # })
-    # 
-    # # RPC/LRPC status output
-    # output$current_rpc_lrpc <- renderText({
-    #   req(sensor_selector$selected_sensor())
-    #   status <- sensor_status()
-    #   
-    #   rpc_processed <- status$pres_rpc_processed %||% FALSE
-    #   lrpc_processed <- status$pres_lrpc_processed %||% FALSE
-    #   
-    #   if (rpc_processed && lrpc_processed) {
-    #     paste("RPC and LRPC calculated for", sensor_selector$selected_sensor())
-    #   } else {
-    #     ""
-    #   }
-    # })
+    # Acceleration summary text outputs
+    acceleration_summary_text <- reactive({
+      req(sensor_selector$selected_sensor())
+      global_sensor_state$summary_updated
+      generate_acceleration_text(sensor_selector$selected_sensor(), output_dir())
+    })
+    
+    output$acceleration_peaks_text <- renderText({
+      acceleration_summary_text()$peaks_text
+    })
+    
+    output$acceleration_events_text <- renderText({
+      acceleration_summary_text()$events_text
+    })
+    
+    output$acceleration_collisions_text <- renderText({
+      acceleration_summary_text()$collisions_text
+    })
+    
+    # Peaks status output
+    output$current_peaks <- renderText({
+      req(sensor_selector$selected_sensor())
+      status <- sensor_status()
+      
+      peaks_processed <- status$acc_hig_peaks_processed %||% FALSE
+      
+      if (peaks_processed) {
+        paste("Acceleration peaks calculated for", sensor_selector$selected_sensor())
+      } else {
+        ""
+      }
+    })
     
     # Acceleration config status
     output$acceleration_config_status <- renderText({
@@ -702,8 +892,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     status_controls <- statusModuleServer("status_display",
                                           sensor_name_reactive = reactive(sensor_selector$selected_sensor()),
                                           output_dir_reactive = reactive(output_dir()),
-                                          check_types = c("acc_processed", "acc_processed_sum", "acc_processed_peaks"),
-                                          invalidation_trigger = reactive(global_sensor_state$summary_updated),
+                                          check_types = c("acc_processed", "acc_processed_sum", "acc_processed_peaks", "acc_processed_collision"),                                          invalidation_trigger = reactive(global_sensor_state$summary_updated),
                                           individual_outputs = TRUE)
     
     # acceleration summary display ####
