@@ -116,10 +116,9 @@ accelerationUI <- function(id) {
               ),
               column(
                 width = 4,
-                tags$h4("Sensor acceleration summary", style = "margin-top: 0; color: #333;"),
-                tags$p(textOutput(ns("acceleration_peaks_text"))),
-                tags$p(textOutput(ns("acceleration_events_text"))),
-                tags$p(textOutput(ns("acceleration_collisions_text")))
+                tags$h4("Acceleration event summary", style = "margin-top: 0; color: #333;"),
+                tags$p("Event counts and blade strike detection are now displayed in the summary table by ROI."),
+                tags$p("The table shows comprehensive acceleration analysis including collision/shear classification and blade strike assessment relative to pressure nadir timing.")
               )
             )
           )
@@ -578,7 +577,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
         height = config$height,
         prominence = config$prominence,
         interpeak = config$interpeak,
-        strike_threshold = cofgi$strike_threshold,
+        strike_threshold = config$strike_threshold,
         collision_threshold = config$collision_threshold,
         shear_threshold = config$shear_threshold
       ))
@@ -674,6 +673,48 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     }
     
     # Calculate and save acceleration peaks
+    detect_blade_strike <- function(sensor_name, output_dir, peak_results, strike_threshold) {
+      # Get nadir time from roi4_nadir in instrument index
+      instrument_df <- get_instrument_index_file(output_dir, read_data = TRUE)
+      if (is.null(instrument_df)) {
+        return(list(acc_strike = "N", acc_strike_event.time. = NA, acc_strike_event.g. = NA))
+      }
+      
+      tryCatch({
+        roi4_row <- instrument_df[instrument_df$file == sensor_name & instrument_df$roi == "roi4_nadir", ]
+        
+        if (nrow(roi4_row) == 0 || is.na(roi4_row$pres_min.time.)) {
+          return(list(acc_strike = "N", acc_strike_event.time. = NA, acc_strike_event.g. = NA))
+        }
+        
+        nadir_time <- as.numeric(roi4_row$pres_min.time.)
+        
+        # Find peaks within ±0.1s of nadir that meet strike threshold
+        strike_candidates <- peak_results[
+          peak_results$peak_value >= strike_threshold & 
+            abs(peak_results$peak_time - nadir_time) <= 0.1,
+        ]
+        
+        if (nrow(strike_candidates) == 0) {
+          return(list(acc_strike = "N", acc_strike_event.time. = NA, acc_strike_event.g. = NA))
+        }
+        
+        # Find closest to nadir time
+        closest_idx <- which.min(abs(strike_candidates$peak_time - nadir_time))
+        closest_strike <- strike_candidates[closest_idx, ]
+        
+        return(list(
+          acc_strike = "Y",
+          acc_strike_event.time. = closest_strike$peak_time,
+          acc_strike_event.g. = closest_strike$peak_value
+        ))
+        
+      }, error = function(e) {
+        return(list(acc_strike = "N", acc_strike_event.time. = NA, acc_strike_event.g. = NA))
+      })
+    }
+    
+    # 2. Updated calculate_and_save_peaks function
     calculate_and_save_peaks <- function() {
       tryCatch({
         sensor_name <- sensor_selector$selected_sensor()
@@ -695,18 +736,8 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
           return()
         }
         
-        if (is.null(config$collision_threshold)) {
-          showNotification("Please enter collision threshold value", type = "error")
-          return()
-        }
-        
-        if (is.null(config$strike_threshold)) {
-          showNotification("Please enter strike threshold value", type = "error")
-          return()
-        }
-        
-        if (is.null(config$shear_threshold)) {
-          showNotification("Please enter shear threshold value", type = "error")
+        if (is.null(config$collision_threshold) || is.null(config$strike_threshold) || is.null(config$shear_threshold)) {
+          showNotification("Please enter all threshold values", type = "error")
           return()
         }
         
@@ -720,47 +751,85 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
         # Get peak parameters
         params <- get_peak_params(config)
         
-        # Find peaks
-        peak_results <- find_acceleration_peaks(sensor_data, params)
+        # Define ROI levels to process
+        roi_levels <- c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
+                        "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                        "roi6_outflow_passage", "roi7_sens_outgress")
         
-        # Prepare updates for instrument index
-        updates <- list()
-        
-        if (nrow(peak_results) > 0) {
-          # Add individual peak data
-          for (i in seq_len(nrow(peak_results))) {
-            peak <- peak_results[i, ]
-            updates[[paste0("acc_peak_", i, ".time.")]] <- peak$peak_time
-            updates[[paste0("acc_peak_", i, ".g.")]] <- peak$peak_value
-            updates[[paste0("acc_peak_", i, "_type")]] <- peak$peak_type
+        # Process each ROI
+        for (roi in roi_levels) {
+          # Filter data for this ROI
+          if (roi == "overall") {
+            roi_data <- sensor_data
+          } else {
+            roi_data <- sensor_data[sensor_data$roi == roi, ]
           }
           
-          # Add event counts - all using threshold-based counting
-          updates$acc_event_95g <- sum(peak_results$peak_value >= 95)
-          updates$acc_event_200g <- sum(peak_results$peak_value >= 200)
-          updates$acc_event_400g <- sum(peak_results$peak_value >= 400)
+          if (nrow(roi_data) == 0) next
           
-          # Add collision count
-          updates$acc_collision <- sum(peak_results$peak_type == "collision")
-        } else {
-          # No peaks found
-          updates$acc_event_95g <- 0
-          updates$acc_event_200g <- 0
-          updates$acc_event_400g <- 0
-          updates$acc_collision <- 0
-        }
-        
-        # Save to instrument index for overall ROI
-        success <- safe_update_instrument_index(output_dir(), sensor_name, "overall", updates)
-        
-        if (!success) {
-          showNotification("Failed to save peak results to instrument index", type = "error")
-          return()
+          # Find peaks for this ROI
+          peak_results <- find_acceleration_peaks(roi_data, params)
+          
+          # Prepare updates for this ROI
+          updates <- list()
+          
+          if (nrow(peak_results) > 0) {
+            # Add individual peak data (only for overall ROI to avoid duplication)
+            if (roi == "overall") {
+              for (i in seq_len(min(6, nrow(peak_results)))) {  # Limit to 6 peaks
+                peak <- peak_results[i, ]
+                updates[[paste0("acc_peak_", i, ".time.")]] <- peak$peak_time
+                updates[[paste0("acc_peak_", i, ".g.")]] <- peak$peak_value
+                updates[[paste0("acc_peak_", i, "_type")]] <- peak$peak_type
+              }
+            }
+            
+            # Add event counts using new logic
+            updates$acc_event_95g <- sum(peak_results$peak_value >= 95)
+            updates$acc_event_200g <- sum(peak_results$peak_value >= 200)
+            updates$acc_event_400g <- sum(peak_results$peak_value >= 400)
+            
+            # Updated collision and shear counting with thresholds
+            updates$acc_collision <- sum(peak_results$peak_value >= config$collision_threshold & 
+                                           peak_results$peak_type == "collision")
+            updates$acc_shear <- sum(peak_results$peak_value >= config$shear_threshold & 
+                                       peak_results$peak_type == "shear")
+            
+            # Blade strike detection (only for overall ROI)
+            if (roi == "overall") {
+              strike_result <- detect_blade_strike(sensor_name, output_dir(), peak_results, config$strike_threshold)
+              updates$acc_strike <- strike_result$acc_strike
+              updates$acc_strike_event.time. <- strike_result$acc_strike_event.time.
+              updates$acc_strike_event.g. <- strike_result$acc_strike_event.g.
+            }
+            
+          } else {
+            # No peaks found for this ROI
+            updates$acc_event_95g <- 0
+            updates$acc_event_200g <- 0
+            updates$acc_event_400g <- 0
+            updates$acc_collision <- 0
+            updates$acc_shear <- 0
+            
+            if (roi == "overall") {
+              updates$acc_strike <- "N"
+              updates$acc_strike_event.time. <- NA
+              updates$acc_strike_event.g. <- NA
+            }
+          }
+          
+          # Save to instrument index for this ROI
+          success <- safe_update_instrument_index(output_dir(), sensor_name, roi, updates)
+          
+          if (!success) {
+            showNotification(paste("Failed to save peak results for", roi), type = "warning")
+          }
         }
         
         # Update sensor status flags
         sensor_updates <- list(
           acc_hig_peaks_processed = "Y",
+          acc_strike_processed = "Y",
           acc_collision_processed = "Y",
           all_acc_processed = "Y",
           acc_config = config$label
@@ -772,8 +841,10 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
           trigger_data_update()
           trigger_summary_update()
           
+          # Get overall peak count for notification
+          overall_peaks <- find_acceleration_peaks(sensor_data, params)
           showNotification(paste("Acceleration peaks calculated and saved for", sensor_name, 
-                                 "- Found", nrow(peak_results), "peaks"), type = "message")
+                                 "- Found", nrow(overall_peaks), "total peaks"), type = "message")
         } else {
           showNotification("Warning: Peaks calculated but failed to update sensor status", type = "warning")
         }
@@ -783,56 +854,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
       })
     }
     
-    # Generate acceleration summary text
-    generate_acceleration_text <- function(sensor_name, output_dir) {
-      instrument_df <- get_instrument_index_file(output_dir, read_data = TRUE)
-      
-      if (is.null(instrument_df)) {
-        return(list(
-          peaks_text = "Acceleration data not available",
-          events_text = "",
-          collisions_text = ""
-        ))
-      }
-      
-      tryCatch({
-        sensor_row <- instrument_df[instrument_df$file == sensor_name & instrument_df$roi == "overall", ]
-        
-        if (nrow(sensor_row) == 0) {
-          return(list(
-            peaks_text = "Acceleration analysis not completed",
-            events_text = "",
-            collisions_text = ""
-          ))
-        }
-        
-        # Extract values
-        event_95g <- sensor_row$acc_event_95g %||% 0
-        event_200g <- sensor_row$acc_event_200g %||% 0
-        event_400g <- sensor_row$acc_event_400g %||% 0
-        collisions <- sensor_row$acc_collision %||% 0
-        
-        # Format text outputs
-        peaks_text <- paste("Events ≥95g =", event_95g)
-        events_text <- paste("Events ≥200g =", event_200g, "| Events ≥400g =", event_400g)
-        collisions_text <- paste("Collision events =", collisions)
-        
-        return(list(
-          peaks_text = peaks_text,
-          events_text = events_text,
-          collisions_text = collisions_text
-        ))
-        
-      }, error = function(e) {
-        return(list(
-          peaks_text = "Error reading acceleration data",
-          events_text = "",
-          collisions_text = ""
-        ))
-      })
-    }
-    
-    
+   
     # Save acceleration configuration function
     save_acceleration_configuration <- function() {
       config_name <- trimws(input$acceleration_config_label)
@@ -881,27 +903,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     # ============================= #
     # /// Output render \\\ ####  
     # ============================= #    
-    
-    
-    
-    # Acceleration summary text outputs
-    acceleration_summary_text <- reactive({
-      req(sensor_selector$selected_sensor())
-      global_sensor_state$summary_updated
-      generate_acceleration_text(sensor_selector$selected_sensor(), output_dir())
-    })
-    
-    output$acceleration_peaks_text <- renderText({
-      acceleration_summary_text()$peaks_text
-    })
-    
-    output$acceleration_events_text <- renderText({
-      acceleration_summary_text()$events_text
-    })
-    
-    output$acceleration_collisions_text <- renderText({
-      acceleration_summary_text()$collisions_text
-    })
+
     
     # Peaks status output
     output$current_peaks <- renderText({

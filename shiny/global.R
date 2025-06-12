@@ -166,22 +166,26 @@ safe_update_instrument_index <- function(output_dir, sensor_name, roi, updates) 
 ## Get instrument column mappings ####
 get_instrument_column_mapping <- function(instrument_var) {
   switch(instrument_var,
-    "pres" = list(
-      data_cols = c("pressure_kpa"),
-      prefix = "pres",
-      units = c(".kPa.")
-    ),
-    "acc" = list(
-      data_cols = c("higacc_mag_g", "inacc_mag_ms"),
-      prefix = c("acc_hig", "acc_inacc"),
-      units = c(".g.", ".ms.")
-    ),
-    "rot" = list(
-      data_cols = c("rot_mag_degs"),
-      prefix = "rot",
-      units = c(".degs.")
-    ),
-    NULL
+         "pres" = list(
+           data_cols = c("pressure_kpa"),
+           prefix = "pres",
+           units = c(".kPa.")
+         ),
+         "acc" = list(
+           data_cols = c("higacc_mag_g", "inacc_mag_ms"),
+           prefix = c("acc_hig", "acc_inacc"),
+           units = c(".g.", ".ms."),
+           event_cols = c("acc_event_95g", "acc_event_200g", "acc_event_400g", 
+                          "acc_collision", "acc_shear", "acc_strike"),
+           event_labels = c("Events ≥95g (n)", "Events ≥200g (n)", "Events ≥400g (n)", 
+                            "Collision events (n)", "Shear events (n)", "Blade strike")
+         ),
+         "rot" = list(
+           data_cols = c("rot_mag_degs"),
+           prefix = "rot",
+           units = c(".degs.")
+         ),
+         NULL
   )
 }
 
