@@ -75,14 +75,15 @@ load_config_file <- function(output_dir, config_type) {
       if (grepl(",", line)) {
         parts <- strsplit(line, ",")[[1]]
         parts <- trimws(parts)
-        if (length(parts) == 6) {  # 5 values + name
+        if (length(parts) == 7) {  # 6 values + name
           config_list[[parts[1]]] <- list(
             label = parts[1],
             height = as.numeric(parts[2]),
             prominence = as.numeric(parts[3]),
             interpeak = as.numeric(parts[4]),
             strike_threshold = as.numeric(parts[5]),
-            collision_threshold = as.numeric(parts[6])
+            collision_threshold = as.numeric(parts[6]),
+            shear_threshold = as.numeric(parts[7])
           )
         }
       }
@@ -200,7 +201,7 @@ save_config_value <- function(output_dir, config_type, key, value, append = TRUE
     }
     
     else if (config_type == "acc") {
-      if (length(value) != 5) stop("Acceleration config requires exactly 5 values")
+      if (length(value) != 6) stop("Acceleration config requires exactly 5 values")
       line <- paste(key, paste(value, collapse = ", "), sep = ", ")
       
       if (append && file.exists(config_file)) {

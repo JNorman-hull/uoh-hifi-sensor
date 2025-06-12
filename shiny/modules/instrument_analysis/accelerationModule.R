@@ -228,6 +228,10 @@ accelerationSidebarUI <- function(id) {
             numericInput(ns("collision_threshold"), "Collision threshold:", 
                          value = NULL, min = 0, max = 1000, step = 1, width = "100%")),
         
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("shear_threshold"), "Shear threshold:", 
+                         value = NULL, min = 0, max = 1000, step = 1, width = "100%")),
+        
         div(style = "margin-bottom: 15px;",
             textInput(ns("acceleration_config_label"), "Configuration label:", 
                       value = "", width = "100%", placeholder = "e.g., Custom_acceleration_config")),
@@ -442,6 +446,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
         updateNumericInput(session, "interpeak", value = config$interpeak)
         updateNumericInput(session, "strike_threshold", value = config$strike_threshold)
         updateNumericInput(session, "collision_threshold", value = config$collision_threshold)
+        updateNumericInput(session, "shear_threshold", value = config$shear_threshold)
       }
     })
     
@@ -456,7 +461,8 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
             input$prominence != (config$prominence %||% 0) ||
             input$interpeak != (config$interpeak %||% 0) ||
             input$strike_threshold != (config$strike_threshold %||% 0) ||
-            input$collision_threshold != (config$collision_threshold %||% 0)
+            input$collision_threshold != (config$collision_threshold %||% 0) ||
+            input$shear_threshold != (config$shear_threshold %||% 0)
         )
         
         acceleration_values$inputs_changed <- inputs_changed
@@ -468,7 +474,8 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
             !is.null(input$prominence) ||
             !is.null(input$interpeak) ||
             !is.null(input$strike_threshold) ||
-            !is.null(input$collision_threshold)
+            !is.null(input$collision_threshold) ||
+            !is.null(input$shear_threshold)
         )
         
         acceleration_values$inputs_changed <- inputs_changed
@@ -571,7 +578,9 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
         height = config$height,
         prominence = config$prominence,
         interpeak = config$interpeak,
-        collision_threshold = config$collision_threshold
+        strike_threshold = cofgi$strike_threshold,
+        collision_threshold = config$collision_threshold,
+        shear_threshold = config$shear_threshold
       ))
     }
     
@@ -675,7 +684,9 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
           height = input$height,
           prominence = input$prominence,
           interpeak = input$interpeak,
-          collision_threshold = input$collision_threshold
+          strike_threshold = input$strike_threshold,
+          collision_threshold = input$collision_threshold,
+          shear_threshold = input$shear_threshold
         )
         
         # Validate inputs
@@ -686,6 +697,16 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
         
         if (is.null(config$collision_threshold)) {
           showNotification("Please enter collision threshold value", type = "error")
+          return()
+        }
+        
+        if (is.null(config$strike_threshold)) {
+          showNotification("Please enter strike threshold value", type = "error")
+          return()
+        }
+        
+        if (is.null(config$shear_threshold)) {
+          showNotification("Please enter shear threshold value", type = "error")
           return()
         }
         
@@ -822,7 +843,8 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
         input$prominence,
         input$interpeak,
         input$strike_threshold,
-        input$collision_threshold
+        input$collision_threshold,
+        input$shear_threshold
       )
       
       # Save configuration using shared function
@@ -846,7 +868,8 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
           prominence = input$prominence,
           interpeak = input$interpeak,
           strike_threshold = input$strike_threshold,
-          collision_threshold = input$collision_threshold
+          collision_threshold = input$collision_threshold,
+          shear_threshold = input$shear_threshold
         )
         
         showNotification("Acceleration configuration saved successfully!", type = "message")
