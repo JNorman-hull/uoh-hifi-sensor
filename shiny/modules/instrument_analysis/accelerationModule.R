@@ -795,12 +795,19 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
             updates$acc_shear <- sum(peak_results$peak_value >= config$shear_threshold & 
                                        peak_results$peak_type == "shear")
             
-            # Blade strike detection (only for overall ROI)
+            # Blade strike detection (for overall and roi4_nadir)
             if (roi == "overall") {
               strike_result <- detect_blade_strike(sensor_name, output_dir(), peak_results, config$strike_threshold)
               updates$acc_strike <- strike_result$acc_strike
               updates$acc_strike_event.time. <- strike_result$acc_strike_event.time.
               updates$acc_strike_event.g. <- strike_result$acc_strike_event.g.
+            } else if (roi == "roi4_nadir") {
+              # For roi4_nadir, get the strike result from overall
+              strike_result <- detect_blade_strike(sensor_name, output_dir(), peak_results, config$strike_threshold)
+              updates$acc_strike <- strike_result$acc_strike
+            } else {
+              # For all other ROIs, explicitly set to NA
+              updates$acc_strike <- NA
             }
             
           } else {
@@ -811,10 +818,16 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
             updates$acc_collision <- 0
             updates$acc_shear <- 0
             
+            # Blade strike: only set for overall and roi4_nadir, others get NA
             if (roi == "overall") {
               updates$acc_strike <- "N"
               updates$acc_strike_event.time. <- NA
               updates$acc_strike_event.g. <- NA
+            } else if (roi == "roi4_nadir") {
+              updates$acc_strike <- "N"
+            } else {
+              # For all other ROIs, explicitly set to NA
+              updates$acc_strike <- NA
             }
           }
           

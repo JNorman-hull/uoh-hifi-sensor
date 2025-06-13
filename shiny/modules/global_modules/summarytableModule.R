@@ -353,7 +353,17 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
           )
       }
       
-      DT::datatable(
+      # Transform blade strike display values before creating table
+      if (instrument_variable == "acc" && "Blade strike" %in% names(display_data)) {
+        display_data <- display_data %>%
+          mutate(`Blade strike` = case_when(
+            `Blade strike` == "Y" ~ "Blade strike detected",
+            `Blade strike` == "N" ~ "No blade strike",
+            TRUE ~ as.character(NA)
+          ))
+      }
+      
+      dt <- DT::datatable(
         display_data,
         options = list(
           pageLength = 8,
@@ -367,14 +377,64 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
         rownames = FALSE,
         selection = 'none'
       ) %>%
-        DT::formatStyle(columns = 1:ncol(display_data), fontSize = '12px') %>%
-        # Only format numeric columns (skip ROI and Blade strike columns)
-        DT::formatRound(columns = which(sapply(display_data, is.numeric)), digits = 2) %>%
-        DT::formatStyle(
-          "ROI",
-          target = "row",
-          backgroundColor = DT::styleEqual("ROI 4: Nadir", "lightgreen")
-        )
+        DT::formatStyle(columns = 1:ncol(display_data), fontSize = '12px')
+      
+      # Apply number formatting based on instrument type
+      if (instrument_variable == "acc") {
+        # Count columns as integers (no decimals)
+        count_cols <- which(names(display_data) %in% c("Events ≥95g (n)", "Events ≥200g (n)", 
+                                                       "Events ≥400g (n)", "Collision events (n)", 
+                                                       "Shear events (n)"))
+        if (length(count_cols) > 0) {
+          dt <- dt %>% DT::formatRound(columns = count_cols, digits = 0)
+        }
+        
+        # Other numeric columns as 2 decimal places
+        other_numeric_cols <- which(sapply(display_data, is.numeric) & 
+                                      !seq_along(display_data) %in% count_cols)
+        if (length(other_numeric_cols) > 0) {
+          dt <- dt %>% DT::formatRound(columns = other_numeric_cols, digits = 2)
+        }
+        
+        # Color blade strike cells red when detected
+        if ("Blade strike" %in% names(display_data)) {
+          dt <- dt %>% DT::formatStyle(
+            "Blade strike",
+            target = "cell",
+            backgroundColor = DT::styleEqual("Blade strike detected", "red"),
+            color = DT::styleEqual("Blade strike detected", "white"),
+            fontWeight = DT::styleEqual("Blade strike detected", "bold")
+          )
+        }
+        
+      } else {
+        # For pressure/rotation, format all numeric as 2 decimal places
+        numeric_cols <- which(sapply(display_data, is.numeric))
+        if (length(numeric_cols) > 0) {
+          dt <- dt %>% DT::formatRound(columns = numeric_cols, digits = 2)
+        }
+      }
+      
+      # For acceleration, add orange highlighting for rows with events > 0
+      if (instrument_variable == "acc") {
+        # Check which rows have any event counts > 0
+        event_cols <- c("Events ≥95g (n)", "Events ≥200g (n)", "Events ≥400g (n)", 
+                        "Collision events (n)", "Shear events (n)")
+        existing_event_cols <- intersect(event_cols, names(display_data))
+        
+        if (length(existing_event_cols) > 0) {
+          # Find rows with any count > 0
+          rows_with_events <- which(rowSums(display_data[existing_event_cols] > 0, na.rm = TRUE) > 0)
+          
+          if (length(rows_with_events) > 0) {
+            dt <- dt %>% DT::formatStyle(
+              "ROI",
+              target = "row",
+              backgroundColor = DT::styleRow(rows_with_events, "orange")
+            )
+          }
+        }
+      }
     })
     
     return(list(
