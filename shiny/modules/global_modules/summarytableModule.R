@@ -294,6 +294,11 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
         relevant_cols <- c(relevant_cols, event_cols_present)
       }
       
+      if (instrument_variable == "pres" && "event_cols" %in% names(mapping)) {
+        event_cols_present <- mapping$event_cols[mapping$event_cols %in% names(summary_data)]
+        relevant_cols <- c(relevant_cols, event_cols_present)
+      }
+      
       # Select and arrange data
       display_data <- summary_data %>%
         select(all_of(relevant_cols)) %>%
@@ -334,7 +339,11 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
             `Min (kPa)` = pres_min.kPa.,
             `Max (kPa)` = pres_max.kPa.,
             `Median (kPa)` = pres_median.kPa.,
-            `IQR (kPa)` = pres_iqr.kPa.
+            `IQR (kPa)` = pres_iqr.kPa.,
+            `Nadir barotrauma` = nadir_baro,
+            `RPC barotrauma` = rpc_baro,
+            `LRPC surface barotrauma` = lrpc_baro_surface,
+            `LRPC depth barotrauma` = lrpc_baro_depth
           )
       } else if (instrument_variable == "rot") {
         # Rotation columns (without time columns)
@@ -430,6 +439,48 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
           }
         }
       }
+      
+      # Orange highlighting for rows with barotrauma
+      if ("Nadir barotrauma" %in% names(display_data)) {
+        # ROI 4: Nadir gets orange if nadir barotrauma = "Y"
+        roi4_nadir_rows <- which(display_data$ROI == "ROI 4: Nadir" & display_data$`Nadir barotrauma` == "Y")
+        
+        # Overall gets orange if ANY barotrauma = "Y"
+        baro_cols <- c("Nadir barotrauma", "RPC barotrauma", "LRPC surface barotrauma", "LRPC depth barotrauma")
+        existing_baro_cols <- intersect(baro_cols, names(display_data))
+        
+        if (length(existing_baro_cols) > 0) {
+          overall_baro_rows <- which(
+            display_data$ROI == "Overall" & 
+              rowSums(display_data[existing_baro_cols] == "Y", na.rm = TRUE) > 0
+          )
+          
+          # Combine both sets of rows for orange highlighting
+          orange_rows <- c(roi4_nadir_rows, overall_baro_rows)
+          
+          if (length(orange_rows) > 0) {
+            dt <- dt %>% DT::formatStyle(
+              "ROI",
+              target = "row", 
+              backgroundColor = DT::styleRow(orange_rows, "orange")
+            )
+          }
+        }
+      }
+        
+        # Red cell highlighting for ALL barotrauma events = "Y" (including nadir)
+        baro_cols <- c("Nadir barotrauma", "RPC barotrauma", "LRPC surface barotrauma", "LRPC depth barotrauma")
+        existing_baro_cols <- intersect(baro_cols, names(display_data))
+        
+        for (col in existing_baro_cols) {
+          dt <- dt %>% DT::formatStyle(
+            col,
+            target = "cell",
+            backgroundColor = DT::styleEqual("Y", "red"),
+            color = DT::styleEqual("Y", "white"),
+            fontWeight = DT::styleEqual("Y", "bold")
+          )
+        }
       
       return(dt)
     })

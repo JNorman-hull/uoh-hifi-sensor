@@ -169,7 +169,9 @@ get_instrument_column_mapping <- function(instrument_var) {
          "pres" = list(
            data_cols = c("pressure_kpa"),
            prefix = "pres",
-           units = c(".kPa.")
+           units = c(".kPa."),
+           event_cols = c("nadir_baro", "rpc_baro", "lrpc_baro_surface", "lrpc_baro_depth"),
+           event_labels = c("Nadir barotrauma", "RPC barotrauma", "LRPC surface barotrauma", "LRPC depth barotrauma")
          ),
          "acc" = list(
            data_cols = c("higacc_mag_g", "inacc_mag_ms"),

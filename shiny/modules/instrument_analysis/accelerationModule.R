@@ -111,14 +111,8 @@ accelerationUI <- function(id) {
                    border-radius: 5px; margin-top: 20px;",
             fluidRow(
               column(
-                width = 8,
+                width = 12,
                 summarytableModuleUI(ns("acceleration_summary"))
-              ),
-              column(
-                width = 4,
-                tags$h4("Acceleration event summary", style = "margin-top: 0; color: #333;"),
-                tags$p("Event counts and blade strike detection are now displayed in the summary table by ROI."),
-                tags$p("The table shows comprehensive acceleration analysis including collision/shear classification and blade strike assessment relative to pressure nadir timing.")
               )
             )
           )

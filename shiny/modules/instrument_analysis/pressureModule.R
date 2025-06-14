@@ -116,43 +116,100 @@ rate_ratio_analysis <- function(sensor_name, output_dir, pressure_config) {
       stop("Failed to read delineated dataset")
     }
     
-    # Get ROI 4 nadir info from instrument index
+    # Get ROI 4 nadir info from instrument index (calculated during summary)
     roi4_nadir <- get_roi4_nadir_info(sensor_name, output_dir)
     
     if (!roi4_nadir$available) {
       stop("ROI 4 nadir information not available. Please calculate pressure summary first.")
     }
     
-    # Get max pressure 1s before nadir
+    # Get max pressure 1s before nadir (only needed once)
     max_pres_results <- rpc_find_max_pres(sensor_data, roi4_nadir$time)
     
-    # Calculate RPC
+    # Calculate RPC (only needed once)
     pres_rpc <- rpc_calculate(roi4_nadir$value, max_pres_results$pres_max_1s_nadir.kPa.)
     
     # Get acclimation values from config
     acclim_values <- lrpc_get_acclim(pressure_config)
     
-    # Calculate LRPC
+    # Calculate LRPC (only needed once)
     lrpc_results <- lrpc_calculate(roi4_nadir$value, 
                                    acclim_values$acclim_pres_surface, 
                                    acclim_values$acclim_pres_depth)
     
-    # Prepare updates for instrument index
-    updates <- list(
-      pres_max_1s_nadir.kPa. = max_pres_results$pres_max_1s_nadir.kPa.,
-      pres_max_1s_nadir.time. = max_pres_results$pres_max_1s_nadir.time.,
-      pres_rpc = pres_rpc,
-      pres_acclim_pres_surface = acclim_values$acclim_pres_surface,
-      pres_acclim_pres_depth = acclim_values$acclim_pres_depth,
-      pres_lrpc_surface = lrpc_results$pres_lrpc_surface,
-      pres_lrpc_depth = lrpc_results$pres_lrpc_depth
-    )
+    # Calculate barotrauma flags (only needed once)
+    barotrauma_results <- list()
     
-    # Save to instrument index for overall ROI
-    success <- safe_update_instrument_index(output_dir, sensor_name, "overall", updates)
+    # Nadir barotrauma: check if nadir <= threshold
+    if (!is.na(roi4_nadir$value) && !is.na(pressure_config$nadir_threshold)) {
+      barotrauma_results$nadir_baro <- if (roi4_nadir$value <= pressure_config$nadir_threshold) "Y" else "N"
+    } else {
+      barotrauma_results$nadir_baro <- "N"
+    }
     
-    if (!success) {
-      stop("Failed to save RPC/LRPC results to instrument index")
+    # RPC barotrauma: check if rpc >= threshold  
+    if (!is.na(pres_rpc) && !is.na(pressure_config$rpc_threshold)) {
+      barotrauma_results$rpc_baro <- if (pres_rpc >= pressure_config$rpc_threshold) "Y" else "N"
+    } else {
+      barotrauma_results$rpc_baro <- "N"
+    }
+    
+    # LRPC barotrauma calculations
+    if (!is.na(lrpc_results$pres_lrpc_surface) && !is.na(pressure_config$lrpc_threshold)) {
+      barotrauma_results$lrpc_baro_surface <- if (lrpc_results$pres_lrpc_surface >= pressure_config$lrpc_threshold) "Y" else "N"
+    } else {
+      barotrauma_results$lrpc_baro_surface <- "N"
+    }
+    
+    if (!is.na(lrpc_results$pres_lrpc_depth) && !is.na(pressure_config$lrpc_threshold)) {
+      barotrauma_results$lrpc_baro_depth <- if (lrpc_results$pres_lrpc_depth >= pressure_config$lrpc_threshold) "Y" else "N"
+    } else {
+      barotrauma_results$lrpc_baro_depth <- "N"
+    }
+    
+    # Define ROI levels to process (like acceleration module)
+    roi_levels <- c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
+                    "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                    "roi6_outflow_passage", "roi7_sens_outgress")
+    
+    # Process each ROI
+    for (roi in roi_levels) {
+      # Prepare updates for this ROI
+      updates <- list()
+      
+      # Apply different logic based on ROI (like acceleration does)
+      if (roi == "overall") {
+        # Full data for overall
+        updates <- list(
+          pres_max_1s_nadir.kPa. = max_pres_results$pres_max_1s_nadir.kPa.,
+          pres_max_1s_nadir.time. = max_pres_results$pres_max_1s_nadir.time.,
+          pres_rpc = pres_rpc,
+          pres_acclim_pres_surface = acclim_values$acclim_pres_surface,
+          pres_acclim_pres_depth = acclim_values$acclim_pres_depth,
+          pres_lrpc_surface = lrpc_results$pres_lrpc_surface,
+          pres_lrpc_depth = lrpc_results$pres_lrpc_depth,
+          nadir_baro = barotrauma_results$nadir_baro,
+          rpc_baro = barotrauma_results$rpc_baro,
+          lrpc_baro_surface = barotrauma_results$lrpc_baro_surface,
+          lrpc_baro_depth = barotrauma_results$lrpc_baro_depth
+        )
+      } else if (roi == "roi4_nadir") {
+        # Only nadir barotrauma for roi4_nadir (like blade strike)
+        updates$nadir_baro = barotrauma_results$nadir_baro
+      } else {
+        # All other ROIs get NA for barotrauma (like blade strike)
+        updates$nadir_baro = NA
+        updates$rpc_baro = NA
+        updates$lrpc_baro_surface = NA
+        updates$lrpc_baro_depth = NA
+      }
+      
+      # Save to instrument index for this ROI
+      success <- safe_update_instrument_index(output_dir, sensor_name, roi, updates)
+      
+      if (!success) {
+        warning(paste("Failed to save pressure results for", roi))
+      }
     }
     
     # Update sensor status flags
@@ -169,7 +226,7 @@ rate_ratio_analysis <- function(sensor_name, output_dir, pressure_config) {
       stop("Failed to update sensor status flags")
     }
     
-    return(list(success = TRUE, updates = updates))
+    return(list(success = TRUE))
     
   }, error = function(e) {
     return(list(success = FALSE, error = e$message))
