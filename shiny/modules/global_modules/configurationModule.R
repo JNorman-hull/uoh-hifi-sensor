@@ -97,12 +97,15 @@ load_config_file <- function(output_dir, config_type) {
       if (grepl(",", line)) {
         parts <- strsplit(line, ",")[[1]]
         parts <- trimws(parts)
-        if (length(parts) == 4) {  # 3 values + name
+        if (length(parts) == 7) {  # 6 values + name
           config_list[[parts[1]]] <- list(
             label = parts[1],
             acclim_pres_surface = as.numeric(parts[2]),
             acclim_pres_depth = as.numeric(parts[3]),
-            hydrostatic_pressure = as.numeric(parts[4])
+            hydrostatic_pressure = as.numeric(parts[4]),
+            nadir_threshold = as.numeric(parts[5]),
+            rpc_threshold = as.numeric(parts[6]),
+            lrpc_threshold = as.numeric(parts[7])
           )
         }
       }
@@ -201,7 +204,7 @@ save_config_value <- function(output_dir, config_type, key, value, append = TRUE
     }
     
     else if (config_type == "acc") {
-      if (length(value) != 6) stop("Acceleration config requires exactly 5 values")
+      if (length(value) != 6) stop("Acceleration config requires exactly 6 values")
       line <- paste(key, paste(value, collapse = ", "), sep = ", ")
       
       if (append && file.exists(config_file)) {
@@ -237,7 +240,7 @@ save_config_value <- function(output_dir, config_type, key, value, append = TRUE
     }
     
     else if (config_type == "pres") {
-      if (length(value) != 3) stop("Pressure config requires exactly 3 values")
+      if (length(value) != 6) stop("Pressure config requires exactly 6 values")
       line <- paste(key, paste(value, collapse = ", "), sep = ", ")
       
       if (append && file.exists(config_file)) {

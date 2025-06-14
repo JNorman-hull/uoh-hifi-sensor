@@ -391,6 +391,18 @@ pressureSidebarUI <- function(id) {
             numericInput(ns("hydrostatic_pressure"), "Hydrostatic pressure:", 
                          value = NULL, min = 0, max = 20, step = 0.01, width = "100%")),
         
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("nadir_threshold"), "Nadir threshold:", 
+                         value = NULL, min = 0, max = 20, step = 0.01, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("rpc_threshold"), "RPC threshold:", 
+                         value = NULL, min = 0, max = 20, step = 0.01, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("lrpc_threshold"), "LRPC threshold:", 
+                         value = NULL, min = 0, max = 20, step = 0.01, width = "100%")),
+        
         div(style = "margin-bottom: 15px;",
             textInput(ns("pressure_config_label"), "Configuration label:", 
                       value = "", width = "100%", placeholder = "e.g., Custom_depth_config")),
@@ -507,6 +519,9 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
         updateNumericInput(session, "acclim_pres_surface", value = config$acclim_pres_surface)
         updateNumericInput(session, "acclim_pres_depth", value = config$acclim_pres_depth)
         updateNumericInput(session, "hydrostatic_pressure", value = config$hydrostatic_pressure)
+        updateNumericInput(session, "nadir_threshold", value = config$nadir_threshold)
+        updateNumericInput(session, "rpc_threshold", value = config$rpc_threshold)
+        updateNumericInput(session, "lrpc_threshold", value = config$lrpc_threshold)
       }
     })
     
@@ -519,7 +534,10 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
           input$pressure_config_label != (config$label %||% "") ||
             input$acclim_pres_surface != (config$acclim_pres_surface %||% 0) ||
             input$acclim_pres_depth != (config$acclim_pres_depth %||% 0) ||
-            input$hydrostatic_pressure != (config$hydrostatic_pressure %||% 0)
+            input$hydrostatic_pressure != (config$hydrostatic_pressure %||% 0) ||
+            input$nadir_threshold != (config$nadir_threshold %||% 0) ||
+            input$rpc_threshold != (config$rpc_threshold %||% 0) ||
+            input$lrpc_threshold != (config$lrpc_threshold %||% 0) 
         )
         
         pressure_values$inputs_changed <- inputs_changed
@@ -529,7 +547,10 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
           nchar(trimws(input$pressure_config_label)) > 0 ||
             !is.null(input$acclim_pres_surface) ||
             !is.null(input$acclim_pres_depth) ||
-            !is.null(input$hydrostatic_pressure)
+            !is.null(input$hydrostatic_pressure) ||
+            !is.null(input$nadir_threshold) ||
+            !is.null(input$rpc_threshold) ||
+            !is.null(input$lrpc_threshold)
         )
         
         pressure_values$inputs_changed <- inputs_changed
@@ -717,7 +738,10 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
       pressure_config_values <- c(
         input$acclim_pres_surface,
         input$acclim_pres_depth,
-        input$hydrostatic_pressure
+        input$hydrostatic_pressure,
+        input$nadir_threshold,
+        input$rpc_threshold,
+        input$lrpc_threshold
       )
       
       # Save configuration using shared function
@@ -739,7 +763,10 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
           label = config_name,
           acclim_pres_surface = input$acclim_pres_surface,
           acclim_pres_depth = input$acclim_pres_depth,
-          hydrostatic_pressure = input$hydrostatic_pressure
+          hydrostatic_pressure = input$hydrostatic_pressure,
+          nadir_threshold = input$nadir_threshold,
+          rpc_threshold = input$rpc_threshold,
+          lrpc_threshold = input$lrpc_threshold
         )
         
         showNotification("Pressure configuration saved successfully!", type = "message")
@@ -759,7 +786,10 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
           label = input$pressure_config_label %||% "Current_values",
           acclim_pres_surface = input$acclim_pres_surface,
           acclim_pres_depth = input$acclim_pres_depth,
-          hydrostatic_pressure = input$hydrostatic_pressure
+          hydrostatic_pressure = input$hydrostatic_pressure,
+          nadir_threshold = input$nadir_threshold,
+          rpc_threshold = input$rpc_threshold,
+          lrpc_threshold = input$lrpc_threshold
         )
         
         # Validate inputs

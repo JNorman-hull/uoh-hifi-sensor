@@ -2,9 +2,6 @@ summarytableModuleUI <- function(id) {
   ns <- NS(id)
   
   tagList(
-    h4("Descriptive statistics and central tendencies"),
-    
-    # Summary table
     DT::dataTableOutput(ns("summary_table"))
   )
 }
@@ -14,11 +11,9 @@ summarytableSidebarUI <- function(id) {
   tagList(
   h4("Summary measurments"),
   
-  # Action button for processing summary information
   actionButton(ns("process_summary"), "Process summary information", 
                class = "btn-success btn-block"),
   
-  # Status text output
   div(style = "margin-top: 10px; margin-bottom: 15px;",
       textOutput(ns("summary_status")))
   )
@@ -207,7 +202,7 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
           success <- safe_update_instrument_index(
             output_dir_reactive(), 
             sensor_reactive(),
-            roi,  # This will now be "overall", "roi1_sens_ingress", "roi4_nadir", etc.
+            roi,
             updates
           )
           
@@ -225,8 +220,8 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
         )
         
         if (success) {
-          trigger_data_update()     # Use global trigger
-          trigger_summary_update()  # Use global trigger
+          trigger_data_update()
+          trigger_summary_update() 
           showNotification(paste("Summary information calculated and saved for", sensor_reactive()), 
                            type = "message")
         } else {
@@ -315,20 +310,20 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
         display_data <- display_data %>%
           select(
             ROI = roi,
-            `HIG Min (g)` = any_of("acc_hig_min.g."),
-            `HIG Max (g)` = any_of("acc_hig_max.g."),
-            `HIG Median (g)` = any_of("acc_hig_median.g."),
-            `HIG IQR (g)` = any_of("acc_hig_iqr.g."),
-            `Inertial Min (m/s²)` = any_of("acc_inacc_min.ms."),
-            `Inertial Max (m/s²)` = any_of("acc_inacc_max.ms."),
-            `Inertial Median (m/s²)` = any_of("acc_inacc_median.ms."),
-            `Inertial IQR (m/s²)` = any_of("acc_inacc_iqr.ms."),
-            `Events ≥95g (n)` = any_of("acc_event_95g"),
-            `Events ≥200g (n)` = any_of("acc_event_200g"),
-            `Events ≥400g (n)` = any_of("acc_event_400g"),
-            `Collision events (n)` = any_of("acc_collision"),
-            `Shear events (n)` = any_of("acc_shear"),
-            `Blade strike` = any_of("acc_strike")
+            `HIG Min (g)` = acc_hig_min.g.,
+            `HIG Max (g)` = acc_hig_max.g.,
+            `HIG Median (g)` = acc_hig_median.g.,
+            `HIG IQR (g)` = acc_hig_iqr.g.,
+            `Inertial Min (m/s²)` = acc_inacc_min.ms.,
+            `Inertial Max (m/s²)` = acc_inacc_max.ms.,
+            `Inertial Median (m/s²)` = acc_inacc_median.ms.,
+            `Inertial IQR (m/s²)` = acc_inacc_iqr.ms.,
+            `Events ≥95g (n)` = acc_event_95g,
+            `Events ≥200g (n)` = acc_event_200g,
+            `Events ≥400g (n)` = acc_event_400g,
+            `Collision events (n)` = acc_collision,
+            `Shear events (n)` = acc_shear,
+            `Blade strike` = acc_strike
           )
         
       } else if (instrument_variable == "pres") {
@@ -435,6 +430,8 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
           }
         }
       }
+      
+      return(dt)
     })
     
     return(list(
