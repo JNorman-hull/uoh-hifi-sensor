@@ -207,7 +207,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       baseline_config = NULL,
       sliders_changed = FALSE,
       slider_ranges_set = FALSE,
-      trim_boundaries_changed = FALSE
+      trim_boundaries_changed = FALSE,
+      populating_sliders = FALSE
     )
     
     # Nadir editing state (keep this as it's still needed)
@@ -332,6 +333,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Populate sliders from existing delineated data
     populate_sliders_from_delineated_data <- function() {
+      roi_values$populating_sliders <- TRUE 
       delineated_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
       if (is.null(delineated_data) || !"roi" %in% names(delineated_data)) return()
       
@@ -360,7 +362,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           updateNumericInput(session, "roi4_duration", value = roi4_duration)
         })
         
-        # ADD THIS: Set baseline_config to match the actual delineated data
         roi_values$baseline_config <- list(
           label = "From_existing_delineation",
           roi1_sens_ingress = roi2_start - roi1_start,
@@ -373,6 +374,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         )
         
         roi_values$sliders_changed <- FALSE
+        roi_values$populating_sliders <- FALSE  
         
       }, error = function(e) {
         warning("Error extracting ROI boundaries from delineated data: ", e$message)
@@ -381,6 +383,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Populate sliders from configuration
     populate_sliders_from_config <- function() {
+      roi_values$populating_sliders <- TRUE
       config <- roi_values$current_config
       nadir <- nadir_info()
       
@@ -414,6 +417,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       })
       
       roi_values$sliders_changed <- FALSE
+      roi_values$populating_sliders <- FALSE 
     }
     
     # ============================= #
@@ -423,7 +427,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Track changes in slider inputs (similar to pressure/acceleration modules)
     observe({
       # Only track changes after initial population
-      if (!roi_values$slider_ranges_set || is.null(roi_values$baseline_config)) return()
+      if (!roi_values$slider_ranges_set || 
+          is.null(roi_values$baseline_config) || 
+          roi_values$populating_sliders) return() 
       
       config <- roi_values$baseline_config
       nadir <- nadir_info()
