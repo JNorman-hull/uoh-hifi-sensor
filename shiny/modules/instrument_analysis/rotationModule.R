@@ -232,7 +232,7 @@ rotationServer <- function(id, raw_data_path, output_dir, processing_complete, s
     # Get nadir info using shared function
     nadir_info <- reactive({
       req(sensor_selector$selected_sensor())
-      global_sensor_state$summary_updated  # Use global
+      #global_sensor_state$summary_updated  # Use global
       get_nadir_info(sensor_selector$selected_sensor(), output_dir())
     })
     

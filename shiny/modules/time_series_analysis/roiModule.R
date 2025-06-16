@@ -233,7 +233,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Get nadir info using shared function
     nadir_info <- reactive({
       req(sensor_selector$selected_sensor())
-      global_sensor_state$summary_updated
+      #global_sensor_state$summary_updated
       get_nadir_info(sensor_selector$selected_sensor(), output_dir())
     })
     
