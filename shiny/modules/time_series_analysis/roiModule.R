@@ -206,7 +206,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       current_config = NULL,
       baseline_config = NULL,
       sliders_changed = FALSE,
-      slider_ranges_set = FALSE
+      slider_ranges_set = FALSE,
+      trim_boundaries_changed = FALSE
     )
     
     # Nadir editing state (keep this as it's still needed)
@@ -278,9 +279,16 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                       auto_select_sensor_config = TRUE)
     
     # Store current config
+    # Store current config
     observe({
       roi_values$current_config <- roi_config$current_config()
-      roi_values$baseline_config <- roi_values$current_config
+      
+      # Only set baseline_config from config if no delineated data exists
+      status <- sensor_status()
+      if (!status$delineated) {
+        roi_values$baseline_config <- roi_values$current_config
+      }
+      
       roi_values$sliders_changed <- FALSE
     })
     
@@ -352,6 +360,18 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           updateNumericInput(session, "roi4_duration", value = roi4_duration)
         })
         
+        # ADD THIS: Set baseline_config to match the actual delineated data
+        roi_values$baseline_config <- list(
+          label = "From_existing_delineation",
+          roi1_sens_ingress = roi2_start - roi1_start,
+          roi2_inflow_passage = roi3_start - roi2_start,
+          roi3_prenadir = roi4_start - roi3_start,
+          roi4_nadir = roi4_duration,
+          roi5_postnadir = roi5_end - roi4_end,
+          roi6_outflow_passage = roi6_end - roi5_end,
+          roi7_sens_outgress = roi7_end - roi6_end
+        )
+        
         roi_values$sliders_changed <- FALSE
         
       }, error = function(e) {
@@ -421,6 +441,19 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       expected_roi5_end <- roi4_end + config$roi5_postnadir
       expected_roi6_end <- expected_roi5_end + config$roi6_outflow_passage
       expected_roi7_end <- expected_roi6_end + config$roi7_sens_outgress
+      
+      # ADD DEBUG OUTPUT HERE
+      cat("=== CHANGE DETECTION DEBUG ===\n")
+      cat("Expected roi1_start:", expected_roi1_start, "Actual:", input$roi1_start, "Diff:", abs(input$roi1_start - expected_roi1_start), "\n")
+      cat("Expected roi7_end:", expected_roi7_end, "Actual:", input$roi7_end, "Diff:", abs(input$roi7_end - expected_roi7_end), "\n")
+      
+      roi_values$trim_boundaries_changed <- (
+        abs(input$roi1_start - expected_roi1_start) > 0.05 ||
+          abs(input$roi7_end - expected_roi7_end) > 0.05
+      )
+      
+      cat("trim_boundaries_changed:", roi_values$trim_boundaries_changed, "\n")
+      cat("===============================\n")
       
       # Check if any slider values differ from expected
       sliders_changed <- (
@@ -886,87 +919,101 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Apply delineated dataset (simplified)
     apply_delineated_dataset <- function() {
       tryCatch({
-        # Read original data
-        sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
         boundaries <- current_roi_boundaries()
+        status <- sensor_status()
         nadir <- nadir_info()
+        
+        cat("trim_boundaries_changed:", roi_values$trim_boundaries_changed, "\n")
+        cat("status$trimmed:", status$trimmed, "\n")
+        cat("Will reset to original?", (roi_values$trim_boundaries_changed || !status$trimmed), "\n")
         
         if (is.null(boundaries)) {
           showNotification("ROI boundaries not available", type = "error")
           return()
         }
         
-        # Create delineated folder
-        delineated_dir <- file.path(output_dir(), "csv", "delineated")
-        if (!dir.exists(delineated_dir)) {
-          dir.create(delineated_dir, showWarnings = FALSE, recursive = TRUE)
+        # Simple logic: if trim boundaries changed OR not yet trimmed, reset to original
+        if (roi_values$trim_boundaries_changed || !status$trimmed) {
+          cat("RESETTING TO ORIGINAL FILE\n")
+          # Reset to original file
+          sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
+          
+          # Apply full delineation with trim regions
+          sensor_data$roi <- cut(sensor_data$time_s, 
+                                 breaks = boundaries,
+                                 labels = c("trim_start", "roi1_sens_ingress", "roi2_inflow_passage", 
+                                            "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                                            "roi6_outflow_passage", "roi7_sens_outgress", "trim_end"),
+                                 include.lowest = TRUE, right = FALSE)
+          
+          # Reset trimmed status
+          reset_flags <- list(trimmed = "N", normalized = "N", passage_times = "N")
+          
+        } else {
+          cat("MODIFYING EXISTING TRIMMED FILE\n")
+          # Just modify internal ROIs on existing trimmed file
+          sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
+          
+          # FIXED: Create proper boundaries for trimmed data
+          data_start <- min(sensor_data$time_s)
+          data_end <- max(sensor_data$time_s)
+          nadir_time <- nadir$time
+          
+          # Recalculate internal boundaries within the trimmed data range
+          roi4_start <- nadir_time - (input$roi4_duration / 2)
+          roi4_end <- nadir_time + (input$roi4_duration / 2)
+          
+          # Create boundaries array for trimmed data (no trim regions)
+          internal_boundaries <- c(
+            data_start,           # Actual trimmed start
+            input$roi2_start,     # roi1 -> roi2
+            input$roi3_start,     # roi2 -> roi3  
+            roi4_start,           # roi3 -> roi4
+            roi4_end,             # roi4 -> roi5 (roi5_start)
+            input$roi5_end,       # roi5 -> roi6 (roi6_start)
+            input$roi6_end,       # roi6 -> roi7 (roi7_start)
+            data_end              # Actual trimmed end
+          )
+          
+          # Check boundaries are in order
+          if (any(diff(internal_boundaries) <= 0)) {
+            showNotification("Error: ROI boundaries must be in ascending order", type = "error")
+            return()
+          }
+          
+          # Re-assign ROI labels (7 regions for 8 boundaries)
+          sensor_data$roi <- cut(sensor_data$time_s, 
+                                 breaks = internal_boundaries,
+                                 labels = c("roi1_sens_ingress", "roi2_inflow_passage", 
+                                            "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                                            "roi6_outflow_passage", "roi7_sens_outgress"),
+                                 include.lowest = TRUE, right = FALSE)
+          
+          # Reset normalized and passage times (but keep trimmed = Y)
+          reset_flags <- list(normalized = "N", passage_times = "N")
         }
         
-        # Add ROI column using current boundaries
-        sensor_data$roi <- cut(sensor_data$time_s, 
-                               breaks = boundaries,
-                               labels = c("trim_start", "roi1_sens_ingress", "roi2_inflow_passage", 
-                                          "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
-                                          "roi6_outflow_passage", "roi7_sens_outgress", "trim_end"),
-                               include.lowest = TRUE, right = FALSE)
-        
-        # Save delineated file
+        # Save file
+        delineated_dir <- file.path(output_dir(), "csv", "delineated")
+        dir.create(delineated_dir, showWarnings = FALSE, recursive = TRUE)
         output_file <- file.path(delineated_dir, paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
         write.csv(sensor_data, output_file, row.names = FALSE)
         
-        # Determine config name for saving
+        # Update sensor index
         config_name <- if (roi_values$sliders_changed) "Custom" else roi_config$selected_config_name()
         
-        # Check if this is a modification of existing delineation
-        status <- sensor_status()
-        is_modification <- status$delineated && roi_values$sliders_changed
-        
-        # Update sensor index - reset trimmed status if modifying existing delineation
-        success <- safe_update_sensor_index(
-          output_dir(),
-          sensor_selector$selected_sensor(),
-          list(
-            delineated = "Y",
-            roi_config = config_name,
-            trimmed = if (is_modification) "N" else "N",  # Always reset to N for new delineation
-            normalized = if (is_modification) "N" else "N",  # Reset normalization if modifying
-            passage_times = if (is_modification) "N" else "N",  # Reset passage times if modifying
-            passage_duration.mm.ss. = "NA",
-            ingress_nadir_duration.mm.ss. = "NA",
-            nadir_outgress_duration.mm.ss. = "NA"
-          )
-        )
+        updates <- c(list(delineated = "Y", roi_config = config_name), reset_flags)
+        success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), updates)
         
         if (success) {
           trigger_data_update()
           trigger_summary_update()
-          roi_values$sliders_changed <- FALSE  # Reset change flag
-          
-          # Update baseline config to current slider values to prevent immediate change detection
-          if (is_modification) {
-            roi_values$baseline_config <- list(
-              label = "Custom",
-              roi1_sens_ingress = input$roi2_start - input$roi1_start,
-              roi2_inflow_passage = input$roi3_start - input$roi2_start,
-              roi3_prenadir = (nadir$time - input$roi4_duration/2) - input$roi3_start,
-              roi4_nadir = input$roi4_duration,
-              roi5_postnadir = input$roi5_end - (nadir$time + input$roi4_duration/2),
-              roi6_outflow_passage = input$roi6_end - input$roi5_end,
-              roi7_sens_outgress = input$roi7_end - input$roi6_end
-            )
-          }
-          
-          if (is_modification) {
-            showNotification("Delineation modified successfully! Sensor will need to be trimmed again.", type = "message")
-          } else {
-            showNotification("Delineated dataset created successfully!", type = "message")
-          }
-        } else {
-          showNotification("Warning: Dataset created but failed to update index", type = "warning")
+          roi_values$sliders_changed <- FALSE
+          showNotification("ROI boundaries updated successfully!", type = "message")
         }
         
       }, error = function(e) {
-        showNotification(paste("Error creating delineated dataset:", e$message), type = "error")
+        showNotification(paste("Error applying delineation:", e$message), type = "error")
       })
     }
     
