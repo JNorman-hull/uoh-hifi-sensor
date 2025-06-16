@@ -957,7 +957,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         } else if (!status$delineated) {
           cat("FIRST TIME DELINEATION\n")
           # First time delineation - work with original file (already loaded)
-          sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
+          sensor_data <- selected_sensor_data()
           
           # Apply full delineation with trim regions
           sensor_data$roi <- cut(sensor_data$time_s, 
@@ -972,7 +972,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         } else {
           cat("MODIFYING EXISTING TRIMMED FILE\n")
           # Just modify internal ROIs on existing trimmed file
-          sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
+          sensor_data <- selected_sensor_data()
           
           # FIXED: Create proper boundaries for trimmed data
           data_start <- min(sensor_data$time_s)
