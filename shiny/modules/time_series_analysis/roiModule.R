@@ -283,13 +283,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Store current config
     observe({
       roi_values$current_config <- roi_config$current_config()
-      
-      # Only set baseline_config from config if no delineated data exists
-      status <- sensor_status()
-      if (!status$delineated) {
-        roi_values$baseline_config <- roi_values$current_config
-      }
-      
       roi_values$sliders_changed <- FALSE
     })
     
@@ -362,6 +355,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           updateNumericInput(session, "roi4_duration", value = roi4_duration)
         })
         
+        roi_values$sliders_changed <- FALSE
+        roi_values$populating_sliders <- FALSE  
+        
         roi_values$baseline_config <- list(
           label = "From_existing_delineation",
           roi1_sens_ingress = roi2_start - roi1_start,
@@ -372,9 +368,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           roi6_outflow_passage = roi6_end - roi5_end,
           roi7_sens_outgress = roi7_end - roi6_end
         )
-        
-        roi_values$sliders_changed <- FALSE
-        roi_values$populating_sliders <- FALSE  
         
       }, error = function(e) {
         warning("Error extracting ROI boundaries from delineated data: ", e$message)
@@ -418,6 +411,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       roi_values$sliders_changed <- FALSE
       roi_values$populating_sliders <- FALSE 
+      roi_values$baseline_config <- config
     }
     
     # ============================= #
@@ -425,16 +419,18 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # ============================= #
     
     # Track changes in slider inputs (similar to pressure/acceleration modules)
-    observe({
-      # Only track changes after initial population
-      if (!roi_values$slider_ranges_set || 
-          is.null(roi_values$baseline_config) || 
-          roi_values$populating_sliders) return() 
-      
-      config <- roi_values$baseline_config
-      nadir <- nadir_info()
-      
-      if (!nadir$available) return()
+    observeEvent(list(input$roi1_start, input$roi2_start, input$roi3_start, 
+                      input$roi5_end, input$roi6_end, input$roi7_end, input$roi4_duration), {
+                        
+                        # Only track changes after initial population and when NOT populating
+                        if (!roi_values$slider_ranges_set || 
+                            is.null(roi_values$baseline_config) || 
+                            roi_values$populating_sliders) return()
+                        
+                        config <- roi_values$baseline_config
+                        nadir <- nadir_info()
+                        
+                        if (!nadir$available) return()
       
       # Calculate expected values from baseline config
       nadir_time <- nadir$time
@@ -473,7 +469,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       )
       
       roi_values$sliders_changed <- sliders_changed
-    })
+    }, ignoreInit = TRUE)
     
     # ============================= #
     # /// ROI Boundary Calculation \\\ ####  
