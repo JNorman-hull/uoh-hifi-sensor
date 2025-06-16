@@ -1,59 +1,59 @@
 # ROI Delineation Module
 
+# ROI Delineation Module
+
 roiUI <- function(id) {
   ns <- NS(id)
   
-    fluidPage(
-      plotModuleUI(ns("roi_plot"), height = "600px"),
-      br(),
-      
-      fluidRow(
-        column(
-          width = 12,
-          div(
-            style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 15px; 
+  fluidPage(
+    plotModuleUI(ns("roi_plot"), height = "600px"),
+    br(),
+    
+    fluidRow(
+      column(
+        width = 12,
+        div(
+          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 15px; 
                    border-radius: 5px; margin-top: 20px;",
-            tags$h4("Delineation and passage summary"),
-            fluidRow(
-              column(
-                width = 8,
-                DT::dataTableOutput(ns("roi_table"))
-              ),
-              column(
-                width = 4,
-                tags$p(style = "margin-top: 10px;", textOutput(ns("passage_duration_text"))),
-                tags$p(textOutput(ns("ingress_nadir_text"))),
-                tags$p(textOutput(ns("nadir_outgress_text")))
-              )
+          tags$h4("Delineation and passage summary"),
+          fluidRow(
+            column(
+              width = 8,
+              DT::dataTableOutput(ns("roi_table"))
+            ),
+            column(
+              width = 4,
+              tags$p(style = "margin-top: 10px;", textOutput(ns("passage_duration_text"))),
+              tags$p(textOutput(ns("ingress_nadir_text"))),
+              tags$p(textOutput(ns("nadir_outgress_text")))
             )
           )
         )
-      ),
-      hr(),
+      )
+    ),
+    hr(),
     
     h4("Delineation Instructions"),
     
     fluidRow(
       column(
         width = 12,
-        tags$p("Use the table above to review regions of interest. Each entry corresponds to a delineated region. Check timestamps to ensure accurate event capture."),
+        tags$p("Use the sliders in the sidebar to adjust ROI boundaries. Each slider controls the start time of its respective ROI. The boundaries are sequential and constrained."),
         tags$ul(
-          tags$li("ROI 1 Sensor ingress: Mark region sesnsor enters system from atmospheric pressure or other landmark feature (e.g., injection pipe)"),
-          tags$li("ROI 2 Intake passage: Mark region sesnsor moves through intake structures and pipework leading towards the impeller."),
-          tags$li("ROI 3 Pre-nadir: Mark region just before the impeller, highest risk of encoruntering pressure differentials and swirl flows."),
-          tags$li("ROI 4 Nadir: Critical passage analysis zone with direct passage through the impeller. Hydraulic pinch point where maximum acceleration, rotation and minimum pressure likley to occur.
-                  Region calculated using input time box, which is centered on the nadir point. Ensure nadir is correct first."),
-          tags$li("ROI 5 Post-nadir: Mark region just after the impeller, highest risk of encoruntering guide vane or other forms of collision, residual turbulences and pressure recovery."),
-          tags$li("ROI 6 Outflow passage: Mark region sensor moves through outflow pipework and structures leading towards sensor outgress. Velcoity expected to decrease and pressure return to atmopsheric pressure."),
-          tags$li("ROI 7 Sensor outgress: Mark region sensor exists system from atmospheric pressure or other landmark features (e.g., stable flow indictiave of tailwater)."),
-          tags$li("Sensor start and end trim: Automatically calculated from start and end of data and start and end of ROI 1 and 7. Use trim tool to remove after delineatition.")
+          tags$li("ROI 1 Sensor ingress: Mark region sensor enters system from atmospheric pressure or other landmark feature (e.g., injection pipe)"),
+          tags$li("ROI 2 Intake passage: Mark region sensor moves through intake structures and pipework leading towards the impeller."),
+          tags$li("ROI 3 Pre-nadir: Mark region just before the impeller, highest risk of encountering pressure differentials and swirl flows."),
+          tags$li("ROI 4 Nadir: Critical passage analysis zone with direct passage through the impeller. Hydraulic pinch point where maximum acceleration, rotation and minimum pressure likely to occur. Duration is controlled by the nadir duration input."),
+          tags$li("ROI 5 Post-nadir: Mark region just after the impeller, highest risk of encountering guide vane or other forms of collision, residual turbulences and pressure recovery."),
+          tags$li("ROI 6 Outflow passage: Mark region sensor moves through outflow pipework and structures leading towards sensor outgress. Velocity expected to decrease and pressure return to atmospheric pressure."),
+          tags$li("ROI 7 Sensor outgress: Mark region sensor exits system from atmospheric pressure or other landmark features (e.g., stable flow indicative of tailwater)."),
+          tags$li("Sensor start and end trim: Automatically calculated from start and end of data and start and end of ROI 1 and 7. Use trim tool to remove after delineation.")
         )
       )
       
     )
   )
 }
-
 
 roiSidebarUI <- function(id) {
   ns <- NS(id)
@@ -110,11 +110,6 @@ roiSidebarUI <- function(id) {
         enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "delineation"),
         
         h4("Delineate data"),
-        actionButton(ns("create_delineated"), "Apply delineation configuration", class = "btn-success btn-block"),
-        actionButton(ns("start_over"), "Start Over", class = "btn-danger btn-block"),
-        actionButton(ns("trim_sensor"), "Trim sensor start and end", class = "btn-warning btn-block"),
-        
-        br(),
         
         configurationSidebarUI(ns("roi_config"), config_type = "roi", 
                                label = "Delineation configuration:"),
@@ -126,6 +121,43 @@ roiSidebarUI <- function(id) {
                          width = "80px")
         ),
         
+        h4("ROI Boundary Adjustment"),
+        div(style = "color: #666; font-style: italic; margin-bottom: 10px;",
+            "Adjust ROI boundaries using sliders below. Boundaries are sequential."),
+        
+        # ROI boundary sliders
+        div(style = "margin-bottom: 10px;",
+            sliderInput(ns("roi1_start"), "ROI 1 Start (s):", 
+                        min = 0, max = 100, value = 20, step = 0.1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            sliderInput(ns("roi2_start"), "ROI 2 Start (s):", 
+                        min = 0, max = 100, value = 25, step = 0.1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            sliderInput(ns("roi3_start"), "ROI 3 Start (s):", 
+                        min = 0, max = 100, value = 28, step = 0.1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            sliderInput(ns("roi4_start"), "ROI 4 Start (s):", 
+                        min = 0, max = 100, value = 29, step = 0.1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            sliderInput(ns("roi5_start"), "ROI 5 Start (s):", 
+                        min = 0, max = 100, value = 31, step = 0.1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            sliderInput(ns("roi6_start"), "ROI 6 Start (s):", 
+                        min = 0, max = 100, value = 35, step = 0.1, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            sliderInput(ns("roi7_start"), "ROI 7 Start (s):", 
+                        min = 0, max = 100, value = 40, step = 0.1, width = "100%")),
+        
+        div(style = "margin-bottom: 15px;",
+            sliderInput(ns("roi7_end"), "ROI 7 End (s):", 
+                        min = 0, max = 100, value = 45, step = 0.1, width = "100%")),
+        
         div(style = "display: flex; align-items: center; justify-content: start; margin-bottom: 15px;",
             tags$label("Label:", `for` = ns("roi_config_label"), 
                        style = "margin-right: 8px;"),
@@ -133,23 +165,23 @@ roiSidebarUI <- function(id) {
                       width = "200px", placeholder = "e.g., Peter_PS_Sep24")
         ),
         
-        actionButton(ns("create_custom_roi"), "Create Custom Delineation", 
-                     class = "btn btn-sm btn-warning", style = "width: 100%; margin-bottom: 15px;"),
+        actionButton(ns("apply_roi_boundaries"), "Apply ROI Boundaries", 
+                     class = "btn btn-success", style = "width: 100%; margin-bottom: 15px;"),
         
-        actionButton(ns("mark_roi_dynamic"), "Mark ROI 1 Start", 
-                     class = "btn btn-sm btn-primary", style = "width: 100%; margin-bottom: 10px;"),
+        actionButton(ns("save_roi_config"), "Save Current Configuration", 
+                     class = "btn btn-warning", style = "width: 100%; margin-bottom: 15px;"),
         
-        actionButton(ns("cancel_custom_roi"), "Cancel Custom", 
-                     class = "btn btn-sm btn-danger", style = "width: 100%; margin-bottom: 10px;"),
+        actionButton(ns("start_over"), "Start Over", class = "btn-danger btn-block"),
+        actionButton(ns("trim_sensor"), "Trim sensor start and end", class = "btn-warning btn-block"),
         
-        textOutput(ns("dynamic_instruction")),
-        
-        hr(),
+        br(),
         
         checkboxInput(ns("round_roi"), "Round ROI to nearest 0.1s", value = FALSE),
         textOutput(ns("round_status")),
         checkboxInput(ns("match_pre_post"), "Match pre- and post-nadir ROI", value = FALSE),
         textOutput(ns("match_status")),
+        
+        textOutput(ns("dynamic_instruction")),
         
         hr(), h4("Pressure Nadir Options"),
         textOutput(ns("current_nadir_display")),
@@ -157,7 +189,7 @@ roiSidebarUI <- function(id) {
         actionButton(ns("cancel_nadir_btn"), "Cancel", class = "btn-danger btn-block"),
         textOutput(ns("nadir_status")),
         
-           hr(), h4("Time normalization"),
+        hr(), h4("Time normalization"),
         actionButton(ns("normalize_time"), "Normalize time series", class = "btn-primary btn-block"),
         textOutput(ns("normalize_status")),
         
@@ -191,17 +223,16 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
+    # ============================= #
+    # /// Reactive values \\\ ####  
+    # ============================= #   
     
-# ============================= #
-# /// Reactive values \\\ ####  
-# ============================= #   
-    
-
     # ROI configuration state
     roi_values <- reactiveValues(
       roi_configs = NULL,
       current_config = NULL
     )
+    
     # Nadir editing state
     nadir_values <- reactiveValues(
       edit_mode = FALSE,           # Whether nadir editing is active
@@ -210,23 +241,20 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       baseline_click = NULL        # Baseline click for detecting new clicks
     )
     
-    # Custom ROI creation state
-    custom_roi_values <- reactiveValues(
-      custom_edit_mode = FALSE,    # Whether custom ROI mode is active
-      current_roi_step = 0,        # Current step in ROI marking process (0-6)
-      selected_boundaries = list(), # Selected ROI boundaries
-      baseline_click = NULL,       # Baseline click for detecting new clicks
-      pending_point = NULL,         # Point marked but not yet confirmed
-      standardization_applied = FALSE,  # Track if any standardization was used
-      baseline_boundaries = list()      # Store original boundaries for reset
+    # ROI slider state
+    roi_slider_values <- reactiveValues(
+      updating_sliders = FALSE,  # Prevent recursive updates
+      data_start = NULL,         # Sensor data start time
+      data_end = NULL,           # Sensor data end time
+      nadir_time = NULL,         # Current nadir time
+      boundaries_set = FALSE     # Track if sliders have been populated
     )
-
- 
-# ============================= #
-# /// Data loading & processing  \\\ ####  
-# ============================= # 
-
-#Sensor dropdown ####   
+    
+    # ============================= #
+    # /// Data loading & processing  \\\ ####  
+    # ============================= # 
+    
+    #Sensor dropdown ####   
     sensor_selector <- enhancedSensorSelectionServer("sensor_selector",
                                                      output_dir, processing_complete,
                                                      status_filter_type = "delineation",
@@ -234,13 +262,14 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                                      global_sensor_state = global_sensor_state,
                                                      trigger_summary_update = trigger_summary_update)
     
-# Get nadir info using shared function
+    # Get nadir info using shared function
     nadir_info <- reactive({
       req(sensor_selector$selected_sensor())
       global_sensor_state$summary_updated  # Use global
       get_nadir_info(sensor_selector$selected_sensor(), output_dir())
     })
-# Get sensor status using shared function
+    
+    # Get sensor status using shared function
     sensor_status <- reactive({
       req(sensor_selector$selected_sensor())
       global_sensor_state$summary_updated  # Use global
@@ -248,7 +277,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       get_sensor_status(sensor_selector$selected_sensor(), output_dir())
     })
     
-# Read selected sensor data (with preference for delineated data)
+    # Read selected sensor data (with preference for delineated data)
     selected_sensor_data <- reactive({
       req(sensor_selector$selected_sensor())
       global_sensor_state$data_updated  # Invalidate when data changes
@@ -263,100 +292,157 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       return(read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min"))
     })
     
-## Calculate ROI times ####
+    # ============================= #
+    # /// ROI Slider Helper Functions \\\ ####
+    # ============================= #
     
-    # Calculate ROI times based on configuration and nadir
-    roi_times <- reactive({
-      req(sensor_selector$selected_sensor(), roi_values$current_config)
-      global_sensor_state$summary_updated 
-      roi_config$selected_config_name()
-      
-      nadir <- nadir_info()
-      
-      if (!nadir$available) return(NULL)
-      
-      nadir_time <- nadir$time
-      config <- roi_values$current_config
-      
-      # Calculate ROI boundaries based on nadir time
-      roi4_start <- nadir_time - (config$roi4_nadir / 2)
-      roi4_end <- nadir_time + (config$roi4_nadir / 2)
-      
-      roi3_start <- roi4_start - config$roi3_prenadir
-      roi3_end <- roi4_start
-      
-      roi2_start <- roi3_start - config$roi2_inflow_passage
-      roi2_end <- roi3_start
-      
-      roi1_start <- roi2_start - config$roi1_sens_ingress
-      roi1_end <- roi2_start
-      
-      roi5_start <- roi4_end
-      roi5_end <- roi4_end + config$roi5_postnadir
-      
-      roi6_start <- roi5_end
-      roi6_end <- roi5_end + config$roi6_outflow_passage
-      
-      roi7_start <- roi6_end
-      roi7_end <- roi6_end + config$roi7_sens_outgress
-      
-      # Read sensor data to get actual start/end times
-      sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
-      if (!is.null(sensor_data)) {
-        data_start <- min(sensor_data$time_s)
-        data_end <- max(sensor_data$time_s)
-        
-        roi_times_df <- data.frame(
-          ROI = c("Sensor start trim", "ROI 1: Sensor ingress", "ROI 2: Inflow passage", 
-                  "ROI 3: Pre-nadir", "ROI 4: Nadir", "ROI 5: Post-nadir", 
-                  "ROI 6: Outflow passage", "ROI 7: Sensor outgress", "Sensor end trim"),
-          `Start time` = c(paste(round(data_start, 3), "s"),
-                           paste(round(roi1_start, 3), "s"),
-                           paste(round(roi2_start, 3), "s"),
-                           paste(round(roi3_start, 3), "s"),
-                           paste(round(roi4_start, 3), "s"),
-                           paste(round(roi5_start, 3), "s"),
-                           paste(round(roi6_start, 3), "s"),
-                           paste(round(roi7_start, 3), "s"),
-                           paste(round(roi7_end, 3), "s")),
-          `End Time` = c(paste(round(roi1_start, 3), "s"),
-                         paste(round(roi1_end, 3), "s"),
-                         paste(round(roi2_end, 3), "s"),
-                         paste(round(roi3_end, 3), "s"),
-                         paste(round(roi4_end, 3), "s"),
-                         paste(round(roi5_end, 3), "s"),
-                         paste(round(roi6_end, 3), "s"),
-                         paste(round(roi7_end, 3), "s"),
-                         paste(round(data_end, 3), "s")),
-          Duration = c(paste(round(roi1_start - data_start, 3), "s"),
-                       paste(round(config$roi1_sens_ingress, 3), "s"),
-                       paste(round(config$roi2_inflow_passage, 3), "s"),
-                       paste(round(config$roi3_prenadir, 3), "s"),
-                       paste(round(config$roi4_nadir, 3), "s"),
-                       paste(round(config$roi5_postnadir, 3), "s"),
-                       paste(round(config$roi6_outflow_passage, 3), "s"),
-                       paste(round(config$roi7_sens_outgress, 3), "s"),
-                       paste(round(data_end - roi7_end, 3), "s")),
-          check.names = FALSE
-        )
-        
-        return(list(
-          table = roi_times_df,
-          boundaries = c(data_start, roi1_start, roi2_start, roi3_start, 
-                         roi4_start, roi5_start, roi6_start, roi7_start, roi7_end, data_end)
-        ))
+    # Extract ROI boundaries from existing delineated data
+    extract_roi_boundaries_from_data <- function(sensor_data) {
+      if (is.null(sensor_data) || !"roi" %in% names(sensor_data)) {
+        return(NULL)
       }
       
-      return(NULL)
-    })
+      # Find where each ROI starts and ends
+      roi_levels <- c("roi1_sens_ingress", "roi2_inflow_passage", 
+                      "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                      "roi6_outflow_passage", "roi7_sens_outgress")
+      
+      boundaries <- list()
+      
+      # Data start and end
+      boundaries$data_start <- min(sensor_data$time_s)
+      boundaries$data_end <- max(sensor_data$time_s)
+      
+      # Find ROI boundaries
+      for (i in seq_along(roi_levels)) {
+        roi_data <- sensor_data[sensor_data$roi == roi_levels[i], ]
+        if (nrow(roi_data) > 0) {
+          if (i == 1) {
+            boundaries$roi1_start <- min(roi_data$time_s)
+          } else {
+            boundaries[[paste0("roi", i, "_start")]] <- min(roi_data$time_s)
+          }
+          
+          if (i == length(roi_levels)) {
+            boundaries$roi7_end <- max(roi_data$time_s)
+          }
+        }
+      }
+      
+      # Calculate ROI 4 duration
+      if (!is.null(boundaries$roi4_start) && !is.null(boundaries$roi5_start)) {
+        boundaries$roi4_duration <- boundaries$roi5_start - boundaries$roi4_start
+      }
+      
+      return(boundaries)
+    }
     
+    # Calculate ROI boundaries from configuration
+    calculate_roi_boundaries_from_config <- function(config, nadir_time, data_start, data_end) {
+      if (is.null(config) || !nadir_time$available) {
+        return(NULL)
+      }
+      
+      nadir <- nadir_time$time
+      
+      # Calculate ROI 4 boundaries (nadir-centered)
+      roi4_start <- nadir - (config$roi4_nadir / 2)
+      roi4_end <- nadir + (config$roi4_nadir / 2)
+      
+      # Calculate other boundaries working backwards and forwards
+      roi3_start <- roi4_start - config$roi3_prenadir
+      roi2_start <- roi3_start - config$roi2_inflow_passage
+      roi1_start <- roi2_start - config$roi1_sens_ingress
+      
+      roi5_start <- roi4_end
+      roi6_start <- roi5_start + config$roi5_postnadir
+      roi7_start <- roi6_start + config$roi6_outflow_passage
+      roi7_end <- roi7_start + config$roi7_sens_outgress
+      
+      return(list(
+        data_start = data_start,
+        data_end = data_end,
+        roi1_start = roi1_start,
+        roi2_start = roi2_start,
+        roi3_start = roi3_start,
+        roi4_start = roi4_start,
+        roi5_start = roi4_end,  # ROI 5 starts where ROI 4 ends
+        roi6_start = roi6_start,
+        roi7_start = roi7_start,
+        roi7_end = roi7_end,
+        roi4_duration = config$roi4_nadir
+      ))
+    }
     
-# ============================= #
-# /// UI State management \\\ ####  
-# ============================= # 
+    # Update slider constraints based on current values
+    update_slider_constraints <- function(session, boundaries) {
+      if (is.null(boundaries)) return()
+      
+      # Update slider ranges with proper constraints
+      updateSliderInput(session, "roi1_start", 
+                        min = boundaries$data_start, 
+                        max = boundaries$roi2_start - 0.1,
+                        value = boundaries$roi1_start)
+      
+      updateSliderInput(session, "roi2_start", 
+                        min = boundaries$roi1_start + 0.1, 
+                        max = boundaries$roi3_start - 0.1,
+                        value = boundaries$roi2_start)
+      
+      updateSliderInput(session, "roi3_start", 
+                        min = boundaries$roi2_start + 0.1, 
+                        max = boundaries$roi4_start - 0.1,
+                        value = boundaries$roi3_start)
+      
+      updateSliderInput(session, "roi4_start", 
+                        min = boundaries$roi3_start + 0.1, 
+                        max = boundaries$roi5_start - 0.1,
+                        value = boundaries$roi4_start)
+      
+      updateSliderInput(session, "roi5_start", 
+                        min = boundaries$roi4_start + boundaries$roi4_duration + 0.1, 
+                        max = boundaries$roi6_start - 0.1,
+                        value = boundaries$roi5_start)
+      
+      updateSliderInput(session, "roi6_start", 
+                        min = boundaries$roi5_start + 0.1, 
+                        max = boundaries$roi7_start - 0.1,
+                        value = boundaries$roi6_start)
+      
+      updateSliderInput(session, "roi7_start", 
+                        min = boundaries$roi6_start + 0.1, 
+                        max = boundaries$roi7_end - 0.1,
+                        value = boundaries$roi7_start)
+      
+      updateSliderInput(session, "roi7_end", 
+                        min = boundaries$roi7_start + 0.1, 
+                        max = boundaries$data_end,
+                        value = boundaries$roi7_end)
+      
+      # Update nadir duration
+      updateNumericInput(session, "roi4_nadir_duration", value = boundaries$roi4_duration)
+    }
     
-
-# Load ROI configurations and update dropdown
+    # Get current slider values as boundaries
+    get_current_slider_boundaries <- function(input) {
+      list(
+        roi1_start = input$roi1_start,
+        roi2_start = input$roi2_start,
+        roi3_start = input$roi3_start,
+        roi4_start = input$roi4_start,
+        roi5_start = input$roi5_start,
+        roi6_start = input$roi6_start,
+        roi7_start = input$roi7_start,
+        roi7_end = input$roi7_end,
+        roi4_duration = input$roi4_nadir_duration
+      )
+    }
+    
+    # ============================= #
+    # /// Slider Population and Management \\\ ####
+    # ============================= #
+    
+    # Load ROI configurations and update dropdown
     roi_config <- configurationServer("roi_config",
                                       output_dir = output_dir,
                                       config_type = "roi",
@@ -368,27 +454,218 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       roi_values$current_config <- roi_config$current_config()
     })
     
-# Reset checkboxes when sensor changes
+    # Populate sliders when sensor or configuration changes
+    observe({
+      req(sensor_selector$selected_sensor())
+      
+      if (roi_slider_values$updating_sliders) return()
+      
+      # Get sensor data to determine time range
+      sensor_data <- selected_sensor_data()
+      if (is.null(sensor_data)) return()
+      
+      roi_slider_values$data_start <- min(sensor_data$time_s)
+      roi_slider_values$data_end <- max(sensor_data$time_s)
+      
+      # Check if sensor has existing delineated data
+      status <- sensor_status()
+      boundaries <- NULL
+      
+      if (status$delineated) {
+        # Extract boundaries from existing delineated data
+        boundaries <- extract_roi_boundaries_from_data(sensor_data)
+        if (!is.null(boundaries)) {
+          roi_slider_values$updating_sliders <- TRUE
+          update_slider_constraints(session, boundaries)
+          roi_slider_values$updating_sliders <- FALSE
+          roi_slider_values$boundaries_set <- TRUE
+          return()
+        }
+      }
+      
+      # If no delineated data, use configuration + nadir
+      nadir <- nadir_info()
+      config <- roi_values$current_config
+      
+      if (!is.null(config) && nadir$available) {
+        boundaries <- calculate_roi_boundaries_from_config(
+          config, nadir, roi_slider_values$data_start, roi_slider_values$data_end
+        )
+        
+        if (!is.null(boundaries)) {
+          roi_slider_values$updating_sliders <- TRUE
+          update_slider_constraints(session, boundaries)
+          roi_slider_values$updating_sliders <- FALSE
+          roi_slider_values$boundaries_set <- TRUE
+        }
+      }
+    })
+    
+    # Update ROI 5 start when ROI 4 start or duration changes
+    observe({
+      if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
+      
+      req(input$roi4_start, input$roi4_nadir_duration)
+      
+      new_roi5_start <- input$roi4_start + input$roi4_nadir_duration
+      
+      roi_slider_values$updating_sliders <- TRUE
+      updateSliderInput(session, "roi5_start", value = new_roi5_start)
+      
+      # Update constraints for downstream sliders
+      if (!is.null(input$roi6_start)) {
+        updateSliderInput(session, "roi5_start", max = input$roi6_start - 0.1)
+      }
+      roi_slider_values$updating_sliders <- FALSE
+    })
+    
+    # Dynamic constraint updates when sliders change
+    observe({
+      if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
+      
+      req(input$roi1_start, input$roi2_start)
+      
+      roi_slider_values$updating_sliders <- TRUE
+      updateSliderInput(session, "roi1_start", max = input$roi2_start - 0.1)
+      updateSliderInput(session, "roi2_start", min = input$roi1_start + 0.1)
+      roi_slider_values$updating_sliders <- FALSE
+    })
+    
+    # Add similar observers for other adjacent slider pairs
+    observe({
+      if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
+      
+      req(input$roi2_start, input$roi3_start)
+      
+      roi_slider_values$updating_sliders <- TRUE
+      updateSliderInput(session, "roi2_start", max = input$roi3_start - 0.1)
+      updateSliderInput(session, "roi3_start", min = input$roi2_start + 0.1)
+      roi_slider_values$updating_sliders <- FALSE
+    })
+    
+    observe({
+      if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
+      
+      req(input$roi3_start, input$roi4_start)
+      
+      roi_slider_values$updating_sliders <- TRUE
+      updateSliderInput(session, "roi3_start", max = input$roi4_start - 0.1)
+      updateSliderInput(session, "roi4_start", min = input$roi3_start + 0.1)
+      roi_slider_values$updating_sliders <- FALSE
+    })
+    
+    observe({
+      if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
+      
+      req(input$roi5_start, input$roi6_start)
+      
+      roi_slider_values$updating_sliders <- TRUE
+      updateSliderInput(session, "roi5_start", max = input$roi6_start - 0.1)
+      updateSliderInput(session, "roi6_start", min = input$roi5_start + 0.1)
+      roi_slider_values$updating_sliders <- FALSE
+    })
+    
+    observe({
+      if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
+      
+      req(input$roi6_start, input$roi7_start)
+      
+      roi_slider_values$updating_sliders <- TRUE
+      updateSliderInput(session, "roi6_start", max = input$roi7_start - 0.1)
+      updateSliderInput(session, "roi7_start", min = input$roi6_start + 0.1)
+      roi_slider_values$updating_sliders <- FALSE
+    })
+    
+    observe({
+      if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
+      
+      req(input$roi7_start, input$roi7_end)
+      
+      roi_slider_values$updating_sliders <- TRUE
+      updateSliderInput(session, "roi7_start", max = input$roi7_end - 0.1)
+      updateSliderInput(session, "roi7_end", min = input$roi7_start + 0.1)
+      roi_slider_values$updating_sliders <- FALSE
+    })
+    
+    # Calculate ROI boundaries from current slider values for plotting
+    roi_boundaries_from_sliders <- reactive({
+      if (!roi_slider_values$boundaries_set) return(NULL)
+      
+      req(input$roi1_start, input$roi2_start, input$roi3_start, input$roi4_start,
+          input$roi5_start, input$roi6_start, input$roi7_start, input$roi7_end)
+      
+      # Return boundaries in the format expected by plotting
+      c(roi_slider_values$data_start,
+        input$roi1_start, input$roi2_start, input$roi3_start, 
+        input$roi4_start, input$roi5_start, input$roi6_start, 
+        input$roi7_start, input$roi7_end,
+        roi_slider_values$data_end)
+    })
+    
+    # Update roi_times reactive to use slider values
+    roi_times <- reactive({
+      boundaries <- roi_boundaries_from_sliders()
+      if (is.null(boundaries)) return(NULL)
+      
+      # Create the table as before, but using slider values
+      roi_times_df <- data.frame(
+        ROI = c("Sensor start trim", "ROI 1: Sensor ingress", "ROI 2: Inflow passage", 
+                "ROI 3: Pre-nadir", "ROI 4: Nadir", "ROI 5: Post-nadir", 
+                "ROI 6: Outflow passage", "ROI 7: Sensor outgress", "Sensor end trim"),
+        `Start time` = c(paste(round(boundaries[1], 3), "s"),
+                         paste(round(boundaries[2], 3), "s"),
+                         paste(round(boundaries[3], 3), "s"),
+                         paste(round(boundaries[4], 3), "s"),
+                         paste(round(boundaries[5], 3), "s"),
+                         paste(round(boundaries[6], 3), "s"),
+                         paste(round(boundaries[7], 3), "s"),
+                         paste(round(boundaries[8], 3), "s"),
+                         paste(round(boundaries[9], 3), "s")),
+        `End Time` = c(paste(round(boundaries[2], 3), "s"),
+                       paste(round(boundaries[3], 3), "s"),
+                       paste(round(boundaries[4], 3), "s"),
+                       paste(round(boundaries[5], 3), "s"),
+                       paste(round(boundaries[6], 3), "s"),
+                       paste(round(boundaries[7], 3), "s"),
+                       paste(round(boundaries[8], 3), "s"),
+                       paste(round(boundaries[9], 3), "s"),
+                       paste(round(boundaries[10], 3), "s")),
+        Duration = c(paste(round(boundaries[2] - boundaries[1], 3), "s"),
+                     paste(round(boundaries[3] - boundaries[2], 3), "s"),
+                     paste(round(boundaries[4] - boundaries[3], 3), "s"),
+                     paste(round(boundaries[5] - boundaries[4], 3), "s"),
+                     paste(round(boundaries[6] - boundaries[5], 3), "s"),
+                     paste(round(boundaries[7] - boundaries[6], 3), "s"),
+                     paste(round(boundaries[8] - boundaries[7], 3), "s"),
+                     paste(round(boundaries[9] - boundaries[8], 3), "s"),
+                     paste(round(boundaries[10] - boundaries[9], 3), "s")),
+        check.names = FALSE
+      )
+      
+      return(list(
+        table = roi_times_df,
+        boundaries = boundaries
+      ))
+    })
+    
+    # ============================= #
+    # /// UI State management \\\ ####  
+    # ============================= # 
+    
+    # Reset checkboxes when sensor changes
     observeEvent(sensor_selector$selected_sensor(), {
       # Reset standardization checkboxes when switching sensors
       updateCheckboxInput(session, "round_roi", value = FALSE)
       updateCheckboxInput(session, "match_pre_post", value = FALSE)
-      
-      # Reset custom ROI state when switching sensors
-      custom_roi_values$custom_edit_mode <- FALSE
-      custom_roi_values$current_roi_step <- 0
-      custom_roi_values$selected_boundaries <- list()
-      custom_roi_values$standardization_applied <- FALSE
-      custom_roi_values$baseline_boundaries <- list()
     })
- 
-## Normalized checkbox ####
+    
+    ## Normalized checkbox ####
     
     # Enable/disable normalized checkbox based on sensor status  
     observe({
       req(sensor_selector$selected_sensor())
-      global_sensor_state$summary_updated  # Add this line
-      global_sensor_state$data_updated     # Add this line
+      global_sensor_state$summary_updated  
+      global_sensor_state$data_updated     
       
       status <- get_sensor_status(sensor_selector$selected_sensor(), output_dir())
       
@@ -407,7 +684,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-## Button state management #####
+    ## Button state management #####
     
     observe({
       req(sensor_selector$selected_sensor())
@@ -416,26 +693,25 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       status <- sensor_status()
       
       button_states <- list(
-        "create_delineated" = nadir$available && !status$delineated && !custom_roi_values$custom_edit_mode,
-        "start_over" = status$delineated && !custom_roi_values$custom_edit_mode,
-        "trim_sensor" = status$delineated && !status$trimmed && !custom_roi_values$custom_edit_mode,
-        "normalize_time" = status$delineated && status$trimmed && !status$normalized && !custom_roi_values$custom_edit_mode,
-        "passage_time" = status$delineated && status$trimmed && !status$passage_times && !custom_roi_values$custom_edit_mode,
-        "nadir_btn" = (!custom_roi_values$custom_edit_mode) && (!nadir_values$edit_mode || !is.null(nadir_values$selected_point)),
+        "apply_roi_boundaries" = roi_slider_values$boundaries_set,
+        "save_roi_config" = roi_slider_values$boundaries_set && 
+          !is.null(input$roi_config_label) && 
+          nchar(trimws(input$roi_config_label)) > 0,
+        "start_over" = status$delineated,
+        "trim_sensor" = status$delineated && !status$trimmed,
+        "normalize_time" = status$delineated && status$trimmed && !status$normalized,
+        "passage_time" = status$delineated && status$trimmed && !status$passage_times,
+        "nadir_btn" = !nadir_values$edit_mode || !is.null(nadir_values$selected_point),
         "cancel_nadir_btn" = nadir_values$edit_mode,
-        "create_custom_roi" = !custom_roi_values$custom_edit_mode || custom_roi_values$current_roi_step == 6,
-        "cancel_custom_roi" = custom_roi_values$custom_edit_mode,
-        "roi_config_label" = custom_roi_values$custom_edit_mode,
-        "mark_roi_dynamic" = custom_roi_values$custom_edit_mode,
-        "round_roi" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 6,
-        "match_pre_post" = custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step == 6 && isTRUE(input$round_roi)
+        "round_roi" = roi_slider_values$boundaries_set,
+        "match_pre_post" = roi_slider_values$boundaries_set && isTRUE(input$round_roi)
       )
       
       manage_button_states(session, button_states)
     })
     
-## Update nadir button ####
-# Update nadir button appearance based on edit mode
+    ## Update nadir button ####
+    # Update nadir button appearance based on edit mode
     observe({
       if (nadir_values$edit_mode) {
         if (!is.null(nadir_values$selected_point)) {
@@ -455,44 +731,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-## Update custom ROI button ####    
-# Update custom ROI buttons based on edit mode
-    observe({
-      if (custom_roi_values$custom_edit_mode) {
-        step_names <- c("Mark ROI 1 Start", "Mark ROI 2 Start", "Mark ROI 3 Start", 
-                        "Mark ROI 5 End", "Mark ROI 6 End", "Mark ROI 7 End")
-        
-        if (custom_roi_values$current_roi_step < 6) {
-          button_text <- step_names[custom_roi_values$current_roi_step + 1]
-          updateActionButton(session, "mark_roi_dynamic", label = button_text)
-        }
-        
-        # Update main button appearance when all boundaries marked
-        if (custom_roi_values$current_roi_step == 6) {
-          updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
-          shinyjs::removeClass("create_custom_roi", "btn-info")
-          shinyjs::addClass("create_custom_roi", "btn-success")
-        }
-      } else {
-        # Reset to initial state when not in edit mode
-        updateActionButton(session, "mark_roi_dynamic", label = "Mark ROI 1 Start")
-        updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
-        shinyjs::removeClass("create_custom_roi", "btn-success")
-        shinyjs::addClass("create_custom_roi", "btn-info")
-      }
-    })
+    # ============================= #
+    # /// Event handlers \\\ ####  
+    # ============================= # 
     
-    # Export custom edit mode for conditional UI
-    output$custom_edit_mode <- reactive({
-      custom_roi_values$custom_edit_mode
-    })
-    outputOptions(output, "custom_edit_mode", suspendWhenHidden = FALSE)
-
-# ============================= #
-# /// Event handlers \\\ ####  
-# ============================= # 
-    
-## Edit nadir ####
+    ## Edit nadir ####
     
     # Edit nadir button
     observeEvent(input$nadir_btn, {
@@ -513,8 +756,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         )
         
         if (success) {
-          trigger_data_update()     # Use global trigger
-          trigger_summary_update()  # Use global trigger
+          trigger_data_update()     
+          trigger_summary_update()  
           nadir_values$edit_mode <- FALSE
           nadir_values$selected_point <- NULL
           showNotification("Nadir updated successfully!", type = "message")
@@ -543,21 +786,138 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         }
       }
     })
-
-## Delineate and trim ####
     
-    observeEvent(input$create_delineated, {
-      req(sensor_selector$selected_sensor(), roi_times(), roi_values$current_config)
+    ## Apply ROI boundaries ####
+    observeEvent(input$apply_roi_boundaries, {
+      req(sensor_selector$selected_sensor())
       
-      create_delineated_dataset()
+      # Check if ROI boundaries exist
+      if (!roi_slider_values$boundaries_set) {
+        showNotification("ROI boundaries not set. Please load a configuration first.", type = "warning")
+        return()
+      }
+      
+      # Check if delineated file already exists
+      status <- sensor_status()
+      if (status$delineated) {
+        showModal(modalDialog(
+          title = "Delineated Data Exists",
+          "Delineated data already exists. Replace existing delineation?",
+          footer = tagList(
+            modalButton("Cancel"),
+            actionButton(ns("confirm_replace_delineation"), "Replace", class = "btn-warning")
+          )
+        ))
+      } else {
+        apply_slider_boundaries()
+      }
     })
     
-    # Confirm replacement
-    observeEvent(input$confirm_replace, {
-      req(roi_values$current_config)
+    # Confirm replace delineation
+    observeEvent(input$confirm_replace_delineation, {
       removeModal()
-      create_delineated_dataset()
+      apply_slider_boundaries()
     })
+    
+    ## Save ROI configuration ####
+    observeEvent(input$save_roi_config, {
+      config_name <- trimws(input$roi_config_label)
+      
+      if (nchar(config_name) == 0) {
+        showNotification("Please enter a configuration label", type = "error")
+        return()
+      }
+      
+      if (!roi_slider_values$boundaries_set) {
+        showNotification("No ROI boundaries set to save", type = "warning")
+        return()
+      }
+      
+      # Check if config already exists
+      existing_configs <- roi_config$all_configs()
+      if (!is.null(existing_configs) && config_name %in% names(existing_configs)) {
+        showModal(modalDialog(
+          title = "Configuration Exists",
+          paste("Configuration '", config_name, "' already exists. Replace existing configuration?"),
+          footer = tagList(
+            modalButton("Cancel"),
+            actionButton(ns("confirm_save_roi_config"), "Replace", class = "btn-warning")
+          ),
+          size = "m"
+        ))
+      } else {
+        save_slider_configuration()
+      }
+    })
+    
+    # Confirm save configuration
+    observeEvent(input$confirm_save_roi_config, {
+      removeModal()
+      save_slider_configuration()
+    })
+    
+    ## Standardization options ####
+    observeEvent(input$round_roi, {
+      if (input$round_roi && roi_slider_values$boundaries_set) {
+        # Round all slider values to nearest 0.1s
+        roi_slider_values$updating_sliders <- TRUE
+        
+        updateSliderInput(session, "roi1_start", value = round(input$roi1_start * 10) / 10)
+        updateSliderInput(session, "roi2_start", value = round(input$roi2_start * 10) / 10)
+        updateSliderInput(session, "roi3_start", value = round(input$roi3_start * 10) / 10)
+        updateSliderInput(session, "roi4_start", value = round(input$roi4_start * 10) / 10)
+        updateSliderInput(session, "roi5_start", value = round(input$roi5_start * 10) / 10)
+        updateSliderInput(session, "roi6_start", value = round(input$roi6_start * 10) / 10)
+        updateSliderInput(session, "roi7_start", value = round(input$roi7_start * 10) / 10)
+        updateSliderInput(session, "roi7_end", value = round(input$roi7_end * 10) / 10)
+        
+        roi_slider_values$updating_sliders <- FALSE
+        showNotification("ROI times rounded to nearest 0.1s", type = "message", duration = 3)
+      }
+    })
+    
+    observeEvent(input$match_pre_post, {
+      if (input$match_pre_post && roi_slider_values$boundaries_set) {
+        # Check if rounding was done first
+        if (!isTRUE(input$round_roi)) {
+          updateCheckboxInput(session, "match_pre_post", value = FALSE)
+          showNotification("Please round ROI times first before matching durations", type = "warning", duration = 4)
+          return()
+        }
+        
+        req(input$roi3_start, input$roi4_start, input$roi5_start, input$roi6_start, input$roi4_nadir_duration)
+        
+        # Calculate current ROI 3 and 5 durations
+        roi4_start_time <- input$roi4_start
+        roi4_end_time <- input$roi4_start + input$roi4_nadir_duration
+        
+        roi3_duration <- roi4_start_time - input$roi3_start
+        roi5_duration <- input$roi6_start - roi4_end_time
+        
+        # Use the average duration for both
+        avg_duration <- (roi3_duration + roi5_duration) / 2
+        
+        roi_slider_values$updating_sliders <- TRUE
+        
+        # Recalculate ROI 3 start and ROI 6 start
+        updateSliderInput(session, "roi3_start", value = roi4_start_time - avg_duration)
+        updateSliderInput(session, "roi6_start", value = roi4_end_time + avg_duration)
+        
+        roi_slider_values$updating_sliders <- FALSE
+        
+        showNotification(paste0("Pre/post-nadir ROI matched to ", round(avg_duration, 3), "s duration"), 
+                         type = "message", duration = 3)
+      }
+    })
+    
+    # Reset match checkbox if round is unchecked
+    observeEvent(input$round_roi, {
+      if (!isTRUE(input$round_roi)) {
+        updateCheckboxInput(session, "match_pre_post", value = FALSE)
+      }
+    })
+    
+    ## Trim and other existing functionality ####
     
     # Trim sensor button
     observeEvent(input$trim_sensor, {
@@ -582,16 +942,16 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), list(trimmed = "Y"))
       
       if (success) {
-        trigger_data_update()     # Use global trigger
-        trigger_summary_update()  # Use global trigger
+        trigger_data_update()     
+        trigger_summary_update()  
         
         showNotification("Sensor data trimmed successfully!", type = "message")
       } else {
         showNotification("Failed to update sensor index", type = "error")
       }
     })
-
-## Start over ####
+    
+    ## Start over ####
     
     observeEvent(input$start_over, {
       req(sensor_selector$selected_sensor())
@@ -619,8 +979,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       )
       
       if (success) {
-        trigger_data_update()     # Use global trigger
-        trigger_summary_update()  # Use global trigger
+        trigger_data_update()     
+        trigger_summary_update()  
         
         updateCheckboxInput(session, "round_roi", value = FALSE)
         updateCheckboxInput(session, "match_pre_post", value = FALSE)
@@ -631,7 +991,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-## Normalize time series ####
+    ## Normalize time series ####
     
     observeEvent(input$normalize_time, {
       req(sensor_selector$selected_sensor())
@@ -648,7 +1008,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         
         # Get nadir info
         nadir <- nadir_info()
-
+        
         # Calculate normalization parameters
         start_time <- min(sensor_data$time_s)
         end_time <- max(sensor_data$time_s)
@@ -671,8 +1031,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), list(normalized = "Y"))
         
         if (success) {
-          trigger_data_update()     # Use global trigger
-          trigger_summary_update()  # Use global trigger
+          trigger_data_update()     
+          trigger_summary_update()  
           
           showNotification("Time series normalized successfully!", type = "message")
         } else {
@@ -684,7 +1044,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       })
     })
     
-## Calculate passage times ####
+    ## Calculate passage times ####
     
     observeEvent(input$passage_time, {
       req(sensor_selector$selected_sensor())
@@ -701,8 +1061,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         
         # Get nadir info
         nadir <- nadir_info()
-
-                # Calculate times in seconds
+        
+        # Calculate times in seconds
         first_time <- min(sensor_data$time_s)
         last_time <- max(sensor_data$time_s)
         nadir_time <- nadir$time
@@ -732,8 +1092,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         )
         
         if (success) {
-          trigger_data_update()     # Use global trigger
-          trigger_summary_update()  # Use global trigger
+          trigger_data_update()     
+          trigger_summary_update()  
           
           showNotification("Passage times calculated successfully!", type = "message")
         } else {
@@ -745,264 +1105,35 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       })
     })
     
-## Create custom ROI incl. modal####
+    # ============================= #
+    # /// Helper functions \\\ ####  
+    # ============================= # 
     
-    # Create custom ROI button
-    observeEvent(input$create_custom_roi, {
-      if (!custom_roi_values$custom_edit_mode) {
-        # Start custom mode
-        custom_roi_values$custom_edit_mode <- TRUE
-        custom_roi_values$current_roi_step <- 0
-        custom_roi_values$selected_boundaries <- list()
-        custom_roi_values$standardization_applied <- FALSE
-        custom_roi_values$baseline_boundaries <- list()
-        custom_roi_values$custom_nadir_duration <- input$roi4_nadir_duration
-        custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
-        updateActionButton(session, "create_custom_roi", label = "Save Custom Delineation")
-        updateCheckboxInput(session, "round_roi", value = FALSE)
-        updateCheckboxInput(session, "match_pre_post", value = FALSE)
-      } else if (custom_roi_values$current_roi_step == 6) {
-        # Check if label is provided
-        if (is.null(input$roi_config_label) || nchar(trimws(input$roi_config_label)) == 0) {
-          showNotification("Please enter a configuration label before saving", type = "error", duration = 4)
-          return()
-        }
-        
-        # Check standardization
-        if (!custom_roi_values$standardization_applied) {
-          showModal(modalDialog(
-            title = "ROI Not Standardized",
-            "ROI boundaries have not been standardized. Continue without standardization?",
-            footer = tagList(
-              modalButton("No, go back"),
-              actionButton(ns("confirm_save_without_standardization"), "Yes, continue", class = "btn-warning")
-            ),
-            size = "m"
-          ))
-        } else {
-          save_custom_configuration()
-        }
-      }
-    })
-    
-    # If user clicks continue, then remove the message and continue to save
-    
-    observeEvent(input$confirm_save_without_standardization, {
-      removeModal()
-      save_custom_configuration() 
-    })
-    
-### Round ROI 0.1s ####
-    observeEvent(input$round_roi, {
-      if (input$round_roi && length(custom_roi_values$selected_boundaries) == 6) {
-        # Store original boundaries if first standardization
-        if (!custom_roi_values$standardization_applied) {
-          custom_roi_values$baseline_boundaries <- custom_roi_values$selected_boundaries
-        }
-        
-        # Round all boundaries to nearest 0.1s
-        for (boundary_name in names(custom_roi_values$selected_boundaries)) {
-          rounded_time <- round(custom_roi_values$selected_boundaries[[boundary_name]] * 10) / 10
-          custom_roi_values$selected_boundaries[[boundary_name]] <- rounded_time
-        }
-        
-        custom_roi_values$standardization_applied <- TRUE
-        showNotification("ROI times rounded to nearest 0.1s", type = "message", duration = 3)
-      }
-    })
-    
-### Match pre/post nadir ROI ####  
-    observeEvent(input$match_pre_post, {
-      if (input$match_pre_post && length(custom_roi_values$selected_boundaries) == 6) {
-        # Check if rounding was done first
-        if (!isTRUE(input$round_roi)) {
-          updateCheckboxInput(session, "match_pre_post", value = FALSE)
-          showNotification("Please round ROI times first before matching durations", type = "warning", duration = 4)
-          return()
-        }
-        
-        nadir <- nadir_info()
-        nadir_duration <- input$roi4_nadir_duration
-        
-        if (!custom_roi_values$standardization_applied) {
-          custom_roi_values$baseline_boundaries <- custom_roi_values$selected_boundaries
-        }
-        
-        # Calculate current ROI 3 and 5 durations
-        roi4_start <- nadir$time - (nadir_duration / 2)
-        roi4_end <- nadir$time + (nadir_duration / 2)
-        
-        roi3_duration <- roi4_start - custom_roi_values$selected_boundaries$roi3_start
-        roi5_duration <- custom_roi_values$selected_boundaries$roi5_end - roi4_end
-        
-        # Use the average duration for both
-        avg_duration <- (roi3_duration + roi5_duration) / 2
-        
-        # Recalculate ROI 3 start and ROI 5 end
-        custom_roi_values$selected_boundaries$roi3_start <- roi4_start - avg_duration
-        custom_roi_values$selected_boundaries$roi5_end <- roi4_end + avg_duration
-        
-        custom_roi_values$standardization_applied <- TRUE
-        showNotification(paste0("Pre/post-nadir ROI matched to ", round(avg_duration, 3), "s duration"), 
-                         type = "message", duration = 3)
-      }
-    })
-    
-# Reset match checkbox if round is unchecked
-    
-    observeEvent(input$round_roi, {
-      if (!isTRUE(input$round_roi)) {
-        updateCheckboxInput(session, "match_pre_post", value = FALSE)
-      }
-    })
-# Reset roi values if cancel #
-    observeEvent(input$cancel_custom_roi, {
-      custom_roi_values$custom_edit_mode <- FALSE
-      custom_roi_values$current_roi_step <- 0
-      updateTextInput(session, "roi_config_label", value = "")
-      custom_roi_values$selected_boundaries <- list()
-      custom_roi_values$pending_point <- NULL
-      custom_roi_values$standardization_applied <- FALSE
-      custom_roi_values$baseline_boundaries <- list()
-      updateTextInput(session, "roi_config_label", value = "")
-      # Reset checkboxes
-      updateCheckboxInput(session, "round_roi", value = FALSE)
-      updateCheckboxInput(session, "match_pre_post", value = FALSE)
-      
-      updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
-    })
-    
-    # Dynamic ROI marking button
-    observeEvent(input$mark_roi_dynamic, {
-      if (is.null(custom_roi_values$pending_point)) {
-        showNotification("Mark ROI on plot first", type = "warning", duration = 3)
-        return()
-      }
-      
-      step_names <- c("roi1_start", "roi2_start", "roi3_start", "roi5_end", "roi6_end", "roi7_end")
-      boundary_name <- step_names[custom_roi_values$current_roi_step + 1]
-      
-      custom_roi_values$selected_boundaries[[boundary_name]] <- custom_roi_values$pending_point$x
-      custom_roi_values$current_roi_step <- custom_roi_values$current_roi_step + 1
-      custom_roi_values$pending_point <- NULL
-      
-      # Reset baseline click for next selection
-      custom_roi_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
-    })
-    
-    # Handle click events for custom ROI selection
-    observe({
-      if (custom_roi_values$custom_edit_mode && custom_roi_values$current_roi_step < 6) {
-        click_data <- event_data("plotly_click", source = "roi_nadir_plot")
-        if (!is.null(click_data)) {
-          # Only respond if this click is different from baseline
-          if (is.null(custom_roi_values$baseline_click) ||
-              click_data$x != custom_roi_values$baseline_click$x) {
-            custom_roi_values$pending_point <- list(x = click_data$x)
-          }
-        }
-      }
-    })
-    
-
-# ============================= #
-# /// Helper functions \\\ ####  
-# ============================= # 
-
-## Save custom ROI ####
-    
-# Save custom ROI configuration function
-    save_custom_configuration <- function() {
-      req(custom_roi_values$current_roi_step == 6)
-      req(length(custom_roi_values$selected_boundaries) == 6)
-      
-      nadir <- nadir_info()
-      req(nadir$available)
-      
-      # Get nadir duration from input
-      nadir_duration <- input$roi4_nadir_duration
-      
-      # Calculate ROI 4 boundaries
-      roi4_start <- nadir$time - (nadir_duration / 2)
-      roi4_end <- nadir$time + (nadir_duration / 2)
-      
-      # Extract selected boundaries
-      roi1_start <- custom_roi_values$selected_boundaries$roi1_start
-      roi2_start <- custom_roi_values$selected_boundaries$roi2_start
-      roi3_start <- custom_roi_values$selected_boundaries$roi3_start
-      roi5_end <- custom_roi_values$selected_boundaries$roi5_end
-      roi6_end <- custom_roi_values$selected_boundaries$roi6_end
-      roi7_end <- custom_roi_values$selected_boundaries$roi7_end
-      
-      # Calculate durations
-      roi1_duration <- roi2_start - roi1_start
-      roi2_duration <- roi3_start - roi2_start
-      roi3_duration <- roi4_start - roi3_start
-      roi4_duration <- nadir_duration
-      roi5_duration <- roi5_end - roi4_end
-      roi6_duration <- roi6_end - roi5_end
-      roi7_duration <- roi7_end - roi6_end
-      
-      # Save configuration
-      config_name <- trimws(input$roi_config_label)
-      
-      success <- save_config_value(
-        output_dir = output_dir(),
-        config_type = "roi",
-        key = config_name,
-        value = c(roi1_duration, roi2_duration, roi3_duration, roi4_duration, 
-                  roi5_duration, roi6_duration, roi7_duration)
-      )
-      
-      if (success) {
-        # Reset custom mode
-        custom_roi_values$custom_edit_mode <- FALSE
-        custom_roi_values$current_roi_step <- 0
-        custom_roi_values$selected_boundaries <- list()
-        updateActionButton(session, "create_custom_roi", label = "Create Custom Delineation")
-        shinyjs::removeClass("create_custom_roi", "btn-success")
-        shinyjs::addClass("create_custom_roi", "btn-info")
-        
-        # Reload configs and set current config to the newly saved one
-        roi_config$reload_configs()
-
-        create_delineated_dataset()
-        
-        showNotification("Custom ROI configuration saved and applied successfully!", type = "message")
-      }else {
-        showNotification("Failed to save custom ROI configuration", type = "error")
-      }
-    }
-    
-## Create delineated data ####
-    
-# Function to create delineated dataset
-    create_delineated_dataset <- function() {
+    ## Apply slider boundaries to create delineated dataset ####
+    apply_slider_boundaries <- function() {
       tryCatch({
         # Read original data using shared function
         sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
         
-        # Create delineated folder - always check/create fresh
+        # Create delineated folder
         delineated_dir <- file.path(output_dir(), "csv", "delineated")
         if (!dir.exists(delineated_dir)) {
           dir.create(delineated_dir, showWarnings = FALSE, recursive = TRUE)
         }
         
-        # Verify directory was created
         if (!dir.exists(delineated_dir)) {
           showNotification("Failed to create delineated directory", type = "error")
           return()
         }
         
-        # Add ROI column
-        times <- roi_times()
-        if (is.null(times)) {
-          showNotification("ROI times not available", type = "error")
-          return()
-        }
+        # Get boundaries from sliders
+        boundaries <- c(roi_slider_values$data_start,
+                        input$roi1_start, input$roi2_start, input$roi3_start, 
+                        input$roi4_start, input$roi5_start, input$roi6_start, 
+                        input$roi7_start, input$roi7_end,
+                        roi_slider_values$data_end)
         
-        boundaries <- times$boundaries
-        
+        # Add ROI column using boundaries
         sensor_data$roi <- cut(sensor_data$time_s, 
                                breaks = boundaries,
                                labels = c("trim_start", "roi1_sens_ingress", "roi2_inflow_passage", 
@@ -1014,10 +1145,16 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         output_file <- file.path(delineated_dir, paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
         write.csv(sensor_data, output_file, row.names = FALSE)
         
-        # Verify file was created
         if (!file.exists(output_file)) {
           showNotification("Failed to create delineated file", type = "error")
           return()
+        }
+        
+        # Determine config label to save
+        config_label <- if (!is.null(input$roi_config_label) && nchar(trimws(input$roi_config_label)) > 0) {
+          trimws(input$roi_config_label)
+        } else {
+          "custom"
         }
         
         # Update sensor index using shared function
@@ -1026,7 +1163,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           sensor_selector$selected_sensor(),
           list(
             delineated = "Y",
-            roi_config = roi_values$current_config$label,
+            roi_config = config_label,
             trimmed = "N",
             normalized = "N",
             passage_times = "N",
@@ -1037,9 +1174,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         )
         
         if (success) {
-          trigger_data_update()     # Use global trigger
-          trigger_summary_update()  # Use global trigger
-          
+          trigger_data_update()     
+          trigger_summary_update()  
           showNotification("Delineated dataset created successfully!", type = "message")
         } else {
           showNotification("Warning: Dataset created but failed to update index", type = "warning")
@@ -1050,12 +1186,50 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                          type = "error")
       })
     }
-
-# ============================= #
-# /// Output render \\\ ####  
-# ============================= #    
-  
-# Display current nadir####
+    
+    ## Save slider configuration ####
+    save_slider_configuration <- function() {
+      tryCatch({
+        config_name <- trimws(input$roi_config_label)
+        
+        # Convert slider positions back to durations
+        roi1_duration <- input$roi2_start - input$roi1_start
+        roi2_duration <- input$roi3_start - input$roi2_start
+        roi3_duration <- input$roi4_start - input$roi3_start
+        roi4_duration <- input$roi4_nadir_duration
+        roi5_duration <- input$roi6_start - input$roi5_start
+        roi6_duration <- input$roi7_start - input$roi6_start
+        roi7_duration <- input$roi7_end - input$roi7_start
+        
+        # Save configuration using shared function
+        success <- save_config_value(
+          output_dir = output_dir(),
+          config_type = "roi",
+          key = config_name,
+          value = c(roi1_duration, roi2_duration, roi3_duration, roi4_duration, 
+                    roi5_duration, roi6_duration, roi7_duration)
+        )
+        
+        if (success) {
+          # Reload configurations
+          roi_config$reload_configs()
+          trigger_summary_update()
+          
+          showNotification(paste("ROI configuration '", config_name, "' saved successfully!"), type = "message")
+        } else {
+          showNotification("Failed to save ROI configuration", type = "error")
+        }
+        
+      }, error = function(e) {
+        showNotification(paste("Error saving configuration:", e$message), type = "error")
+      })
+    }
+    
+    # ============================= #
+    # /// Output render \\\ ####  
+    # ============================= #    
+    
+    # Display current nadir####
     
     output$current_nadir_display <- renderText({
       nadir <- nadir_info()
@@ -1064,7 +1238,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-# Delineation, normalization, passage status ####
+    # Delineation, normalization, passage status ####
     status_controls <- statusModuleServer("status_display",
                                           sensor_name_reactive = reactive(sensor_selector$selected_sensor()),
                                           output_dir_reactive = reactive(output_dir()),
@@ -1072,7 +1246,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                           invalidation_trigger = reactive(global_sensor_state$summary_updated),
                                           individual_outputs = TRUE)
     
-# Nadir editing status display ####
+    # Nadir editing status display ####
     
     output$nadir_status <- renderText({
       if (nadir_values$edit_mode) {
@@ -1087,40 +1261,33 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-# Dynamic ROI instruction ####
+    # Dynamic ROI instruction ####
     output$dynamic_instruction <- renderText({
-      if (custom_roi_values$custom_edit_mode) {
-        if (!is.null(custom_roi_values$pending_point)) {
-          paste0("Time: ", round(custom_roi_values$pending_point$x, 3), "s - Click button to confirm")
-        } else if (custom_roi_values$current_roi_step < 6) {
-          step_instructions <- c("Click plot to mark ROI 1 start", "Click plot to mark ROI 2 start", 
-                                 "Click plot to mark ROI 3 start", "Click plot to mark ROI 5 end",
-                                 "Click plot to mark ROI 6 end", "Click plot to mark ROI 7 end")
-          step_instructions[custom_roi_values$current_roi_step + 1]
-        } else {
-          "All boundaries selected - click Save Custom Delineation"
-        }
+      if (!roi_slider_values$boundaries_set) {
+        "Load a configuration or select a delineated sensor to adjust ROI boundaries"
+      } else {
+        "Use sliders above to adjust ROI boundaries, then apply delineation"
       }
     })
-
-##Round status ####
+    
+    ##Round status ####
     output$round_status <- renderText({
-      if (input$round_roi && custom_roi_values$standardization_applied) {
+      if (input$round_roi && roi_slider_values$boundaries_set) {
         "ROI times rounded to 0.1s precision"
       } else {
         ""
       }
     })
-##Match pre/post ####
+    ##Match pre/post ####
     output$match_status <- renderText({
-      if (input$match_pre_post && custom_roi_values$standardization_applied) {
+      if (input$match_pre_post && roi_slider_values$boundaries_set) {
         "Pre/post-nadir ROI durations matched"  
       } else {
         ""
       }
     })
     
-# Display ROI table ####
+    # Display ROI table ####
     output$roi_table <- DT::renderDataTable({
       times <- roi_times()
       if (!is.null(times)) {
@@ -1141,7 +1308,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-# Normalize status output ####
+    # Normalize status output ####
     output$normalize_status <- renderText({
       req(sensor_selector$selected_sensor())
       status <- sensor_status()
@@ -1153,7 +1320,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-# Passage status output####
+    # Passage status output####
     output$passage_status <- renderText({
       req(sensor_selector$selected_sensor())
       status <- sensor_status()
@@ -1165,9 +1332,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-# Passage duration output #### 
+    # Passage duration output #### 
     
-# Helper function to generate duration text
+    # Helper function to generate duration text
     generate_duration_text <- function(duration_col, prefix_text) {
       req(sensor_selector$selected_sensor())
       global_sensor_state$summary_updated
@@ -1201,8 +1368,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       generate_duration_text("nadir_outgress_duration.mm.ss.", "Nadir to sensor outgress")
     })
     
-# Create main plot #####
-    # Get plot controls from the module
+    # Create main plot #####
     # Setup the base plot using plot module
     plot_controls <- plotModuleServer("roi_plot", 
                                       sensor_data = selected_sensor_data,
@@ -1220,98 +1386,15 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                           NULL
                                         }
                                       }),
-                                      roi_boundaries = reactive({
-                                        times <- roi_times()
-                                        if (!is.null(times)) {
-                                          times$boundaries
-                                        } else {
-                                          NULL
-                                        }
-                                      }),
+                                      roi_boundaries = roi_boundaries_from_sliders,  # Use new reactive
                                       show_roi_markers = reactive({
-                                        # Show ROI markers when delineated, trimmed, and NOT in custom edit mode
+                                        # Show ROI markers when boundaries are set and sensor is delineated+trimmed
                                         status <- sensor_status()
-                                        !custom_roi_values$custom_edit_mode && status$delineated && status$trimmed
+                                        roi_slider_values$boundaries_set && status$delineated && status$trimmed
                                       }),
-                                      custom_edit_mode = reactive(custom_roi_values$custom_edit_mode),
-                                      title_prefix = "ROI Delineated",
-                                      plot_source = "roi_nadir_plot",
-                                      custom_traces = custom_roi_traces
+                                      title_prefix = "ROI Delineation",
+                                      plot_source = "roi_nadir_plot"
     )
-    
-    custom_roi_traces <- reactive({
-      if (!custom_roi_values$custom_edit_mode) return(NULL)
-      
-      sensor_data <- selected_sensor_data()
-      nadir <- nadir_info()
-      
-      if (is.null(sensor_data) || !nadir$available) return(NULL)
-      
-      # Get current left axis variable
-      left_var <- if (!is.null(plot_controls$left_var())) plot_controls$left_var() else "pressure_kpa"
-      
-      if (!left_var %in% names(sensor_data)) return(NULL)
-      
-      y_min <- min(sensor_data[[left_var]], na.rm = TRUE)
-      y_max <- max(sensor_data[[left_var]], na.rm = TRUE)
-      
-      traces <- list()
-      
-      # ROI 4 nadir duration lines (orange solid lines)
-      nadir_duration <- input$roi4_nadir_duration %||% 0.4
-      roi4_start <- nadir$time - (nadir_duration / 2)
-      roi4_end <- nadir$time + (nadir_duration / 2)
-      
-      traces <- append(traces, list(
-        list(
-          x = c(roi4_start, roi4_start), y = c(y_min, y_max),
-          mode = "lines", 
-          line = list(color = "orange", width = 2, dash = "solid"),
-          hovertext = "ROI 4 Start (Nadir)", 
-          showlegend = FALSE
-        ),
-        list(
-          x = c(roi4_end, roi4_end), y = c(y_min, y_max),
-          mode = "lines", 
-          line = list(color = "orange", width = 2, dash = "solid"),
-          hovertext = "ROI 4 End (Nadir)", 
-          showlegend = FALSE
-        )
-      ))
-      
-      # Custom boundary lines (purple dashed lines)
-      for (boundary_name in names(custom_roi_values$selected_boundaries)) {
-        boundary_time <- custom_roi_values$selected_boundaries[[boundary_name]]
-        boundary_label <- gsub("_", " ", toupper(boundary_name))
-        
-        traces <- append(traces, list(
-          list(
-            x = c(boundary_time, boundary_time), y = c(y_min, y_max),
-            mode = "lines", 
-            line = list(color = "purple", width = 2, dash = "dash"),
-            hovertext = boundary_label, 
-            showlegend = FALSE
-          )
-        ))
-      }
-      
-      # Pending point line (green dotted line)
-      if (!is.null(custom_roi_values$pending_point)) {
-        traces <- append(traces, list(
-          list(
-            x = c(custom_roi_values$pending_point$x, custom_roi_values$pending_point$x), 
-            y = c(y_min, y_max),
-            mode = "lines", 
-            line = list(color = "green", width = 2, dash = "dot"),
-            hovertext = "Pending Selection", 
-            showlegend = FALSE
-          )
-        ))
-      }
-      
-      return(traces)
-    })
     
   })  # End of moduleServer
 }     # End of roiServer
-    
