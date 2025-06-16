@@ -356,8 +356,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         })
         
         roi_values$sliders_changed <- FALSE
-        roi_values$populating_sliders <- FALSE  
-        
+       
         roi_values$baseline_config <- list(
           label = "From_existing_delineation",
           roi1_sens_ingress = roi2_start - roi1_start,
@@ -410,7 +409,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       })
       
       roi_values$sliders_changed <- FALSE
-      roi_values$populating_sliders <- FALSE 
       roi_values$baseline_config <- config
     }
     
@@ -421,6 +419,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Track changes in slider inputs (similar to pressure/acceleration modules)
     observeEvent(list(input$roi1_start, input$roi2_start, input$roi3_start, 
                       input$roi5_end, input$roi6_end, input$roi7_end, input$roi4_duration), {
+                        cat("populating_sliders:", roi_values$populating_sliders, "\n")
+                        
+                        if (roi_values$populating_sliders) {
+                          roi_values$populating_sliders <- FALSE  # Reset flag here
+                          return()
+                        }
                         
                         # Only track changes after initial population and when NOT populating
                         if (!roi_values$slider_ranges_set || 
@@ -935,9 +939,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         }
         
         # Simple logic: if trim boundaries changed OR not yet trimmed, reset to original
-        if (roi_values$trim_boundaries_changed || !status$trimmed) {
-          cat("RESETTING TO ORIGINAL FILE\n")
-          # Reset to original file
+        if (status$delineated && roi_values$trim_boundaries_changed) {
+          cat("RESETTING TO ORIGINAL FILE (trim boundaries changed)\n")
+          # Reset to original file because trim boundaries changed on existing delineation
           sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
           
           # Apply full delineation with trim regions
@@ -948,7 +952,21 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                             "roi6_outflow_passage", "roi7_sens_outgress", "trim_end"),
                                  include.lowest = TRUE, right = FALSE)
           
-          # Reset trimmed status
+          reset_flags <- list(trimmed = "N", normalized = "N", passage_times = "N")
+          
+        } else if (!status$delineated) {
+          cat("FIRST TIME DELINEATION\n")
+          # First time delineation - work with original file (already loaded)
+          sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
+          
+          # Apply full delineation with trim regions
+          sensor_data$roi <- cut(sensor_data$time_s, 
+                                 breaks = boundaries,
+                                 labels = c("trim_start", "roi1_sens_ingress", "roi2_inflow_passage", 
+                                            "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                                            "roi6_outflow_passage", "roi7_sens_outgress", "trim_end"),
+                                 include.lowest = TRUE, right = FALSE)
+          
           reset_flags <- list(trimmed = "N", normalized = "N", passage_times = "N")
           
         } else {
