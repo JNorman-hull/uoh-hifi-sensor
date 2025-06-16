@@ -139,14 +139,6 @@ roiSidebarUI <- function(id) {
                         min = 0, max = 100, value = 28, step = 0.1, width = "100%")),
         
         div(style = "margin-bottom: 10px;",
-            sliderInput(ns("roi4_start"), "ROI 4 Start (s):", 
-                        min = 0, max = 100, value = 29, step = 0.1, width = "100%")),
-        
-        div(style = "margin-bottom: 10px;",
-            sliderInput(ns("roi5_start"), "ROI 5 Start (s):", 
-                        min = 0, max = 100, value = 31, step = 0.1, width = "100%")),
-        
-        div(style = "margin-bottom: 10px;",
             sliderInput(ns("roi6_start"), "ROI 6 Start (s):", 
                         min = 0, max = 100, value = 35, step = 0.1, width = "100%")),
         
@@ -345,16 +337,15 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       nadir <- nadir_time$time
       
-      # Calculate ROI 4 boundaries (nadir-centered)
+      # Calculate ROI 4 boundaries (nadir-centered) using nadir duration input
       roi4_start <- nadir - (config$roi4_nadir / 2)
-      roi4_end <- nadir + (config$roi4_nadir / 2)
+      roi5_start <- nadir + (config$roi4_nadir / 2)
       
       # Calculate other boundaries working backwards and forwards
       roi3_start <- roi4_start - config$roi3_prenadir
       roi2_start <- roi3_start - config$roi2_inflow_passage
       roi1_start <- roi2_start - config$roi1_sens_ingress
       
-      roi5_start <- roi4_end
       roi6_start <- roi5_start + config$roi5_postnadir
       roi7_start <- roi6_start + config$roi6_outflow_passage
       roi7_end <- roi7_start + config$roi7_sens_outgress
@@ -366,7 +357,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         roi2_start = roi2_start,
         roi3_start = roi3_start,
         roi4_start = roi4_start,
-        roi5_start = roi4_end,  # ROI 5 starts where ROI 4 ends
+        roi5_start = roi5_start,
         roi6_start = roi6_start,
         roi7_start = roi7_start,
         roi7_end = roi7_end,
@@ -378,46 +369,33 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     update_slider_constraints <- function(session, boundaries) {
       if (is.null(boundaries)) return()
       
-      # Update slider ranges with proper constraints
+      # First update values without constraints to avoid conflicts
+      updateSliderInput(session, "roi1_start", value = boundaries$roi1_start)
+      updateSliderInput(session, "roi2_start", value = boundaries$roi2_start)
+      updateSliderInput(session, "roi3_start", value = boundaries$roi3_start)
+      updateSliderInput(session, "roi6_start", value = boundaries$roi6_start)
+      updateSliderInput(session, "roi7_start", value = boundaries$roi7_start)
+      updateSliderInput(session, "roi7_end", value = boundaries$roi7_end)
+      
+      # Then update ranges based on data bounds
       updateSliderInput(session, "roi1_start", 
                         min = boundaries$data_start, 
-                        max = boundaries$roi2_start - 0.1,
-                        value = boundaries$roi1_start)
-      
+                        max = boundaries$data_end)
       updateSliderInput(session, "roi2_start", 
-                        min = boundaries$roi1_start + 0.1, 
-                        max = boundaries$roi3_start - 0.1,
-                        value = boundaries$roi2_start)
-      
+                        min = boundaries$data_start, 
+                        max = boundaries$data_end)
       updateSliderInput(session, "roi3_start", 
-                        min = boundaries$roi2_start + 0.1, 
-                        max = boundaries$roi4_start - 0.1,
-                        value = boundaries$roi3_start)
-      
-      updateSliderInput(session, "roi4_start", 
-                        min = boundaries$roi3_start + 0.1, 
-                        max = boundaries$roi5_start - 0.1,
-                        value = boundaries$roi4_start)
-      
-      updateSliderInput(session, "roi5_start", 
-                        min = boundaries$roi4_start + boundaries$roi4_duration + 0.1, 
-                        max = boundaries$roi6_start - 0.1,
-                        value = boundaries$roi5_start)
-      
+                        min = boundaries$data_start, 
+                        max = boundaries$data_end)
       updateSliderInput(session, "roi6_start", 
-                        min = boundaries$roi5_start + 0.1, 
-                        max = boundaries$roi7_start - 0.1,
-                        value = boundaries$roi6_start)
-      
+                        min = boundaries$data_start, 
+                        max = boundaries$data_end)
       updateSliderInput(session, "roi7_start", 
-                        min = boundaries$roi6_start + 0.1, 
-                        max = boundaries$roi7_end - 0.1,
-                        value = boundaries$roi7_start)
-      
+                        min = boundaries$data_start, 
+                        max = boundaries$data_end)
       updateSliderInput(session, "roi7_end", 
-                        min = boundaries$roi7_start + 0.1, 
-                        max = boundaries$data_end,
-                        value = boundaries$roi7_end)
+                        min = boundaries$data_start, 
+                        max = boundaries$data_end)
       
       # Update nadir duration
       updateNumericInput(session, "roi4_nadir_duration", value = boundaries$roi4_duration)
@@ -502,102 +480,77 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     })
     
     # Update ROI 5 start when ROI 4 start or duration changes
-    observe({
-      if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
+    calculate_roi4_roi5_from_nadir <- reactive({
+      req(input$roi4_nadir_duration)
+      nadir <- nadir_info()
       
-      req(input$roi4_start, input$roi4_nadir_duration)
+      if (!nadir$available) return(list(roi4_start = NULL, roi5_start = NULL))
       
-      new_roi5_start <- input$roi4_start + input$roi4_nadir_duration
+      roi4_start <- nadir$time - (input$roi4_nadir_duration / 2)
+      roi5_start <- nadir$time + (input$roi4_nadir_duration / 2)
       
-      roi_slider_values$updating_sliders <- TRUE
-      updateSliderInput(session, "roi5_start", value = new_roi5_start)
-      
-      # Update constraints for downstream sliders
-      if (!is.null(input$roi6_start)) {
-        updateSliderInput(session, "roi5_start", max = input$roi6_start - 0.1)
-      }
-      roi_slider_values$updating_sliders <- FALSE
+      return(list(roi4_start = roi4_start, roi5_start = roi5_start))
     })
     
-    # Dynamic constraint updates when sliders change
     observe({
       if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
       
       req(input$roi1_start, input$roi2_start)
-      
-      roi_slider_values$updating_sliders <- TRUE
-      updateSliderInput(session, "roi1_start", max = input$roi2_start - 0.1)
-      updateSliderInput(session, "roi2_start", min = input$roi1_start + 0.1)
-      roi_slider_values$updating_sliders <- FALSE
+      if (input$roi1_start >= input$roi2_start) {
+        roi_slider_values$updating_sliders <- TRUE
+        updateSliderInput(session, "roi1_start", value = input$roi2_start - 0.1)
+        roi_slider_values$updating_sliders <- FALSE
+      }
     })
     
-    # Add similar observers for other adjacent slider pairs
     observe({
       if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
       
       req(input$roi2_start, input$roi3_start)
-      
-      roi_slider_values$updating_sliders <- TRUE
-      updateSliderInput(session, "roi2_start", max = input$roi3_start - 0.1)
-      updateSliderInput(session, "roi3_start", min = input$roi2_start + 0.1)
-      roi_slider_values$updating_sliders <- FALSE
-    })
-    
-    observe({
-      if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
-      
-      req(input$roi3_start, input$roi4_start)
-      
-      roi_slider_values$updating_sliders <- TRUE
-      updateSliderInput(session, "roi3_start", max = input$roi4_start - 0.1)
-      updateSliderInput(session, "roi4_start", min = input$roi3_start + 0.1)
-      roi_slider_values$updating_sliders <- FALSE
-    })
-    
-    observe({
-      if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
-      
-      req(input$roi5_start, input$roi6_start)
-      
-      roi_slider_values$updating_sliders <- TRUE
-      updateSliderInput(session, "roi5_start", max = input$roi6_start - 0.1)
-      updateSliderInput(session, "roi6_start", min = input$roi5_start + 0.1)
-      roi_slider_values$updating_sliders <- FALSE
+      if (input$roi2_start >= input$roi3_start) {
+        roi_slider_values$updating_sliders <- TRUE
+        updateSliderInput(session, "roi2_start", value = input$roi3_start - 0.1)
+        roi_slider_values$updating_sliders <- FALSE
+      }
     })
     
     observe({
       if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
       
       req(input$roi6_start, input$roi7_start)
-      
-      roi_slider_values$updating_sliders <- TRUE
-      updateSliderInput(session, "roi6_start", max = input$roi7_start - 0.1)
-      updateSliderInput(session, "roi7_start", min = input$roi6_start + 0.1)
-      roi_slider_values$updating_sliders <- FALSE
+      if (input$roi6_start >= input$roi7_start) {
+        roi_slider_values$updating_sliders <- TRUE
+        updateSliderInput(session, "roi6_start", value = input$roi7_start - 0.1)
+        roi_slider_values$updating_sliders <- FALSE
+      }
     })
     
     observe({
       if (roi_slider_values$updating_sliders || !roi_slider_values$boundaries_set) return()
       
       req(input$roi7_start, input$roi7_end)
-      
-      roi_slider_values$updating_sliders <- TRUE
-      updateSliderInput(session, "roi7_start", max = input$roi7_end - 0.1)
-      updateSliderInput(session, "roi7_end", min = input$roi7_start + 0.1)
-      roi_slider_values$updating_sliders <- FALSE
+      if (input$roi7_start >= input$roi7_end) {
+        roi_slider_values$updating_sliders <- TRUE
+        updateSliderInput(session, "roi7_start", value = input$roi7_end - 0.1)
+        roi_slider_values$updating_sliders <- FALSE
+      }
     })
     
     # Calculate ROI boundaries from current slider values for plotting
     roi_boundaries_from_sliders <- reactive({
       if (!roi_slider_values$boundaries_set) return(NULL)
       
-      req(input$roi1_start, input$roi2_start, input$roi3_start, input$roi4_start,
-          input$roi5_start, input$roi6_start, input$roi7_start, input$roi7_end)
+      req(input$roi1_start, input$roi2_start, input$roi3_start,
+          input$roi6_start, input$roi7_start, input$roi7_end)
+      
+      # Get calculated roi4/roi5 from nadir
+      roi4_roi5 <- calculate_roi4_roi5_from_nadir()
+      if (is.null(roi4_roi5$roi4_start)) return(NULL)
       
       # Return boundaries in the format expected by plotting
       c(roi_slider_values$data_start,
         input$roi1_start, input$roi2_start, input$roi3_start, 
-        input$roi4_start, input$roi5_start, input$roi6_start, 
+        roi4_roi5$roi4_start, roi4_roi5$roi5_start, input$roi6_start, 
         input$roi7_start, input$roi7_end,
         roi_slider_values$data_end)
     })
