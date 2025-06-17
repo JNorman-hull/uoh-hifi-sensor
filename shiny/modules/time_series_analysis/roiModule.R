@@ -134,6 +134,8 @@ roiSidebarUI <- function(id) {
             sliderInput(ns("roi7_end"), NULL, min = 0, max = 100, value = 40, step = 0.1, width = "100%")
         ),
         
+        actionButton(ns("update_plot"), "Update Plot", class = "btn-info btn-block"),
+        
         hr(),
         
         h4("Actions"),
@@ -205,7 +207,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       sliders_changed = FALSE,
       slider_ranges_set = FALSE,
       trim_boundaries_changed = FALSE,
-      populating_sliders = FALSE
+      populating_sliders = FALSE,
+      committed_boundaries = NULL
     )
     
     # Nadir editing state (keep this as it's still needed)
@@ -623,7 +626,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         "normalize_time" = status$delineated && status$trimmed && !status$normalized,
         "passage_time" = status$delineated && status$trimmed && !status$passage_times,
         "nadir_btn" = !nadir_values$edit_mode || !is.null(nadir_values$selected_point),
-        "cancel_nadir_btn" = nadir_values$edit_mode
+        "cancel_nadir_btn" = nadir_values$edit_mode,
+        "update_plot" = roi_values$sliders_changed
       )
       
       manage_button_states(session, button_states)
@@ -757,6 +761,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           }
         }
       }
+    })
+    
+    observeEvent(input$update_plot, {
+      roi_values$committed_boundaries <- current_roi_boundaries()
+      roi_values$sliders_changed <- FALSE  # Reset the flag since we've "committed" the changes
     })
     
     # Start over button (simplified)
@@ -1230,19 +1239,18 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                         }
                                       }),
                                       roi_boundaries = reactive({
-                                        status <- sensor_status()
-                                        
-                                        # If sliders have been changed, always show slider boundaries (real-time preview)
-                                        if (roi_values$sliders_changed) {
-                                          return(current_roi_boundaries())
+                                        # If we have committed boundaries from button click, use those
+                                        if (!is.null(roi_values$committed_boundaries)) {
+                                          return(roi_values$committed_boundaries)
                                         }
                                         
-                                        # If delineated and trimmed but no slider changes, show actual boundaries
+                                        # Otherwise use existing data boundaries (for initial load)
+                                        status <- sensor_status()
                                         if (status$delineated && status$trimmed) {
                                           return(get_roi_boundaries(sensor_selector$selected_sensor(), output_dir(), TRUE))
                                         }
                                         
-                                        # Otherwise show calculated boundaries from config/sliders
+                                        # Fallback to calculated boundaries for first load
                                         return(current_roi_boundaries())
                                       }),
                                       show_roi_markers = reactive(TRUE),  # Always show ROI markers
