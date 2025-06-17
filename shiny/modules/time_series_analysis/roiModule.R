@@ -368,6 +368,13 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           roi7_sens_outgress = roi7_end - roi6_end
         )
         
+        roi_values$committed_boundaries <- c(
+          min(delineated_data$time_s),  # data_start
+          roi1_start, roi2_start, roi3_start, roi4_start, 
+          roi4_end, roi5_end, roi6_end, roi7_end, 
+          max(delineated_data$time_s)   # data_end
+        )
+        
       }, error = function(e) {
         warning("Error extracting ROI boundaries from delineated data: ", e$message)
       })
@@ -410,6 +417,20 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       roi_values$sliders_changed <- FALSE
       roi_values$baseline_config <- config
+      
+      sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
+      if (!is.null(sensor_data)) {
+        roi_values$committed_boundaries <- c(
+          min(sensor_data$time_s),  # data_start
+          roi1_start, roi2_start, roi3_start, roi4_start,
+          roi4_end,    # roi5_start 
+          roi5_end,    # roi6_start
+          roi6_end,    # roi7_start
+          roi7_end, 
+          max(sensor_data$time_s)   # data_end
+        )
+      }
+      
     }
     
     # ============================= #
@@ -523,9 +544,11 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       return(boundaries)
     })
     
+    current_roi_boundaries_debounced <- debounce(current_roi_boundaries, 2000)
+    
     # Calculate ROI table data from current boundaries
     roi_table_data <- reactive({
-      boundaries <- current_roi_boundaries()
+      boundaries <- current_roi_boundaries_debounced()
       if (is.null(boundaries)) return(NULL)
       
       nadir <- nadir_info()
@@ -1251,7 +1274,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                         }
                                         
                                         # Fallback to calculated boundaries for first load
-                                        return(current_roi_boundaries())
+                                        return(isolate(current_roi_boundaries()))
                                       }),
                                       show_roi_markers = reactive(TRUE),  # Always show ROI markers
                                       title_prefix = "ROI Delineation",
