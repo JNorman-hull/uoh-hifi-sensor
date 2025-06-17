@@ -1,6 +1,3 @@
-# ROI Delineation Module
-# Simplified ROI Delineation Module UI
-
 roiUI <- function(id) {
   ns <- NS(id)
   
@@ -208,8 +205,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       sliders_changed = FALSE,
       slider_ranges_set = FALSE,
       trim_boundaries_changed = FALSE,
-      populating_sliders = FALSE,
-      preview_mode = FALSE
+      populating_sliders = FALSE
     )
     
     # Nadir editing state (keep this as it's still needed)
@@ -357,7 +353,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         })
         
         roi_values$sliders_changed <- FALSE
-       
+        
         roi_values$baseline_config <- list(
           label = "From_existing_delineation",
           roi1_sens_ingress = roi2_start - roi1_start,
@@ -420,13 +416,14 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Track changes in slider inputs (similar to pressure/acceleration modules)
     observeEvent(list(input$roi1_start, input$roi2_start, input$roi3_start, 
                       input$roi5_end, input$roi6_end, input$roi7_end, input$roi4_duration), {
+                        cat("populating_sliders:", roi_values$populating_sliders, "\n")
                         
                         if (roi_values$populating_sliders) {
-                          roi_values$populating_sliders <- FALSE
+                          roi_values$populating_sliders <- FALSE  # Reset flag here
                           return()
                         }
                         
-                        # Only track changes for preview - NO global updates here
+                        # Only track changes after initial population and when NOT populating
                         if (!roi_values$slider_ranges_set || 
                             is.null(roi_values$baseline_config) || 
                             roi_values$populating_sliders) return()
@@ -436,7 +433,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                         
                         if (!nadir$available) return()
                         
-                        # Calculate expected values (same logic as before)
+                        # Calculate expected values from baseline config
                         nadir_time <- nadir$time
                         roi4_start <- nadir_time - (config$roi4_nadir / 2)
                         roi4_end <- nadir_time + (config$roi4_nadir / 2)
@@ -448,10 +445,18 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                         expected_roi6_end <- expected_roi5_end + config$roi6_outflow_passage
                         expected_roi7_end <- expected_roi6_end + config$roi7_sens_outgress
                         
+                        # ADD DEBUG OUTPUT HERE
+                        cat("=== CHANGE DETECTION DEBUG ===\n")
+                        cat("Expected roi1_start:", expected_roi1_start, "Actual:", input$roi1_start, "Diff:", abs(input$roi1_start - expected_roi1_start), "\n")
+                        cat("Expected roi7_end:", expected_roi7_end, "Actual:", input$roi7_end, "Diff:", abs(input$roi7_end - expected_roi7_end), "\n")
+                        
                         roi_values$trim_boundaries_changed <- (
                           abs(input$roi1_start - expected_roi1_start) > 0.05 ||
                             abs(input$roi7_end - expected_roi7_end) > 0.05
                         )
+                        
+                        cat("trim_boundaries_changed:", roi_values$trim_boundaries_changed, "\n")
+                        cat("===============================\n")
                         
                         # Check if any slider values differ from expected
                         sliders_changed <- (
@@ -465,7 +470,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                         )
                         
                         roi_values$sliders_changed <- sliders_changed
-                        # NOTE: Removed global update triggers here
                       }, ignoreInit = TRUE)
     
     # ============================= #
@@ -514,42 +518,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                       roi4_start, roi5_start, roi6_start, roi7_start, roi7_end, data_end)
       
       return(boundaries)
-    })
-    
-    observe({
-      # Only update when sliders change and we have valid data
-      if (!roi_values$sliders_changed) return()
-      
-      sensor_data <- selected_sensor_data()
-      nadir <- nadir_info()
-      if (is.null(sensor_data) || !nadir$available) return()
-      
-      # Calculate preview boundaries from current slider positions
-      boundaries <- isolate(current_roi_boundaries())
-      if (is.null(boundaries)) return()
-      
-      # Create proxy to update existing plot
-      proxy <- plotlyProxy("roi_plot-plot", session)
-      
-      # Remove existing preview traces
-      proxy %>% plotlyProxyInvoke("deleteTraces", as.list(10:17))
-      
-      # Add new preview traces (orange dashed lines)
-      for (i in 2:9) {
-        trace_data <- list(
-          x = c(boundaries[i], boundaries[i]),
-          y = c(min(sensor_data$pressure_kpa, na.rm = TRUE), 
-                max(sensor_data$pressure_kpa, na.rm = TRUE)),
-          type = "scattergl",
-          mode = "lines",
-          line = list(color = "orange", width = 2, dash = "dash"),
-          name = paste("Preview ROI", i-1),
-          showlegend = FALSE,
-          hoverinfo = "skip"
-        )
-        
-        proxy %>% plotlyProxyInvoke("addTraces", trace_data)
-      }
     })
     
     # Calculate ROI table data from current boundaries
@@ -1264,43 +1232,20 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                       roi_boundaries = reactive({
                                         status <- sensor_status()
                                         
-                                        # NEVER use current slider values for main boundaries
-                                        # Only show committed boundaries (green solid lines)
+                                        # If sliders have been changed, always show slider boundaries (real-time preview)
+                                        if (roi_values$sliders_changed) {
+                                          return(current_roi_boundaries())
+                                        }
+                                        
+                                        # If delineated and trimmed but no slider changes, show actual boundaries
                                         if (status$delineated && status$trimmed) {
                                           return(get_roi_boundaries(sensor_selector$selected_sensor(), output_dir(), TRUE))
                                         }
                                         
-                                        # For non-delineated, use baseline config boundaries (not current sliders)
-                                        if (!is.null(roi_values$baseline_config)) {
-                                          nadir <- nadir_info()
-                                          if (nadir$available) {
-                                            config <- roi_values$baseline_config
-                                            nadir_time <- nadir$time
-                                            
-                                            roi4_start <- nadir_time - (config$roi4_nadir / 2)
-                                            roi4_end <- nadir_time + (config$roi4_nadir / 2)
-                                            
-                                            roi1_start <- roi4_start - config$roi3_prenadir - config$roi2_inflow_passage - config$roi1_sens_ingress
-                                            roi2_start <- roi4_start - config$roi3_prenadir - config$roi2_inflow_passage
-                                            roi3_start <- roi4_start - config$roi3_prenadir
-                                            roi5_end <- roi4_end + config$roi5_postnadir
-                                            roi6_end <- roi5_end + config$roi6_outflow_passage
-                                            roi7_end <- roi6_end + config$roi7_sens_outgress
-                                            
-                                            sensor_data <- selected_sensor_data()
-                                            if (!is.null(sensor_data)) {
-                                              data_start <- min(sensor_data$time_s)
-                                              data_end <- max(sensor_data$time_s)
-                                              
-                                              return(c(data_start, roi1_start, roi2_start, roi3_start,
-                                                       roi4_start, roi4_end, roi5_end, roi6_end, roi7_end, data_end))
-                                            }
-                                          }
-                                        }
-                                        
-                                        return(NULL)
+                                        # Otherwise show calculated boundaries from config/sliders
+                                        return(current_roi_boundaries())
                                       }),
-                                      show_roi_markers = reactive(TRUE),
+                                      show_roi_markers = reactive(TRUE),  # Always show ROI markers
                                       title_prefix = "ROI Delineation",
                                       plot_source = "roi_nadir_plot"
     )
