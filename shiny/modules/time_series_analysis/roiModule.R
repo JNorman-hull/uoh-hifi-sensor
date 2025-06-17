@@ -205,9 +205,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       sliders_changed = FALSE,
       slider_ranges_set = FALSE,
       trim_boundaries_changed = FALSE,
-      populating_sliders = FALSE,
-      preview_boundaries = NULL,    
-      preview_trace_names = character(0)
+      populating_sliders = FALSE
     )
     
     # Nadir editing state (keep this as it's still needed)
@@ -415,83 +413,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # /// Change Detection \\\ ####  
     # ============================= #
     
-    # Observer for slider changes - visual preview only (NO data processing)
-    observe({
-      req(sensor_selector$selected_sensor())
-      
-      # Only trigger when sliders actually changed and not during population
-      if (!roi_values$sliders_changed || roi_values$populating_sliders) return()
-      
-      boundaries <- preview_roi_boundaries()
-      if (is.null(boundaries)) return()
-      
-      # Get sensor data for y-axis limits
-      sensor_data <- selected_sensor_data()
-      if (is.null(sensor_data)) return()
-      
-      min_y <- min(sensor_data$pressure_kpa, na.rm = TRUE)
-      max_y <- max(sensor_data$pressure_kpa, na.rm = TRUE)
-      
-      proxy <- plotlyProxy("roi_plot-plot", session)
-      
-      # If preview traces don't exist yet, add them (hidden initially)
-      if (length(roi_values$preview_trace_names) == 0) {
-        roi_labels <- c("", "ROI 1", "ROI 2", "ROI 3", "ROI 4", "ROI 5", "ROI 6", "ROI 7", "")
-        
-        for (i in 2:9) {
-          trace_name <- paste0("preview_roi_", i)
-          roi_values$preview_trace_names <- c(roi_values$preview_trace_names, trace_name)
-          
-          trace_data <- list(
-            x = c(boundaries[i], boundaries[i]),
-            y = c(min_y, max_y),
-            mode = "lines",
-            line = list(color = "orange", width = 2, dash = "dash"),
-            showlegend = FALSE,
-            hoverinfo = "text",
-            text = paste("Preview:", roi_labels[i]),
-            name = trace_name,
-            visible = TRUE  # Show immediately when sliders change
-          )
-          proxy %>% plotlyProxyInvoke("addTraces", list(trace_data))
-        }
-      } else {
-        # Update existing preview traces with new positions
-        for (i in 1:length(roi_values$preview_trace_names)) {
-          boundary_index <- i + 1  # Adjust for boundaries array
-          
-          # Update trace data using restyle
-          proxy %>% plotlyProxyInvoke("restyle", 
-                                      list(
-                                        x = list(c(boundaries[boundary_index], boundaries[boundary_index])),
-                                        y = list(c(min_y, max_y)),
-                                        visible = TRUE
-                                      ), 
-                                      list(length(roi_values$preview_trace_names) - 1 + i - 1)  # Calculate actual trace index
-          )
-        }
-      }
-    })
-    
-    # Observer to hide preview traces when sliders reset
-    observe({
-      req(sensor_selector$selected_sensor())
-      
-      # Hide preview traces when sliders_changed becomes FALSE
-      if (!roi_values$sliders_changed && length(roi_values$preview_trace_names) > 0) {
-        proxy <- plotlyProxy("roi_plot-plot", session)
-        
-        # Hide all preview traces (don't delete, just hide)
-        for (i in 1:length(roi_values$preview_trace_names)) {
-          proxy %>% plotlyProxyInvoke("restyle", 
-                                      list(visible = FALSE), 
-                                      list(i - 1)  # Adjust for plotly's 0-based indexing
-          )
-        }
-      }
-    })
-    
-    
     # Track changes in slider inputs (similar to pressure/acceleration modules)
     observeEvent(list(input$roi1_start, input$roi2_start, input$roi3_start, 
                       input$roi5_end, input$roi6_end, input$roi7_end, input$roi4_duration), {
@@ -555,21 +476,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # /// ROI Boundary Calculation \\\ ####  
     # ============================= #
     
-    # Committed boundaries (only for plot module - green solid lines)
-    committed_roi_boundaries <- reactive({
-      status <- sensor_status()
-      
-      # Only show committed boundaries from actual delineated data
-      if (status$delineated && status$trimmed) {
-        return(get_roi_boundaries(sensor_selector$selected_sensor(), output_dir(), TRUE))
-      }
-      
-      # For non-delineated sensors, return NULL (no committed boundaries yet)
-      return(NULL)
-    })
-    
-    # Preview boundaries (for table display and plotlyProxy - orange dashed lines)
-    preview_roi_boundaries <- reactive({
+    # Calculate current ROI boundaries from slider values
+    current_roi_boundaries <- reactive({
       req(input$roi1_start, input$roi2_start, input$roi3_start, 
           input$roi5_end, input$roi6_end, input$roi7_end, input$roi4_duration)
       
@@ -584,7 +492,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       data_end <- max(sensor_data$time_s)
       nadir_time <- nadir$time
       
-      # Calculate all ROI boundaries from current slider positions
+      # Calculate all ROI boundaries
       roi1_start <- input$roi1_start
       roi2_start <- input$roi2_start  
       roi3_start <- input$roi3_start
@@ -593,48 +501,49 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       roi4_start <- nadir_time - (input$roi4_duration / 2)
       roi4_end <- nadir_time + (input$roi4_duration / 2)
       
-      # ROI 5-7 from slider values
+      # ROI 5 starts where ROI 4 ends, ends at slider value
       roi5_start <- roi4_end
       roi5_end <- input$roi5_end
+      
+      # ROI 6 starts where ROI 5 ends, ends at slider value  
       roi6_start <- roi5_end
       roi6_end <- input$roi6_end
+      
+      # ROI 7 starts where ROI 6 ends, ends at slider value
       roi7_start <- roi6_end
       roi7_end <- input$roi7_end
       
-      # Return boundaries array (10 elements for plot compatibility)
+      # Return boundaries array for plotting (10 elements as expected by plot module)
       boundaries <- c(data_start, roi1_start, roi2_start, roi3_start,
                       roi4_start, roi5_start, roi6_start, roi7_start, roi7_end, data_end)
-      
-      # Store in reactive values for tracking
-      roi_values$preview_boundaries <- boundaries
       
       return(boundaries)
     })
     
     # Calculate ROI table data from current boundaries
     roi_table_data <- reactive({
-      boundaries <- preview_roi_boundaries()  # CHANGED: use preview instead of current
+      boundaries <- current_roi_boundaries()
       if (is.null(boundaries)) return(NULL)
       
       nadir <- nadir_info()
       if (!nadir$available) return(NULL)
       
-      # Extract individual boundaries (same logic as before)
+      # Extract individual boundaries
       data_start <- boundaries[1]
       roi1_start <- boundaries[2]
       roi2_start <- boundaries[3]
       roi3_start <- boundaries[4]
       roi4_start <- boundaries[5]
-      roi5_start <- boundaries[6]
-      roi6_start <- boundaries[7]
-      roi7_start <- boundaries[8]
+      roi5_start <- boundaries[6]  # This is roi4_end
+      roi6_start <- boundaries[7]  # This is roi5_end  
+      roi7_start <- boundaries[8]  # This is roi6_end
       roi7_end <- boundaries[9]
       data_end <- boundaries[10]
       
       # Calculate ROI 4 end from nadir and duration
       roi4_end <- nadir$time + (input$roi4_duration / 2)
       
-      # Create ROI table (same logic as before)
+      # Create ROI table
       roi_times_df <- data.frame(
         ROI = c("Sensor start trim", "ROI 1: Sensor ingress", "ROI 2: Inflow passage", 
                 "ROI 3: Pre-nadir", "ROI 4: Nadir", "ROI 5: Post-nadir", 
@@ -1013,24 +922,17 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Apply delineated dataset (simplified)
     apply_delineated_dataset <- function() {
       tryCatch({
-        boundaries <- preview_roi_boundaries()  # CHANGED: use preview boundaries
+        boundaries <- current_roi_boundaries()
         status <- sensor_status()
         nadir <- nadir_info()
+        
+        cat("trim_boundaries_changed:", roi_values$trim_boundaries_changed, "\n")
+        cat("status$trimmed:", status$trimmed, "\n")
+        cat("Will reset to original?", (roi_values$trim_boundaries_changed || !status$trimmed), "\n")
         
         if (is.null(boundaries)) {
           showNotification("ROI boundaries not available", type = "error")
           return()
-        }
-        
-        # Hide preview traces before processing (safer than deletion)
-        if (length(roi_values$preview_trace_names) > 0) {
-          proxy <- plotlyProxy("roi_plot-plot", session)
-          for (i in 1:length(roi_values$preview_trace_names)) {
-            proxy %>% plotlyProxyInvoke("restyle", 
-                                        list(visible = FALSE), 
-                                        list(i - 1)
-            )
-          }
         }
         
         # Simple logic: if trim boundaries changed OR not yet trimmed, reset to original
@@ -1120,11 +1022,10 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         updates <- c(list(delineated = "Y", roi_config = config_name), reset_flags)
         success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), updates)
         
-        roi_values$sliders_changed <- FALSE
-        
         if (success) {
           trigger_data_update()
           trigger_summary_update()
+          roi_values$sliders_changed <- FALSE
           showNotification("ROI boundaries updated successfully!", type = "message")
         }
         
@@ -1328,8 +1229,23 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                           NULL
                                         }
                                       }),
-                                      roi_boundaries = committed_roi_boundaries,  # CHANGED: only committed boundaries
-                                      show_roi_markers = reactive(TRUE),
+                                      roi_boundaries = reactive({
+                                        status <- sensor_status()
+                                        
+                                        # If sliders have been changed, always show slider boundaries (real-time preview)
+                                        if (roi_values$sliders_changed) {
+                                          return(current_roi_boundaries())
+                                        }
+                                        
+                                        # If delineated and trimmed but no slider changes, show actual boundaries
+                                        if (status$delineated && status$trimmed) {
+                                          return(get_roi_boundaries(sensor_selector$selected_sensor(), output_dir(), TRUE))
+                                        }
+                                        
+                                        # Otherwise show calculated boundaries from config/sliders
+                                        return(current_roi_boundaries())
+                                      }),
+                                      show_roi_markers = reactive(TRUE),  # Always show ROI markers
                                       title_prefix = "ROI Delineation",
                                       plot_source = "roi_nadir_plot"
     )
