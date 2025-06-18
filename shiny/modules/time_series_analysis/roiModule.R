@@ -1112,6 +1112,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                           "roi4_nadir",
                                           "roi5_postnadir",
                                           "roi6_outflow_passage",
+                                          "roi7_sens_outgress",
                                           if(should_trim) "trim_end" else "roi7_sens_outgress"),
                                include.lowest = TRUE, right = FALSE)
         
