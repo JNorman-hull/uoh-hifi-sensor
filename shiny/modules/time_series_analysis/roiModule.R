@@ -1173,56 +1173,39 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     save_roi_configuration <- function() {
       config_name <- trimws(input$config_label)
       nadir <- nadir_info()
-      
-      if (!nadir$available) {
-        showNotification("Nadir information not available", type = "error")
-        return()
-      }
-      
-      # Convert current slider values back to durations
+      # Convert current slider values to durations
       nadir_time <- nadir$time
       roi4_start <- nadir_time - (input$roi4_duration / 2)
       roi4_end <- nadir_time + (input$roi4_duration / 2)
       
-      roi1_duration <- input$roi2_start - input$roi1_start
-      roi2_duration <- input$roi3_start - input$roi2_start
-      roi3_duration <- roi4_start - input$roi3_start
-      roi4_duration <- input$roi4_duration
-      roi5_duration <- input$roi5_end - roi4_end
-      roi6_duration <- input$roi6_end - input$roi5_end
-      roi7_duration <- input$roi7_end - input$roi6_end
+      config_values <- list(
+        roi1_sens_ingress = input$roi2_start - input$roi1_start,
+        roi2_inflow_passage = input$roi3_start - input$roi2_start,
+        roi3_prenadir = roi4_start - input$roi3_start,
+        roi4_nadir = input$roi4_duration,
+        roi5_postnadir = input$roi5_end - roi4_end,
+        roi6_outflow_passage = input$roi6_end - input$roi5_end,
+        roi7_sens_outgress = input$roi7_end - input$roi6_end
+      )
       
       # Save configuration
       success <- save_config_value(
         output_dir = output_dir(),
         config_type = "roi",
         key = config_name,
-        value = c(roi1_duration, roi2_duration, roi3_duration, roi4_duration, 
-                  roi5_duration, roi6_duration, roi7_duration)
+        value = config_values
       )
       
       if (success) {
-        roi_config$reload_configs()
-        trigger_summary_update()
+        # Update state without triggering re-renders
+        isolate({
+          roi_config$reload_configs()
+          roi_values$sliders_changed <- FALSE
+          roi_values$baseline_config <- c(list(label = config_name), config_values)
+          updateTextInput(session, "config_label", value = "")
+        })
         
-        # Reset change tracking and update baseline to current values
-        roi_values$sliders_changed <- FALSE
-        roi_values$baseline_config <- list(
-          label = config_name,
-          roi1_sens_ingress = roi1_duration,
-          roi2_inflow_passage = roi2_duration,
-          roi3_prenadir = roi3_duration,
-          roi4_nadir = roi4_duration,
-          roi5_postnadir = roi5_duration,
-          roi6_outflow_passage = roi6_duration,
-          roi7_sens_outgress = roi7_duration
-        )
-        updateTextInput(session, "config_label", value = "")
-        
-        # Apply the saved configuration to the current sensor
-        apply_delineated_dataset()
-        
-        showNotification("ROI configuration saved and applied successfully!", type = "message")
+        showNotification("ROI configuration saved successfully!", type = "message")
       } else {
         showNotification("Failed to save ROI configuration", type = "error")
       }
