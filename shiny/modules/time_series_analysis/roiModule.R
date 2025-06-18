@@ -95,19 +95,22 @@ roiSidebarUI <- function(id) {
         # ROI 1 Start
         div(style = "margin-bottom: 15px;",
             tags$label("ROI 1 Start:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-            sliderInput(ns("roi1_start"), NULL, min = 0, max = 100, value = 20, step = 0.1, width = "100%")
+            sliderInput(ns("roi1_start"), NULL, min = 0, max = 100, value = 20, step = 0.1, width = "100%"),
+            numericInput(ns("roi1_start_input"), NULL, value = 20, step = 0.1, width = "100%")
         ),
         
         # ROI 2 Start  
         div(style = "margin-bottom: 15px;",
             tags$label("ROI 2 Start:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-            sliderInput(ns("roi2_start"), NULL, min = 0, max = 100, value = 25, step = 0.1, width = "100%")
+            sliderInput(ns("roi2_start"), NULL, min = 0, max = 100, value = 25, step = 0.1, width = "100%"),
+            numericInput(ns("roi2_start_input"), NULL, value = 20, step = 0.1, width = "100%")
         ),
         
         # ROI 3 Start
         div(style = "margin-bottom: 15px;",
             tags$label("ROI 3 Start:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-            sliderInput(ns("roi3_start"), NULL, min = 0, max = 100, value = 28, step = 0.1, width = "100%")
+            sliderInput(ns("roi3_start"), NULL, min = 0, max = 100, value = 28, step = 0.1, width = "100%"),
+            numericInput(ns("roi3_start_input"), NULL, value = 25, step = 0.1, width = "100%")
         ),
         
         # ROI 4 Duration (centered on nadir)
@@ -119,19 +122,22 @@ roiSidebarUI <- function(id) {
         # ROI 5 End
         div(style = "margin-bottom: 15px;",
             tags$label("ROI 5 End:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-            sliderInput(ns("roi5_end"), NULL, min = 0, max = 100, value = 32, step = 0.1, width = "100%")
+            sliderInput(ns("roi5_end"), NULL, min = 0, max = 100, value = 32, step = 0.1, width = "100%"),
+            numericInput(ns("roi5_end_input"), NULL, value = 32, step = 0.1, width = "100%")
         ),
         
         # ROI 6 End
         div(style = "margin-bottom: 15px;",
             tags$label("ROI 6 End:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-            sliderInput(ns("roi6_end"), NULL, min = 0, max = 100, value = 35, step = 0.1, width = "100%")
+            sliderInput(ns("roi6_end"), NULL, min = 0, max = 100, value = 35, step = 0.1, width = "100%"),
+            numericInput(ns("roi6_end_input"), NULL, value = 35, step = 0.1, width = "100%")
         ),
         
         # ROI 7 End
         div(style = "margin-bottom: 15px;",
             tags$label("ROI 7 End:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-            sliderInput(ns("roi7_end"), NULL, min = 0, max = 100, value = 40, step = 0.1, width = "100%")
+            sliderInput(ns("roi7_end"), NULL, min = 0, max = 100, value = 40, step = 0.1, width = "100%"),
+            numericInput(ns("roi7_end_input"), NULL, value = 40, step = 0.1, width = "100%")
         ),
         
         actionButton(ns("update_plot"), "Update Plot", class = "btn-info btn-block"),
@@ -293,11 +299,17 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       # Update all slider ranges
       updateSliderInput(session, "roi1_start", min = time_range[1], max = time_range[2])
+      updateNumericInput(session, "roi1_start_input", min = time_range[1], max = time_range[2])
       updateSliderInput(session, "roi2_start", min = time_range[1], max = time_range[2])
+      updateNumericInput(session, "roi2_start_input", min = time_range[1], max = time_range[2])
       updateSliderInput(session, "roi3_start", min = time_range[1], max = time_range[2])
+      updateNumericInput(session, "roi3_start_input", min = time_range[1], max = time_range[2])
       updateSliderInput(session, "roi5_end", min = time_range[1], max = time_range[2])
+      updateNumericInput(session, "roi5_end_input", min = time_range[1], max = time_range[2])
       updateSliderInput(session, "roi6_end", min = time_range[1], max = time_range[2])
+      updateNumericInput(session, "roi6_end_input", min = time_range[1], max = time_range[2])
       updateSliderInput(session, "roi7_end", min = time_range[1], max = time_range[2])
+      updateNumericInput(session, "roi7_end_input", min = time_range[1], max = time_range[2])
       
       roi_values$slider_ranges_set <- TRUE
     })
@@ -347,11 +359,17 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         # Update sliders without triggering change detection
         isolate({
           updateSliderInput(session, "roi1_start", value = roi1_start)
+          updateNumericInput(session, "roi1_start_input", value = roi1_start)
           updateSliderInput(session, "roi2_start", value = roi2_start)
+          updateNumericInput(session, "roi2_start_input", value = roi2_start)
           updateSliderInput(session, "roi3_start", value = roi3_start)
+          updateNumericInput(session, "roi3_start_input", value = roi3_start)
           updateSliderInput(session, "roi5_end", value = roi5_end)
+          updateNumericInput(session, "roi5_end_input", value = roi5_end)
           updateSliderInput(session, "roi6_end", value = roi6_end)
+          updateNumericInput(session, "roi6_end_input", value = roi6_end)
           updateSliderInput(session, "roi7_end", value = roi7_end)
+          updateNumericInput(session, "roi7_end_input", value = roi7_end)
           updateNumericInput(session, "roi4_duration", value = roi4_duration)
         })
         
@@ -407,11 +425,17 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       # Update sliders without triggering change detection
       isolate({
         updateSliderInput(session, "roi1_start", value = roi1_start)
+        updateNumericInput(session, "roi1_start_input", value = roi1_start)
         updateSliderInput(session, "roi2_start", value = roi2_start)
+        updateNumericInput(session, "roi2_start_input", value = roi2_start)
         updateSliderInput(session, "roi3_start", value = roi3_start)
+        updateNumericInput(session, "roi3_start_input", value = roi3_start)
         updateSliderInput(session, "roi5_end", value = roi5_end)
+        updateNumericInput(session, "roi5_end_input", value = roi5_end)
         updateSliderInput(session, "roi6_end", value = roi6_end)
+        updateNumericInput(session, "roi6_end_input", value = roi6_end)
         updateSliderInput(session, "roi7_end", value = roi7_end)
+        updateNumericInput(session, "roi7_end_input", value = roi7_end)
         updateNumericInput(session, "roi4_duration", value = config$roi4_nadir)
       })
       
@@ -437,9 +461,96 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # /// Change Detection \\\ ####  
     # ============================= #
     
+    # ============================= #
+    # /// Bidirectional slider-input synchronization \\\ ####  
+    # ============================= #
+    
+    # ROI 1 Start
+    observeEvent(input$roi1_start, {
+      if (!roi_values$populating_sliders) {
+        updateNumericInput(session, "roi1_start_input", value = input$roi1_start)
+      }
+    }, ignoreInit = TRUE)
+    
+    observeEvent(input$roi1_start_input, {
+      if (!roi_values$populating_sliders && !is.na(input$roi1_start_input)) {
+        updateSliderInput(session, "roi1_start", value = input$roi1_start_input)
+      }
+    }, ignoreInit = TRUE)
+    
+    # ROI 2 Start
+    observeEvent(input$roi2_start, {
+      if (!roi_values$populating_sliders) {
+        updateNumericInput(session, "roi2_start_input", value = input$roi2_start)
+      }
+    }, ignoreInit = TRUE)
+    
+    observeEvent(input$roi2_start_input, {
+      if (!roi_values$populating_sliders && !is.na(input$roi2_start_input)) {
+        updateSliderInput(session, "roi2_start", value = input$roi2_start_input)
+      }
+    }, ignoreInit = TRUE)
+    
+    # ROI 3 Start
+    observeEvent(input$roi3_start, {
+      if (!roi_values$populating_sliders) {
+        updateNumericInput(session, "roi3_start_input", value = input$roi3_start)
+      }
+    }, ignoreInit = TRUE)
+    
+    observeEvent(input$roi3_start_input, {
+      if (!roi_values$populating_sliders && !is.na(input$roi3_start_input)) {
+        updateSliderInput(session, "roi3_start", value = input$roi3_start_input)
+      }
+    }, ignoreInit = TRUE)
+    
+    # ROI 5 End
+    observeEvent(input$roi5_end, {
+      if (!roi_values$populating_sliders) {
+        updateNumericInput(session, "roi5_end_input", value = input$roi5_end)
+      }
+    }, ignoreInit = TRUE)
+    
+    observeEvent(input$roi5_end_input, {
+      if (!roi_values$populating_sliders && !is.na(input$roi5_end_input)) {
+        updateSliderInput(session, "roi5_end", value = input$roi5_end_input)
+      }
+    }, ignoreInit = TRUE)
+    
+    # ROI 6 End
+    observeEvent(input$roi6_end, {
+      if (!roi_values$populating_sliders) {
+        updateNumericInput(session, "roi6_end_input", value = input$roi6_end)
+      }
+    }, ignoreInit = TRUE)
+    
+    observeEvent(input$roi6_end_input, {
+      if (!roi_values$populating_sliders && !is.na(input$roi6_end_input)) {
+        updateSliderInput(session, "roi6_end", value = input$roi6_end_input)
+      }
+    }, ignoreInit = TRUE)
+    
+    # ROI 7 End
+    observeEvent(input$roi7_end, {
+      if (!roi_values$populating_sliders) {
+        updateNumericInput(session, "roi7_end_input", value = input$roi7_end)
+      }
+    }, ignoreInit = TRUE)
+    
+    observeEvent(input$roi7_end_input, {
+      if (!roi_values$populating_sliders && !is.na(input$roi7_end_input)) {
+        updateSliderInput(session, "roi7_end", value = input$roi7_end_input)
+      }
+    }, ignoreInit = TRUE)
+    
     # Track changes in slider inputs (similar to pressure/acceleration modules)
-    observeEvent(list(input$roi1_start, input$roi2_start, input$roi3_start, 
-                      input$roi5_end, input$roi6_end, input$roi7_end, input$roi4_duration), {
+    observeEvent(list(input$roi1_start, input$roi1_start_input, 
+                      input$roi2_start, input$roi2_start_input,
+                      input$roi3_start, input$roi3_start_input,
+                      input$roi5_end, input$roi5_end_input,
+                      input$roi6_end, input$roi6_end_input,
+                      input$roi7_end, input$roi7_end_input, 
+                      input$roi4_duration), {
                         cat("populating_sliders:", roi_values$populating_sliders, "\n")
                         
                         if (roi_values$populating_sliders) {
