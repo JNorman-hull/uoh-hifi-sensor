@@ -212,6 +212,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       slider_ranges_set = FALSE,
       trim_boundaries_changed = FALSE,
       populating_sliders = FALSE,
+      syncing_inputs = FALSE, 
       committed_boundaries = NULL
     )
     
@@ -466,78 +467,102 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # ROI 1 Start
     observeEvent(input$roi1_start, {
       if (!roi_values$populating_sliders) {
+        roi_values$syncing_inputs <- TRUE
         updateNumericInput(session, "roi1_start_input", value = input$roi1_start)
+        roi_values$syncing_inputs <- FALSE
       }
     }, ignoreInit = TRUE)
     
     observeEvent(input$roi1_start_input, {
       if (!roi_values$populating_sliders && !is.na(input$roi1_start_input)) {
+        roi_values$syncing_inputs <- TRUE
         updateSliderInput(session, "roi1_start", value = input$roi1_start_input)
+        roi_values$syncing_inputs <- FALSE
       }
     }, ignoreInit = TRUE)
     
     # ROI 2 Start
     observeEvent(input$roi2_start, {
       if (!roi_values$populating_sliders) {
+        roi_values$syncing_inputs <- TRUE
         updateNumericInput(session, "roi2_start_input", value = input$roi2_start)
+        roi_values$syncing_inputs <- FALSE
       }
     }, ignoreInit = TRUE)
     
     observeEvent(input$roi2_start_input, {
       if (!roi_values$populating_sliders && !is.na(input$roi2_start_input)) {
+        roi_values$syncing_inputs <- TRUE
         updateSliderInput(session, "roi2_start", value = input$roi2_start_input)
+        roi_values$syncing_inputs <- FALSE
       }
     }, ignoreInit = TRUE)
     
     # ROI 3 Start
     observeEvent(input$roi3_start, {
       if (!roi_values$populating_sliders) {
+        roi_values$syncing_inputs <- TRUE
         updateNumericInput(session, "roi3_start_input", value = input$roi3_start)
+        roi_values$syncing_inputs <- FALSE
       }
     }, ignoreInit = TRUE)
     
     observeEvent(input$roi3_start_input, {
       if (!roi_values$populating_sliders && !is.na(input$roi3_start_input)) {
+        roi_values$syncing_inputs <- TRUE
         updateSliderInput(session, "roi3_start", value = input$roi3_start_input)
+        roi_values$syncing_inputs <- FALSE
       }
     }, ignoreInit = TRUE)
     
     # ROI 5 End
     observeEvent(input$roi5_end, {
       if (!roi_values$populating_sliders) {
+        roi_values$syncing_inputs <- TRUE
         updateNumericInput(session, "roi5_end_input", value = input$roi5_end)
+        roi_values$syncing_inputs <- FALSE
       }
     }, ignoreInit = TRUE)
     
     observeEvent(input$roi5_end_input, {
       if (!roi_values$populating_sliders && !is.na(input$roi5_end_input)) {
+        roi_values$syncing_inputs <- TRUE
         updateSliderInput(session, "roi5_end", value = input$roi5_end_input)
+        roi_values$syncing_inputs <- FALSE
       }
     }, ignoreInit = TRUE)
     
     # ROI 6 End
     observeEvent(input$roi6_end, {
       if (!roi_values$populating_sliders) {
+        roi_values$syncing_inputs <- TRUE
         updateNumericInput(session, "roi6_end_input", value = input$roi6_end)
+        roi_values$syncing_inputs <- FALSE
       }
     }, ignoreInit = TRUE)
     
     observeEvent(input$roi6_end_input, {
       if (!roi_values$populating_sliders && !is.na(input$roi6_end_input)) {
+        roi_values$syncing_inputs <- TRUE
         updateSliderInput(session, "roi6_end", value = input$roi6_end_input)
+        roi_values$syncing_inputs <- FALSE
       }
     }, ignoreInit = TRUE)
     
     # ROI 7 End
     observeEvent(input$roi7_end, {
       if (!roi_values$populating_sliders) {
+        roi_values$syncing_inputs <- TRUE
         updateNumericInput(session, "roi7_end_input", value = input$roi7_end)
+        roi_values$syncing_inputs <- FALSE
       }
     }, ignoreInit = TRUE)
     
     observeEvent(input$roi7_end_input, {
       if (!roi_values$populating_sliders && !is.na(input$roi7_end_input)) {
+        roi_values$syncing_inputs <- TRUE
         updateSliderInput(session, "roi7_end", value = input$roi7_end_input)
+        roi_values$syncing_inputs <- FALSE
       }
     }, ignoreInit = TRUE)
     
@@ -550,6 +575,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                       input$roi7_end, input$roi7_end_input, 
                       input$roi4_duration), {
                         cat("populating_sliders:", roi_values$populating_sliders, "\n")
+                        
+                        if (roi_values$syncing_inputs) return()
                         
                         if (roi_values$populating_sliders) {
                           roi_values$populating_sliders <- FALSE  # Reset flag here
