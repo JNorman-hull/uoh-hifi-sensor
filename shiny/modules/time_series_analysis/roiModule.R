@@ -212,7 +212,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       slider_ranges_set = FALSE,
       trim_boundaries_changed = FALSE,
       populating_sliders = FALSE,
-      # syncing_inputs = FALSE, 
+      last_update_time = Sys.time(),
+      update_cooldown = 0.5, # seconds
       committed_boundaries = NULL
     )
     
@@ -399,6 +400,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Populate sliders from configuration
     populate_sliders_from_config <- function() {
+      req(sensor_time_range())
+      time_range <- sensor_time_range()
       roi_values$populating_sliders <- TRUE
       
       config <- roi_values$current_config
@@ -412,20 +415,34 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       nadir_time <- nadir$time
       roi4_duration <- config$roi4_nadir
       
-      roi1_start <- nadir_time - (roi4_duration/2) - config$roi3_prenadir - config$roi2_inflow_passage - config$roi1_sens_ingress
-      roi2_start <- nadir_time - (roi4_duration/2) - config$roi3_prenadir - config$roi2_inflow_passage
-      roi3_start <- nadir_time - (roi4_duration/2) - config$roi3_prenadir
-      roi5_end <- nadir_time + (roi4_duration/2) + config$roi5_postnadir
-      roi6_end <- roi5_end + config$roi6_outflow_passage
-      roi7_end <- roi6_end + config$roi7_sens_outgress
+      boundaries <- list(
+        roi1_start = nadir_time - (roi4_duration/2) - config$roi3_prenadir - 
+          config$roi2_inflow_passage - config$roi1_sens_ingress,
+        roi2_start = nadir_time - (roi4_duration/2) - config$roi3_prenadir - 
+          config$roi2_inflow_passage,
+        roi3_start = nadir_time - (roi4_duration/2) - config$roi3_prenadir,
+        roi5_end = nadir_time + (roi4_duration/2) + config$roi5_postnadir,
+        roi6_end = nadir_time + (roi4_duration/2) + config$roi5_postnadir + 
+          config$roi6_outflow_passage,
+        roi7_end = nadir_time + (roi4_duration/2) + config$roi5_postnadir + 
+          config$roi6_outflow_passage + config$roi7_sens_outgress
+      )
       
-      # Update all inputs using the helper
-      safe_update_pair(session, "roi1_start", "roi1_start_input", roi1_start)
-      safe_update_pair(session, "roi2_start", "roi2_start_input", roi2_start)
-      safe_update_pair(session, "roi3_start", "roi3_start_input", roi3_start)
-      safe_update_pair(session, "roi5_end", "roi5_end_input", roi5_end)
-      safe_update_pair(session, "roi6_end", "roi6_end_input", roi6_end)
-      safe_update_pair(session, "roi7_end", "roi7_end_input", roi7_end)
+      # Apply all updates using safe_update_pair
+      safe_update_pair(session, "roi1_start", "roi1_start_input", 
+                       boundaries$roi1_start, time_range)
+      safe_update_pair(session, "roi2_start", "roi2_start_input", 
+                       boundaries$roi2_start, time_range)
+      safe_update_pair(session, "roi3_start", "roi3_start_input", 
+                       boundaries$roi3_start, time_range)
+      safe_update_pair(session, "roi5_end", "roi5_end_input", 
+                       boundaries$roi5_end, time_range)
+      safe_update_pair(session, "roi6_end", "roi6_end_input", 
+                       boundaries$roi6_end, time_range)
+      safe_update_pair(session, "roi7_end", "roi7_end_input", 
+                       boundaries$roi7_end, time_range)
+      
+      # Special handling for duration (not a paired input)
       updateNumericInput(session, "roi4_duration", value = roi4_duration)
       
       roi_values$baseline_config <- config
@@ -457,108 +474,69 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # ============================= #
     
     # ROI 1 Start
-    safe_update_pair <- function(session, slider_id, input_id, value, round_digits = 3) {
-      if (!is.null(value) && !is.na(value)) {
-        rounded_val <- round(value, round_digits)
-        updateSliderInput(session, slider_id, value = rounded_val)
-        updateNumericInput(session, input_id, value = rounded_val)
+    safe_update_pair <- function(session, slider_id, input_id, value, time_range) {
+      current_time <- Sys.time()
+      
+      # Check cooldown period
+      if (difftime(current_time, roi_values$last_update_time, units = "secs") < 
+          roi_values$update_cooldown) {
+        roi_values$pending_updates[[slider_id]] <- value
+        return(FALSE)
       }
+      
+      # Proceed with validation
+      if (!is.na(value) && value >= time_range[1] && value <= time_range[2]) {
+        updateSliderInput(session, slider_id, value = value)
+        updateNumericInput(session, input_id, value = value)
+        roi_values$last_update_time <- current_time
+        return(TRUE)
+      }
+      return(FALSE)
     }
-    # ROI 1 Start synchronization
-    observeEvent(input$roi1_start, {
-      if (abs(input$roi1_start_input - input$roi1_start) > 0.001) {
-        safe_update_pair(session, "roi1_start", "roi1_start_input", input$roi1_start)
-        roi_values$sliders_changed <- TRUE
-      }
-    }, ignoreInit = TRUE)
     
-    observeEvent(input$roi1_start_input, {
-      if (!is.na(input$roi1_start_input) && 
-          abs(input$roi1_start - input$roi1_start_input) > 0.001) {
-        safe_update_pair(session, "roi1_start", "roi1_start_input", input$roi1_start_input)
-        roi_values$sliders_changed <- TRUE
-      }
-    }, ignoreInit = TRUE)
+    roi_input_pairs <- list(
+      list(slider = "roi1_start", input = "roi1_start_input"),
+      list(slider = "roi2_start", input = "roi2_start_input"),
+      list(slider = "roi3_start", input = "roi3_start_input"),
+      list(slider = "roi5_end", input = "roi5_end_input"),
+      list(slider = "roi6_end", input = "roi6_end_input"),
+      list(slider = "roi7_end", input = "roi7_end_input")
+    )
     
-    # ROI 2 Start
-    observeEvent(input$roi2_start, {
-      if (abs(input$roi2_start_input - input$roi2_start) > 0.001) {
-        safe_update_pair(session, "roi2_start", "roi2_start_input", input$roi2_start)
-        roi_values$sliders_changed <- TRUE
-      }
-    }, ignoreInit = TRUE)
+    roi_input_debouncers <- lapply(roi_input_pairs, function(pair) {
+      debounce(reactive(input[[pair$input]]), 1000) # 1s debounce
+    })
     
-    observeEvent(input$roi2_start_input, {
-      if (!is.na(input$roi2_start_input) && 
-          abs(input$roi2_start - input$roi2_start_input) > 0.001) {
-        safe_update_pair(session, "roi2_start", "roi2_start_input", input$roi2_start_input)
-        roi_values$sliders_changed <- TRUE
-      }
-    }, ignoreInit = TRUE)
+    # Name them for easier access
+    names(roi_input_debouncers) <- sapply(roi_input_pairs, function(x) x$input)
     
-    # ROI 3 Start
-    observeEvent(input$roi3_start, {
-      if (abs(input$roi3_start_input - input$roi3_start) > 0.001) {
-        safe_update_pair(session, "roi3_start", "roi3_start_input", input$roi3_start)
-        roi_values$sliders_changed <- TRUE
-      }
-    }, ignoreInit = TRUE)
-    
-    observeEvent(input$roi3_start_input, {
-      if (!is.na(input$roi3_start_input) && 
-          abs(input$roi3_start - input$roi3_start_input) > 0.001) {
-        safe_update_pair(session, "roi3_start", "roi3_start_input", input$roi3_start_input)
-        roi_values$sliders_changed <- TRUE
-      }
-    }, ignoreInit = TRUE)
-    
-    # ROI 5 End
-    observeEvent(input$roi5_end, {
-      if (abs(input$roi5_end_input - input$roi5_end) > 0.001) {
-        safe_update_pair(session, "roi5_end", "roi5_end_input", input$roi5_end)
-        roi_values$sliders_changed <- TRUE
-      }
-    }, ignoreInit = TRUE)
-    
-    observeEvent(input$roi5_end_input, {
-      if (!is.na(input$roi5_end_input) && 
-          abs(input$roi5_end - input$roi5_end_input) > 0.001) {
-        safe_update_pair(session, "roi5_end", "roi5_end_input", input$roi5_end_input)
-        roi_values$sliders_changed <- TRUE
-      }
-    }, ignoreInit = TRUE)
-    
-    # ROI 5 End
-    observeEvent(input$roi6_end, {
-      if (abs(input$roi6_end_input - input$roi6_end) > 0.001) {
-        safe_update_pair(session, "roi6_end", "roi6_end_input", input$roi6_end)
-        roi_values$sliders_changed <- TRUE
-      }
-    }, ignoreInit = TRUE)
-    
-    observeEvent(input$roi6_end_input, {
-      if (!is.na(input$roi6_end_input) && 
-          abs(input$roi6_end - input$roi6_end_input) > 0.001) {
-        safe_update_pair(session, "roi6_end", "roi6_end_input", input$roi6_end_input)
-        roi_values$sliders_changed <- TRUE
-      }
-    }, ignoreInit = TRUE)
-    
-    # ROI 7 End
-    observeEvent(input$roi7_end, {
-      if (abs(input$roi7_end_input - input$roi7_end) > 0.001) {
-        safe_update_pair(session, "roi7_end", "roi7_end_input", input$roi7_end)
-        roi_values$sliders_changed <- TRUE
-      }
-    }, ignoreInit = TRUE)
-    
-    observeEvent(input$roi7_end_input, {
-      if (!is.na(input$roi7_end_input) && 
-          abs(input$roi7_end - input$roi7_end_input) > 0.001) {
-        safe_update_pair(session, "roi7_end", "roi7_end_input", input$roi7_end_input)
-        roi_values$sliders_changed <- TRUE
-      }
-    }, ignoreInit = TRUE)
+    # Create observers for each pair
+    lapply(roi_input_pairs, function(pair) {
+      # Numeric → Slider (debounced)
+      observeEvent(roi_input_debouncers[[pair$input]](), {
+        req(sensor_time_range())
+        time_range <- sensor_time_range()
+        value <- roi_input_debouncers[[pair$input]]()
+        
+        if (!is.na(value) && value >= time_range[1] && value <= time_range[2]) {
+          updateSliderInput(session, pair$slider, value = value)
+          roi_values$sliders_changed <- TRUE
+        } else {
+          updateNumericInput(session, pair$input, value = input[[pair$slider]])
+        }
+      })
+      
+      # Slider → Numeric (with cooldown)
+      observeEvent(input[[pair$slider]], {
+        current_time <- Sys.time()
+        if (difftime(current_time, roi_values$last_update_time, units = "secs") >= 
+            roi_values$update_cooldown) {
+          updateNumericInput(session, pair$input, value = input[[pair$slider]])
+          roi_values$sliders_changed <- TRUE
+          roi_values$last_update_time <- current_time
+        }
+      }, ignoreInit = TRUE)
+    })
     
     # Track changes in slider inputs (similar to pressure/acceleration modules)
     observe({
