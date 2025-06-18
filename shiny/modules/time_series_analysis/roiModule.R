@@ -227,7 +227,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       slider_ranges_set = FALSE,
       trim_boundaries_changed = FALSE,
       populating_sliders = FALSE,
-      committed_boundaries = NULL
+      committed_boundaries = NULL,
+      updating_durations = FALSE 
     )
     
     # Nadir editing state (keep this as it's still needed)
@@ -560,6 +561,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       durations <- current_durations()
       if (is.null(durations) || roi_values$populating_sliders) return()
       
+      roi_values$updating_durations <- TRUE 
+      
       # Only update if values actually changed (avoid infinite loops)
       if (!isTRUE(all.equal(input$roi1_duration, durations$roi1, tolerance = 0.01))) {
         updateNumericInput(session, "roi1_duration", value = round(durations$roi1, 2))
@@ -579,6 +582,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       if (!isTRUE(all.equal(input$roi7_duration, durations$roi7, tolerance = 0.01))) {
         updateNumericInput(session, "roi7_duration", value = round(durations$roi7, 2))
       }
+      
+      roi_values$updating_durations <- FALSE
     })
     
     # Track changes in slider inputs (similar to pressure/acceleration modules)
@@ -647,12 +652,13 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     observeEvent(list(input$roi1_duration, input$roi2_duration, input$roi3_duration,
                       input$roi5_duration, input$roi6_duration, input$roi7_duration), {
-                        if (roi_values$populating_sliders) return()
+                        if (roi_values$populating_sliders || roi_values$updating_durations) return() 
                         
                         nadir <- nadir_info()
                         if (!nadir$available) return()
                         
                         # Create a "virtual config" from duration inputs
+                        roi_values$populating_sliders <- TRUE
                         virtual_config <- list(
                           roi1_sens_ingress = input$roi1_duration %||% 0.2,
                           roi2_inflow_passage = input$roi2_duration %||% 4.8,
@@ -678,7 +684,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                         roi7_end <- roi6_end + virtual_config$roi7_sens_outgress
                         
                         # Update sliders - roi_table_data will automatically recalculate
-                        roi_values$populating_sliders <- TRUE
+                        
                         updateSliderInput(session, "roi1_start", value = roi1_start)
                         updateSliderInput(session, "roi2_start", value = roi2_start)
                         updateSliderInput(session, "roi3_start", value = roi3_start)
