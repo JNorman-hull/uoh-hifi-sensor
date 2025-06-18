@@ -726,8 +726,10 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       # Calculate if trim boundaries have changed
       trim_boundaries_changed <- if (!is.null(roi_values$baseline_config)) {
-        input$roi1_start != roi_values$baseline_config$roi1_start || 
-          input$roi7_end != roi_values$baseline_config$roi7_end
+        !is.na(input$roi1_start) && !is.na(input$roi7_end) &&
+          !is.na(roi_values$baseline_config$roi1_start) && !is.na(roi_values$baseline_config$roi7_end) &&
+          (input$roi1_start != roi_values$baseline_config$roi1_start || 
+             input$roi7_end != roi_values$baseline_config$roi7_end)
       } else {
         FALSE
       }
@@ -751,12 +753,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       # Special handling for apply_delineation button
       if (buttons$apply_delineation) {
-        if (!status$delineated) {
+        if (!isTRUE(status$delineated)) {
           # First time delineation - always include trim
           btn_label <- "Apply delineation and trim sensor"
           btn_icon <- icon("scissors")
           btn_class <- "btn-success"
-        } else if (trim_boundaries_changed) {
+        } else if (isTRUE(trim_boundaries_changed)) {
           # Subsequent delineation with trim boundaries changed
           btn_label <- "Apply modified delineation and trim"
           btn_icon <- icon("refresh")
@@ -1085,8 +1087,14 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         boundaries <- current_roi_boundaries()
         status <- sensor_status()
         nadir <- nadir_info()
-        trim_boundaries_changed <- input$roi1_start != roi_values$baseline_config$roi1_start || 
-          input$roi7_end != roi_values$baseline_config$roi7_end
+        trim_boundaries_changed <- if (!is.null(roi_values$baseline_config)) {
+          !is.na(input$roi1_start) && !is.na(input$roi7_end) &&
+            !is.na(roi_values$baseline_config$roi1_start) && !is.na(roi_values$baseline_config$roi7_end) &&
+            (input$roi1_start != roi_values$baseline_config$roi1_start || 
+               input$roi7_end != roi_values$baseline_config$roi7_end)
+        } else {
+          FALSE
+        }
         
         if (is.null(boundaries)) {
           showNotification("ROI boundaries not available", type = "error")
@@ -1094,7 +1102,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         }
         
         # Always read from original data if not delineated yet
-        if (!status$delineated) {
+        if (!isTRUE(status$delineated)) {
           sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
           should_trim <- TRUE
         } else {
@@ -1117,7 +1125,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                include.lowest = TRUE, right = FALSE)
         
         # If trimming needed, remove trim regions
-        if (should_trim) {
+        if (isTRUE(should_trim)) {
           sensor_data <- sensor_data[!sensor_data$roi %in% c("trim_start", "trim_end"),]
         }
         
@@ -1129,7 +1137,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         # Update sensor index
         updates <- list(
           delineated = "Y",
-          trimmed = if(should_trim) "Y" else "N",
+          trimmed = if(isTRUE(should_trim)) "Y" else "N",
           roi_config = if(roi_values$sliders_changed) "Custom" else roi_config$selected_config_name()
         )
         
@@ -1139,7 +1147,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           trigger_data_update()
           trigger_summary_update()
           roi_values$sliders_changed <- FALSE
-          showNotification(if(should_trim) 
+          showNotification(if(isTRUE(should_trim)) 
             "Delineation and trim applied successfully!" 
             else 
               "Delineation updated successfully!", 
