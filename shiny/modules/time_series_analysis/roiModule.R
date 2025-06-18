@@ -92,53 +92,53 @@ roiSidebarUI <- function(id) {
         # ROI 1 Start
         div(style = "margin-bottom: 5px;",
             fluidRow(
-              column(8, sliderInput(ns("roi1_start"), " ROI 1 Start Time (x)", min = 0, max = 100, value = 20, step = 0.1, width = "100%")),
-              column(4, numericInput(ns("roi1_start_input"), "", value = 20, step = 0.1, width = "100%"))
+              column(8, sliderInput(ns("roi1_start"), " ROI 1 Start Time (x)", min = 0, max = 100, value = 20, step = 0.01, width = "100%")),
+              column(4, numericInput(ns("roi1_start_input"), "", value = 20, step = 0.01, width = "100%"))
             )
         ),
         
         # ROI 2 Start  
         div(style = "margin-bottom: 5px;",
             fluidRow(
-              column(8, sliderInput(ns("roi2_start"), " ROI 2 Start Time (x)", min = 0, max = 100, value = 20, step = 0.1, width = "100%")),
-              column(4, numericInput(ns("roi2_start_input"), "", value = 20, step = 0.1, width = "100%"))
+              column(8, sliderInput(ns("roi2_start"), " ROI 2 Start Time (x)", min = 0, max = 100, value = 20, step = 0.01, width = "100%")),
+              column(4, numericInput(ns("roi2_start_input"), "", value = 20, step = 0.01, width = "100%"))
             )
         ),
         # ROI 3 Start
         div(style = "margin-bottom: 5px;",
             fluidRow(
-              column(8, sliderInput(ns("roi3_start"), " ROI 3 Start Time (x)", min = 0, max = 100, value = 20, step = 0.1, width = "100%")),
-              column(4, numericInput(ns("roi3_start_input"), "", value = 20, step = 0.1, width = "100%"))
+              column(8, sliderInput(ns("roi3_start"), " ROI 3 Start Time (x)", min = 0, max = 100, value = 20, step = 0.01, width = "100%")),
+              column(4, numericInput(ns("roi3_start_input"), "", value = 20, step = 0.01, width = "100%"))
             )
         ),
         
         # ROI 4 Duration (centered on nadir)
         div(style = "margin-bottom: 5px;",
             tags$label("ROI 4 Nadir Duration:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-            numericInput(ns("roi4_duration"), NULL, value = 0.4, min = 0.1, max = 2.0, step = 0.1, width = "100%")
+            numericInput(ns("roi4_duration"), NULL, value = 0.4, min = 0.01, max = 2.0, step = 0.01, width = "100%")
         ),
         
         # ROI 5 End
         div(style = "margin-bottom: 5px;",
             fluidRow(
-              column(8, sliderInput(ns("roi5_end"), " ROI 5 End Time (x)", min = 0, max = 100, value = 20, step = 0.1, width = "100%")),
-              column(4, numericInput(ns("roi5_end_input"), "", value = 20, step = 0.1, width = "100%"))
+              column(8, sliderInput(ns("roi5_end"), " ROI 5 End Time (x)", min = 0, max = 100, value = 20, step = 0.01, width = "100%")),
+              column(4, numericInput(ns("roi5_end_input"), "", value = 20, step = 0.01, width = "100%"))
             )
         ),
         
         # ROI 6 End
         div(style = "margin-bottom: 5px;",
             fluidRow(
-              column(8, sliderInput(ns("roi6_end"), " ROI 6 End Time (x)", min = 0, max = 100, value = 20, step = 0.1, width = "100%")),
-              column(4, numericInput(ns("roi6_end_input"), "", value = 20, step = 0.1, width = "100%"))
+              column(8, sliderInput(ns("roi6_end"), " ROI 6 End Time (x)", min = 0, max = 100, value = 20, step = 0.01, width = "100%")),
+              column(4, numericInput(ns("roi6_end_input"), "", value = 20, step = 0.01, width = "100%"))
             )
         ),
         
         # ROI 7 End
         div(style = "margin-bottom: 5px;",
             fluidRow(
-              column(8, sliderInput(ns("roi7_end"), " ROI 7 End Time (x)", min = 0, max = 100, value = 20, step = 0.1, width = "100%")),
-              column(4, numericInput(ns("roi7_end_input"), "", value = 20, step = 0.1, width = "100%"))
+              column(8, sliderInput(ns("roi7_end"), " ROI 7 End Time (x)", min = 0, max = 100, value = 20, step = 0.01, width = "100%")),
+              column(4, numericInput(ns("roi7_end_input"), "", value = 20, step = 0.01, width = "100%"))
             )
         ),
 
