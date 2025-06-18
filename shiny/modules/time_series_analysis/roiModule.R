@@ -149,7 +149,6 @@ roiSidebarUI <- function(id) {
                       value = "", width = "100%", placeholder = "e.g., Custom_delineation")),
         actionButton(ns("save_config"), "Save Current Configuration", class = "btn-warning btn-block"),
         actionButton(ns("apply_delineation"), "Apply Delineation", class = "btn-success btn-block"),
-        actionButton(ns("trim_sensor"), "Trim sensor start and end", class = "btn-warning btn-block"),
         actionButton(ns("start_over"), "Start Over", class = "btn-danger btn-block"),
         
         hr(),
@@ -725,12 +724,19 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       nadir <- nadir_info()
       status <- sensor_status()
       
-      # Determine button states
+      # Calculate if trim boundaries have changed
+      trim_boundaries_changed <- if (!is.null(roi_values$baseline_config)) {
+        input$roi1_start != roi_values$baseline_config$roi1_start || 
+          input$roi7_end != roi_values$baseline_config$roi7_end
+      } else {
+        FALSE
+      }
+      
+      # Determine all button states
       buttons <- list(
         apply_delineation = nadir$available && (!status$delineated || roi_values$sliders_changed),
         save_config = roi_values$sliders_changed && nchar(trimws(input$config_label)) > 0,
         start_over = status$delineated,
-        trim_sensor = status$delineated && !status$trimmed,
         normalize_time = status$delineated && status$trimmed && !status$normalized,
         passage_time = status$delineated && status$trimmed && !status$passage_times,
         nadir_btn = !nadir_values$edit_mode,
@@ -738,25 +744,44 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         update_plot = roi_values$sliders_changed
       )
       
-      # Apply states
+      # Apply basic button states
       lapply(names(buttons), function(btn) {
         shinyjs::toggleState(btn, condition = buttons[[btn]])
       })
       
       # Special handling for apply_delineation button
-      if (status$delineated && roi_values$sliders_changed) {
-        updateActionButton(session, "apply_delineation", 
-                           label = "Update Delineation",
-                           icon = icon("refresh"))
-        shinyjs::addClass("apply_delineation", "btn-warning")
-        shinyjs::removeClass("apply_delineation", "btn-success")
+      if (buttons$apply_delineation) {
+        if (!status$delineated) {
+          # First time delineation - always include trim
+          btn_label <- "Apply delineation and trim sensor"
+          btn_icon <- icon("scissors")
+          btn_class <- "btn-success"
+        } else if (trim_boundaries_changed) {
+          # Subsequent delineation with trim boundaries changed
+          btn_label <- "Apply modified delineation and trim"
+          btn_icon <- icon("refresh")
+          btn_class <- "btn-warning"
+        } else {
+          # Subsequent delineation without trim changes
+          btn_label <- "Apply modified delineation"
+          btn_icon <- icon("edit")
+          btn_class <- "btn-primary"
+        }
       } else {
-        updateActionButton(session, "apply_delineation", 
-                           label = "Apply Delineation",
-                           icon = icon("check"))
-        shinyjs::addClass("apply_delineation", "btn-success")
-        shinyjs::removeClass("apply_delineation", "btn-warning")
+        # Button disabled state
+        btn_label <- if (status$delineated) "Delineation Applied" else "Apply Delineation"
+        btn_icon <- icon("check")
+        btn_class <- if (status$delineated) "btn-default" else "btn-success"
       }
+      
+      # Update apply_delineation button
+      updateActionButton(session, "apply_delineation", 
+                         label = btn_label,
+                         icon = btn_icon)
+      
+      # Update button classes (remove all possible classes first)
+      shinyjs::removeClass("apply_delineation", "btn-success btn-warning btn-primary btn-default")
+      shinyjs::addClass("apply_delineation", btn_class)
     })
     
     # # Update button text based on delineation status and slider changes
@@ -1060,108 +1085,64 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         boundaries <- current_roi_boundaries()
         status <- sensor_status()
         nadir <- nadir_info()
-        
-        cat("trim_boundaries_changed:", roi_values$trim_boundaries_changed, "\n")
-        cat("status$trimmed:", status$trimmed, "\n")
-        cat("Will reset to original?", (roi_values$trim_boundaries_changed || !status$trimmed), "\n")
+        trim_boundaries_changed <- input$roi1_start != roi_values$baseline_config$roi1_start || 
+          input$roi7_end != roi_values$baseline_config$roi7_end
         
         if (is.null(boundaries)) {
           showNotification("ROI boundaries not available", type = "error")
           return()
         }
         
-        # Simple logic: if trim boundaries changed OR not yet trimmed, reset to original
-        if (status$delineated && roi_values$trim_boundaries_changed) {
-          cat("RESETTING TO ORIGINAL FILE (trim boundaries changed)\n")
-          # Reset to original file because trim boundaries changed on existing delineation
+        # Always read from original data if not delineated yet
+        if (!status$delineated) {
           sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
-          
-          # Apply full delineation with trim regions
-          sensor_data$roi <- cut(sensor_data$time_s, 
-                                 breaks = boundaries,
-                                 labels = c("trim_start", "roi1_sens_ingress", "roi2_inflow_passage", 
-                                            "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
-                                            "roi6_outflow_passage", "roi7_sens_outgress", "trim_end"),
-                                 include.lowest = TRUE, right = FALSE)
-          
-          reset_flags <- list(trimmed = "N", normalized = "N", passage_times = "N")
-          
-        } else if (!status$delineated) {
-          cat("FIRST TIME DELINEATION\n")
-          # First time delineation - work with original file (already loaded)
-          sensor_data <- selected_sensor_data()
-          
-          # Apply full delineation with trim regions
-          sensor_data$roi <- cut(sensor_data$time_s, 
-                                 breaks = boundaries,
-                                 labels = c("trim_start", "roi1_sens_ingress", "roi2_inflow_passage", 
-                                            "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
-                                            "roi6_outflow_passage", "roi7_sens_outgress", "trim_end"),
-                                 include.lowest = TRUE, right = FALSE)
-          
-          reset_flags <- list(trimmed = "N", normalized = "N", passage_times = "N")
-          
+          should_trim <- TRUE
         } else {
-          cat("MODIFYING EXISTING TRIMMED FILE\n")
-          # Just modify internal ROIs on existing trimmed file
           sensor_data <- selected_sensor_data()
-          
-          # FIXED: Create proper boundaries for trimmed data
-          data_start <- min(sensor_data$time_s)
-          data_end <- max(sensor_data$time_s)
-          nadir_time <- nadir$time
-          
-          # Recalculate internal boundaries within the trimmed data range
-          roi4_start <- nadir_time - (input$roi4_duration / 2)
-          roi4_end <- nadir_time + (input$roi4_duration / 2)
-          
-          # Create boundaries array for trimmed data (no trim regions)
-          internal_boundaries <- c(
-            data_start,           # Actual trimmed start
-            input$roi2_start,     # roi1 -> roi2
-            input$roi3_start,     # roi2 -> roi3  
-            roi4_start,           # roi3 -> roi4
-            roi4_end,             # roi4 -> roi5 (roi5_start)
-            input$roi5_end,       # roi5 -> roi6 (roi6_start)
-            input$roi6_end,       # roi6 -> roi7 (roi7_start)
-            data_end              # Actual trimmed end
-          )
-          
-          # Check boundaries are in order
-          if (any(diff(internal_boundaries) <= 0)) {
-            showNotification("Error: ROI boundaries must be in ascending order", type = "error")
-            return()
-          }
-          
-          # Re-assign ROI labels (7 regions for 8 boundaries)
-          sensor_data$roi <- cut(sensor_data$time_s, 
-                                 breaks = internal_boundaries,
-                                 labels = c("roi1_sens_ingress", "roi2_inflow_passage", 
-                                            "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
-                                            "roi6_outflow_passage", "roi7_sens_outgress"),
-                                 include.lowest = TRUE, right = FALSE)
-          
-          # Reset normalized and passage times (but keep trimmed = Y)
-          reset_flags <- list(normalized = "N", passage_times = "N")
+          should_trim <- trim_boundaries_changed
+        }
+        
+        # Apply delineation
+        sensor_data$roi <- cut(sensor_data$time_s, 
+                               breaks = boundaries,
+                               labels = c(if(should_trim) "trim_start" else "roi1_sens_ingress",
+                                          "roi1_sens_ingress", 
+                                          "roi2_inflow_passage",
+                                          "roi3_prenadir",
+                                          "roi4_nadir",
+                                          "roi5_postnadir",
+                                          "roi6_outflow_passage",
+                                          if(should_trim) "trim_end" else "roi7_sens_outgress"),
+                               include.lowest = TRUE, right = FALSE)
+        
+        # If trimming needed, remove trim regions
+        if (should_trim) {
+          sensor_data <- sensor_data[!sensor_data$roi %in% c("trim_start", "trim_end"),]
         }
         
         # Save file
-        delineated_dir <- file.path(output_dir(), "csv", "delineated")
-        dir.create(delineated_dir, showWarnings = FALSE, recursive = TRUE)
-        output_file <- file.path(delineated_dir, paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
-        write.csv(sensor_data, output_file, row.names = FALSE)
+        delineated_path <- file.path(output_dir(), "csv", "delineated", 
+                                     paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
+        write.csv(sensor_data, delineated_path, row.names = FALSE)
         
         # Update sensor index
-        config_name <- if (roi_values$sliders_changed) "Custom" else roi_config$selected_config_name()
+        updates <- list(
+          delineated = "Y",
+          trimmed = if(should_trim) "Y" else "N",
+          roi_config = if(roi_values$sliders_changed) "Custom" else roi_config$selected_config_name()
+        )
         
-        updates <- c(list(delineated = "Y", roi_config = config_name), reset_flags)
         success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), updates)
         
         if (success) {
           trigger_data_update()
           trigger_summary_update()
           roi_values$sliders_changed <- FALSE
-          showNotification("ROI boundaries updated successfully!", type = "message")
+          showNotification(if(should_trim) 
+            "Delineation and trim applied successfully!" 
+            else 
+              "Delineation updated successfully!", 
+            type = "message")
         }
         
       }, error = function(e) {
