@@ -369,7 +369,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           updateNumericInput(session, "roi6_end_input", value = roi6_end)
           updateSliderInput(session, "roi7_end", value = roi7_end)
           updateNumericInput(session, "roi7_end_input", value = roi7_end)
-          updateNumericInput(session, "roi4_duration", value = roi4_duration)
+          updateNumericInput(session, "roi4_duration", value = round(roi4_duration, 3))
         })
         
         roi_values$sliders_changed <- FALSE
@@ -429,22 +429,22 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       # Apply all updates using safe_update_pair
       isolate({
-        updateSliderInput(session, "roi1_start", value = boundaries$roi1_start)
-        updateNumericInput(session, "roi1_start_input", value = boundaries$roi1_start)
-        updateSliderInput(session, "roi2_start", value = boundaries$roi2_start)
-        updateNumericInput(session, "roi2_start_input", value = boundaries$roi2_start)
-        updateSliderInput(session, "roi3_start", value = boundaries$roi3_start)
-        updateNumericInput(session, "roi3_start_input", value = boundaries$roi3_start)
-        updateSliderInput(session, "roi5_end", value = boundaries$roi5_end)
-        updateNumericInput(session, "roi5_end_input", value = boundaries$roi5_end)
-        updateSliderInput(session, "roi6_end", value = boundaries$roi6_end)
-        updateNumericInput(session, "roi6_end_input", value = boundaries$roi6_end)
-        updateSliderInput(session, "roi7_end", value = boundaries$roi7_end)
-        updateNumericInput(session, "roi7_end_input", value = boundaries$roi7_end)
+        updateSliderInput(session, "roi1_start", value = round(boundaries$roi1_start, 3))
+        updateNumericInput(session, "roi1_start_input", value = round(boundaries$roi1_start, 3))
+        updateSliderInput(session, "roi2_start", value = round(boundaries$roi2_start, 3))
+        updateNumericInput(session, "roi2_start_input", value = round(boundaries$roi2_start, 3))
+        updateSliderInput(session, "roi3_start", value = round(boundaries$roi3_start, 3))
+        updateNumericInput(session, "roi3_start_input", value = round(boundaries$roi3_start, 3))
+        updateSliderInput(session, "roi5_end", value = round(boundaries$roi5_end, 3))
+        updateNumericInput(session, "roi5_end_input", value = round(boundaries$roi5_end, 3))
+        updateSliderInput(session, "roi6_end", value = round(boundaries$roi6_end, 3))
+        updateNumericInput(session, "roi6_end_input", value = round(boundaries$roi6_end, 3))
+        updateSliderInput(session, "roi7_end", value = round(boundaries$roi7_end, 3))
+        updateNumericInput(session, "roi7_end_input", value = round(boundaries$roi7_end, 3))
       })
       
       # Special handling for duration (not a paired input)
-      updateNumericInput(session, "roi4_duration", value = roi4_duration)
+      updateNumericInput(session, "roi4_duration", value = round(roi4_duration, 3))
       
       roi_values$baseline_config <- config
       roi_values$sliders_changed <- FALSE
@@ -1087,13 +1087,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         boundaries <- current_roi_boundaries()
         status <- sensor_status()
         nadir <- nadir_info()
-        trim_boundaries_changed <- if (!is.null(roi_values$baseline_config)) {
+        trim_boundaries_changed <- if (!is.null(roi_values$committed_boundaries)) {
           !is.na(input$roi1_start) && !is.na(input$roi7_end) &&
-            !is.na(roi_values$baseline_config$roi1_start) && !is.na(roi_values$baseline_config$roi7_end) &&
-            (input$roi1_start != roi_values$baseline_config$roi1_start || 
-               input$roi7_end != roi_values$baseline_config$roi7_end)
+            (abs(input$roi1_start - roi_values$committed_boundaries[2]) > 0.01 || 
+               abs(input$roi7_end - roi_values$committed_boundaries[9]) > 0.01)
         } else {
-          FALSE
+          TRUE  # If no committed boundaries, assume trimming is needed
         }
         
         if (is.null(boundaries)) {
@@ -1107,7 +1106,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           should_trim <- TRUE
         } else {
           sensor_data <- selected_sensor_data()
-          should_trim <- trim_boundaries_changed
+          should_trim <- isTRUE(trim_boundaries_changed)
         }
         
         # Apply delineation
@@ -1137,9 +1136,27 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         # Update sensor index
         updates <- list(
           delineated = "Y",
-          trimmed = if(isTRUE(should_trim)) "Y" else "N",
+          trimmed = if(!isTRUE(status$delineated)) {
+            # First time delineation - set based on should_trim
+            if(isTRUE(should_trim)) "Y" else "N"
+          } else if(isTRUE(trim_boundaries_changed)) {
+            # Trim boundaries changed - always trim
+            "Y"
+          } else {
+            # No trim boundary changes - preserve existing trimmed status
+            if(isTRUE(status$trimmed)) "Y" else "N"
+          },
           roi_config = if(roi_values$sliders_changed) "Custom" else roi_config$selected_config_name()
         )
+        
+        # If trim boundaries changed, reset normalization and passage times
+        if(isTRUE(trim_boundaries_changed)) {
+          updates$normalized <- "N"
+          updates$passage_times <- "N"
+          updates$passage_duration.mm.ss. <- "NA"
+          updates$ingress_nadir_duration.mm.ss. <- "NA"
+          updates$nadir_outgress_duration.mm.ss. <- "NA"
+        }
         
         success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), updates)
         
@@ -1169,13 +1186,13 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       roi4_end <- nadir_time + (input$roi4_duration / 2)
       
       config_values <- list(
-        roi1_sens_ingress = input$roi2_start - input$roi1_start,
-        roi2_inflow_passage = input$roi3_start - input$roi2_start,
-        roi3_prenadir = roi4_start - input$roi3_start,
-        roi4_nadir = input$roi4_duration,
-        roi5_postnadir = input$roi5_end - roi4_end,
-        roi6_outflow_passage = input$roi6_end - input$roi5_end,
-        roi7_sens_outgress = input$roi7_end - input$roi6_end
+        roi1_sens_ingress = round(input$roi2_start - input$roi1_start, 2),
+        roi2_inflow_passage = round(input$roi3_start - input$roi2_start, 2),
+        roi3_prenadir = round(roi4_start - input$roi3_start, 2),
+        roi4_nadir = round(input$roi4_duration, 2),
+        roi5_postnadir = round(input$roi5_end - roi4_end, 2),
+        roi6_outflow_passage = round(input$roi6_end - input$roi5_end, 2),
+        roi7_sens_outgress = round(input$roi7_end - input$roi6_end, 2)
       )
       
       # Save configuration
