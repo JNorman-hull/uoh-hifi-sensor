@@ -81,36 +81,42 @@ roiSidebarUI <- function(id) {
         
         enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "delineation"),
         
-        hr(),
-        
         h4("ROI Configuration"),
         configurationSidebarUI(ns("roi_config"), config_type = "roi", 
                                label = "Delineation configuration:"),
         
         textOutput(ns("config_change_status")),
-        br(),
-        
+
         h4("ROI Boundary Adjustment"),
         
         # ROI 1 Start
         div(style = "margin-bottom: 15px;",
             tags$label("ROI 1 Start:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
             sliderInput(ns("roi1_start"), NULL, min = 0, max = 100, value = 20, step = 0.1, width = "100%"),
-            numericInput(ns("roi1_start_input"), NULL, value = 20, step = 0.1, width = "100%")
+            fluidRow(
+              column(6, numericInput(ns("roi1_start_input"), "Time (s)", value = 20, step = 0.1, width = "100%")),
+              column(6, numericInput(ns("roi1_duration"), "Duration (s)", value = 2.0, min = 0.1, step = 0.1, width = "100%"))
+        )
         ),
         
         # ROI 2 Start  
         div(style = "margin-bottom: 15px;",
             tags$label("ROI 2 Start:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-            sliderInput(ns("roi2_start"), NULL, min = 0, max = 100, value = 25, step = 0.1, width = "100%"),
-            numericInput(ns("roi2_start_input"), NULL, value = 20, step = 0.1, width = "100%")
+            sliderInput(ns("roi2_start"), NULL, min = 0, max = 100, value = 20, step = 0.1, width = "100%"),
+            fluidRow(
+              column(6, numericInput(ns("roi2_start_input"), "Time (s)", value = 20, step = 0.1, width = "100%")),
+              column(6, numericInput(ns("roi2_duration"), "Duration (s)", value = 2.0, min = 0.1, step = 0.1, width = "100%"))
+            )
         ),
         
         # ROI 3 Start
         div(style = "margin-bottom: 15px;",
             tags$label("ROI 3 Start:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-            sliderInput(ns("roi3_start"), NULL, min = 0, max = 100, value = 28, step = 0.1, width = "100%"),
-            numericInput(ns("roi3_start_input"), NULL, value = 25, step = 0.1, width = "100%")
+            sliderInput(ns("roi3_start"), NULL, min = 0, max = 100, value = 20, step = 0.1, width = "100%"),
+            fluidRow(
+              column(6, numericInput(ns("roi3_start_input"), "Time (s)", value = 20, step = 0.1, width = "100%")),
+              column(6, numericInput(ns("roi3_duration"), "Duration (s)", value = 2.0, min = 0.1, step = 0.1, width = "100%"))
+            )
         ),
         
         # ROI 4 Duration (centered on nadir)
@@ -122,37 +128,44 @@ roiSidebarUI <- function(id) {
         # ROI 5 End
         div(style = "margin-bottom: 15px;",
             tags$label("ROI 5 End:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-            sliderInput(ns("roi5_end"), NULL, min = 0, max = 100, value = 32, step = 0.1, width = "100%"),
-            numericInput(ns("roi5_end_input"), NULL, value = 32, step = 0.1, width = "100%")
+            sliderInput(ns("roi5_end"), NULL, min = 0, max = 100, value = 20, step = 0.1, width = "100%"),
+            fluidRow(
+              column(6, numericInput(ns("roi5_end_input"), "Time (s)", value = 20, step = 0.1, width = "100%")),
+              column(6, numericInput(ns("roi5_duration"), "Duration (s)", value = 2.0, min = 0.1, step = 0.1, width = "100%"))
+            )
         ),
         
         # ROI 6 End
         div(style = "margin-bottom: 15px;",
             tags$label("ROI 6 End:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-            sliderInput(ns("roi6_end"), NULL, min = 0, max = 100, value = 35, step = 0.1, width = "100%"),
-            numericInput(ns("roi6_end_input"), NULL, value = 35, step = 0.1, width = "100%")
+            sliderInput(ns("roi6_end"), NULL, min = 0, max = 100, value = 20, step = 0.1, width = "100%"),
+            fluidRow(
+              column(6, numericInput(ns("roi6_end_input"), "Time (s)", value = 20, step = 0.1, width = "100%")),
+              column(6, numericInput(ns("roi6_duration"), "Duration (s)", value = 2.0, min = 0.1, step = 0.1, width = "100%"))
+            )
         ),
-        
         # ROI 7 End
         div(style = "margin-bottom: 15px;",
             tags$label("ROI 7 End:", style = "font-weight: bold; margin-bottom: 5px; display: block;"),
-            sliderInput(ns("roi7_end"), NULL, min = 0, max = 100, value = 40, step = 0.1, width = "100%"),
-            numericInput(ns("roi7_end_input"), NULL, value = 40, step = 0.1, width = "100%")
+            sliderInput(ns("roi7_end"), NULL, min = 0, max = 100, value = 20, step = 0.1, width = "100%"),
+            fluidRow(
+              column(6, numericInput(ns("roi7_end_input"), "Time (s)", value = 20, step = 0.1, width = "100%")),
+              column(6, numericInput(ns("roi7_duration"), "Duration (s)", value = 2.0, min = 0.1, step = 0.1, width = "100%"))
+            )
         ),
         
-        actionButton(ns("update_plot"), "Update Plot", class = "btn-info btn-block"),
         
         hr(),
         
         h4("Actions"),
-        actionButton(ns("apply_delineation"), "Apply Delineation", class = "btn-success btn-block"),
-        actionButton(ns("save_config"), "Save Current Configuration", class = "btn-warning btn-block"),
-        actionButton(ns("start_over"), "Start Over", class = "btn-danger btn-block"),
-        actionButton(ns("trim_sensor"), "Trim sensor start and end", class = "btn-warning btn-block"),
-        
+        actionButton(ns("update_plot"), "Update Plot", class = "btn-info btn-block"),
         div(style = "margin-bottom: 15px;",
             textInput(ns("config_label"), "Configuration label:", 
                       value = "", width = "100%", placeholder = "e.g., Custom_delineation")),
+        actionButton(ns("save_config"), "Save Current Configuration", class = "btn-warning btn-block"),
+        actionButton(ns("apply_delineation"), "Apply Delineation", class = "btn-success btn-block"),
+        actionButton(ns("trim_sensor"), "Trim sensor start and end", class = "btn-warning btn-block"),
+        actionButton(ns("start_over"), "Start Over", class = "btn-danger btn-block"),
         
         hr(),
         
