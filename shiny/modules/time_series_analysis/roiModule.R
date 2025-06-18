@@ -429,18 +429,20 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       )
       
       # Apply all updates using safe_update_pair
-      safe_update_pair(session, "roi1_start", "roi1_start_input", 
-                       boundaries$roi1_start, time_range)
-      safe_update_pair(session, "roi2_start", "roi2_start_input", 
-                       boundaries$roi2_start, time_range)
-      safe_update_pair(session, "roi3_start", "roi3_start_input", 
-                       boundaries$roi3_start, time_range)
-      safe_update_pair(session, "roi5_end", "roi5_end_input", 
-                       boundaries$roi5_end, time_range)
-      safe_update_pair(session, "roi6_end", "roi6_end_input", 
-                       boundaries$roi6_end, time_range)
-      safe_update_pair(session, "roi7_end", "roi7_end_input", 
-                       boundaries$roi7_end, time_range)
+      isolate({
+        updateSliderInput(session, "roi1_start", value = boundaries$roi1_start)
+        updateNumericInput(session, "roi1_start_input", value = boundaries$roi1_start)
+        updateSliderInput(session, "roi2_start", value = boundaries$roi2_start)
+        updateNumericInput(session, "roi2_start_input", value = boundaries$roi2_start)
+        updateSliderInput(session, "roi3_start", value = boundaries$roi3_start)
+        updateNumericInput(session, "roi3_start_input", value = boundaries$roi3_start)
+        updateSliderInput(session, "roi5_end", value = boundaries$roi5_end)
+        updateNumericInput(session, "roi5_end_input", value = boundaries$roi5_end)
+        updateSliderInput(session, "roi6_end", value = boundaries$roi6_end)
+        updateNumericInput(session, "roi6_end_input", value = boundaries$roi6_end)
+        updateSliderInput(session, "roi7_end", value = boundaries$roi7_end)
+        updateNumericInput(session, "roi7_end_input", value = boundaries$roi7_end)
+      })
       
       # Special handling for duration (not a paired input)
       updateNumericInput(session, "roi4_duration", value = roi4_duration)
