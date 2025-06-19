@@ -10,7 +10,7 @@ library(shinydashboard)
 dir.create("./processed_sens_data", showWarnings = FALSE, recursive = TRUE)
 
 #Use the correct python environment 
-#use_condaenv(rap_pro, required = TRUE)
+use_condaenv("rap_pro", required = TRUE)
 
 # Import Python functions
 source_python("modules/global_modules/rapid_functions.py")
