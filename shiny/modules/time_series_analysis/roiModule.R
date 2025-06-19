@@ -119,16 +119,16 @@ roiSidebarUI <- function(id) {
                          value = NULL, step = 0.001, width = "100%")),
         
         div(style = "margin-bottom: 10px;",
-            numericInput(ns("roi3_start"), "ROI 3 Start (s):", 
-                         value = NULL, step = 0.001, width = "100%")),
+            numericInput(ns("roi3_duration"), "ROI 3 Duration (s):", 
+                         value = NULL, step = 0.01, width = "100%")),
         
         div(style = "margin-bottom: 10px;",
             numericInput(ns("roi4_duration"), "ROI 4 Duration (s):", 
-                         value = NULL, step = 0.001, width = "100%")),
+                         value = NULL, step = 0.01, width = "100%")),
         
         div(style = "margin-bottom: 10px;",
-            numericInput(ns("roi5_end"), "ROI 5 End (s):", 
-                         value = NULL, step = 0.001, width = "100%")),
+            numericInput(ns("roi5_duration"), "ROI 5 Duration (s):", 
+                         value = NULL, step = 0.01, width = "100%")),
         
         div(style = "margin-bottom: 10px;",
             numericInput(ns("roi6_end"), "ROI 6 End (s):", 
@@ -205,9 +205,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       # Store the actual ROI values (not reactive to inputs)
       roi1_start = NULL,
       roi2_start = NULL,
-      roi3_start = NULL,
+      roi3_duration = NULL,
       roi4_duration = NULL,
-      roi5_end = NULL,
+      roi5_duration = NULL,
       roi6_end = NULL,
       roi7_end = NULL
     )
@@ -290,37 +290,37 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         # Clear all inputs and stored values
         updateNumericInput(session, "roi1_start", value = NULL)
         updateNumericInput(session, "roi2_start", value = NULL)
-        updateNumericInput(session, "roi3_start", value = NULL)
-        updateNumericInput(session, "roi4_duration", value = NULL)
-        updateNumericInput(session, "roi5_end", value = NULL)
+        updateNumericInput(session, "roi3_duration", value = 0.5)
+        updateNumericInput(session, "roi4_duration", value = 0.2)
+        updateNumericInput(session, "roi5_duration", value = 0.5)
         updateNumericInput(session, "roi6_end", value = NULL)
         updateNumericInput(session, "roi7_end", value = NULL)
         
-        # Clear stored values
+        # Clear stored values (defaults will be stored when user clicks "Update")
         roi_values$roi1_start <- NULL
         roi_values$roi2_start <- NULL
-        roi_values$roi3_start <- NULL
+        roi_values$roi3_duration <- NULL
         roi_values$roi4_duration <- NULL
-        roi_values$roi5_end <- NULL
+        roi_values$roi5_duration <- NULL
         roi_values$roi6_end <- NULL
         roi_values$roi7_end <- NULL
         roi_values$has_roi_data <- FALSE
       } else {
-        # Populate from extracted data
-        updateNumericInput(session, "roi1_start", value = roi_data$roi1_sens_ingress$start)
-        updateNumericInput(session, "roi2_start", value = roi_data$roi2_inflow_passage$start)
-        updateNumericInput(session, "roi3_start", value = roi_data$roi3_prenadir$start)
-        updateNumericInput(session, "roi4_duration", value = round(roi_data$roi4_nadir$duration, 2))
-        updateNumericInput(session, "roi5_end", value = roi_data$roi5_postnadir$end)
-        updateNumericInput(session, "roi6_end", value = roi_data$roi6_outflow_passage$end)
-        updateNumericInput(session, "roi7_end", value = roi_data$roi7_sens_outgress$end)
+        # Populate from extracted data with rounding
+        updateNumericInput(session, "roi1_start", value = round(roi_data$roi1_sens_ingress$start, 3))
+        updateNumericInput(session, "roi2_start", value = round(roi_data$roi2_inflow_passage$start, 3))
+        updateNumericInput(session, "roi3_duration", value = round(roi_data$roi3_prenadir$duration, 3))
+        updateNumericInput(session, "roi4_duration", value = round(roi_data$roi4_nadir$duration, 3))
+        updateNumericInput(session, "roi5_duration", value = round(roi_data$roi5_postnadir$duration, 3))
+        updateNumericInput(session, "roi6_end", value = round(roi_data$roi6_outflow_passage$end, 3))
+        updateNumericInput(session, "roi7_end", value = round(roi_data$roi7_sens_outgress$end, 3))
         
         # Store the values (for non-reactive access)
         roi_values$roi1_start <- roi_data$roi1_sens_ingress$start
         roi_values$roi2_start <- roi_data$roi2_inflow_passage$start
-        roi_values$roi3_start <- roi_data$roi3_prenadir$start
+        roi_values$roi3_duration <- roi_data$roi3_prenadir$duration
         roi_values$roi4_duration <- roi_data$roi4_nadir$duration
-        roi_values$roi5_end <- roi_data$roi5_postnadir$end
+        roi_values$roi5_duration <- roi_data$roi5_postnadir$duration
         roi_values$roi6_end <- roi_data$roi6_outflow_passage$end
         roi_values$roi7_end <- roi_data$roi7_sens_outgress$end
         roi_values$has_roi_data <- TRUE
@@ -337,23 +337,30 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       # Get all input values
       roi1_start <- input$roi1_start
       roi2_start <- input$roi2_start
-      roi3_start <- input$roi3_start
+      roi3_duration <- input$roi3_duration
       roi4_duration <- input$roi4_duration
-      roi5_end <- input$roi5_end
+      roi5_duration <- input$roi5_duration
       roi6_end <- input$roi6_end
       roi7_end <- input$roi7_end
       
       # Check for missing values
-      if (any(is.null(c(roi1_start, roi2_start, roi3_start, roi4_duration, roi5_end, roi6_end, roi7_end)))) {
+      if (any(is.null(c(roi1_start, roi2_start, roi3_duration, roi4_duration, roi5_duration, roi6_end, roi7_end)))) {
         return(list(valid = FALSE, message = "All ROI timing fields must be filled"))
       }
       
-      # Calculate ROI 4 boundaries
+      # Check for positive durations
+      if (any(c(roi3_duration, roi4_duration, roi5_duration) <= 0)) {
+        return(list(valid = FALSE, message = "All durations must be positive"))
+      }
+      
+      # Calculate ROI boundaries for validation
       nadir_time <- nadir$time
       roi4_start <- nadir_time - (roi4_duration / 2)
       roi4_end <- nadir_time + (roi4_duration / 2)
+      roi3_start <- roi4_start - roi3_duration
+      roi5_end <- roi4_end + roi5_duration
       
-      # Validate logical order
+      # Validate logical order: roi1 < roi2 < roi3_start < roi4_start < roi4_end < roi5_end < roi6 < roi7
       if (!(roi1_start < roi2_start && roi2_start < roi3_start && roi3_start < roi4_start &&
             roi4_end < roi5_end && roi5_end < roi6_end && roi6_end < roi7_end)) {
         return(list(valid = FALSE, message = "ROI times must be in logical order"))
@@ -392,27 +399,35 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       # Read from stored values (NOT from inputs - this breaks reactivity)
       roi1_start <- roi_values$roi1_start
       roi2_start <- roi_values$roi2_start
-      roi3_start <- roi_values$roi3_start
+      roi3_duration <- roi_values$roi3_duration
       roi4_duration <- roi_values$roi4_duration
-      roi5_end <- roi_values$roi5_end
+      roi5_duration <- roi_values$roi5_duration
       roi6_end <- roi_values$roi6_end
       roi7_end <- roi_values$roi7_end
       
       # Check for missing values
-      if (any(is.null(c(roi1_start, roi2_start, roi3_start, roi4_duration, roi5_end, roi6_end, roi7_end)))) {
+      if (any(is.null(c(roi1_start, roi2_start, roi3_duration, roi4_duration, roi5_duration, roi6_end, roi7_end)))) {
         return(NULL)
       }
       
-      # Calculate ROI 4 boundaries (centered on nadir)
+      # Calculate ROI boundaries using duration-based logic
       nadir_time <- nadir$time
+      
+      # ROI 4 boundaries (centered on nadir)
       roi4_start <- nadir_time - (roi4_duration / 2)
       roi4_end <- nadir_time + (roi4_duration / 2)
       
-      # Calculate other ROI boundaries
+      # ROI 3 boundaries (duration before ROI 4)
+      roi3_end <- roi4_start
+      roi3_start <- roi3_end - roi3_duration
+      
+      # ROI 5 boundaries (duration after ROI 4)
+      roi5_start <- roi4_end
+      roi5_end <- roi5_start + roi5_duration
+      
+      # Other ROI boundaries
       roi1_end <- roi2_start
       roi2_end <- roi3_start
-      roi3_end <- roi4_start
-      roi5_start <- roi4_end
       roi6_start <- roi5_end
       roi7_start <- roi6_end
       
@@ -449,9 +464,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         Duration = c(paste(round(roi1_start - data_start, 3), "s"),
                      paste(round(roi1_end - roi1_start, 3), "s"),
                      paste(round(roi2_end - roi2_start, 3), "s"),
-                     paste(round(roi3_end - roi3_start, 3), "s"),
+                     paste(round(roi3_duration, 3), "s"),
                      paste(round(roi4_duration, 3), "s"),
-                     paste(round(roi5_end - roi5_start, 3), "s"),
+                     paste(round(roi5_duration, 3), "s"),
                      paste(round(roi6_end - roi6_start, 3), "s"),
                      paste(round(roi7_end - roi7_start, 3), "s"),
                      paste(round(data_end - roi7_end, 3), "s")),
@@ -519,8 +534,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       # Check if user has entered values in input boxes
       has_input_values <- !is.null(input$roi1_start) && !is.null(input$roi2_start) && 
-        !is.null(input$roi3_start) && !is.null(input$roi4_duration) &&
-        !is.null(input$roi5_end) && !is.null(input$roi6_end) && 
+        !is.null(input$roi3_duration) && !is.null(input$roi4_duration) &&
+        !is.null(input$roi5_duration) && !is.null(input$roi6_end) && 
         !is.null(input$roi7_end)
       
       button_states <- list(
@@ -586,9 +601,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       # Copy input values to stored values (this triggers roi_times() update)
       roi_values$roi1_start <- input$roi1_start
       roi_values$roi2_start <- input$roi2_start
-      roi_values$roi3_start <- input$roi3_start
+      roi_values$roi3_duration <- input$roi3_duration
       roi_values$roi4_duration <- input$roi4_duration
-      roi_values$roi5_end <- input$roi5_end
+      roi_values$roi5_duration <- input$roi5_duration
       roi_values$roi6_end <- input$roi6_end
       roi_values$roi7_end <- input$roi7_end
       roi_values$has_roi_data <- TRUE
@@ -842,23 +857,27 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           # Use existing boundaries for ROI 1 start and ROI 7 end, input values for others
           nadir <- nadir_info()
           nadir_time <- nadir$time
+          
+          # Calculate ROI boundaries using new duration logic
           roi4_start <- nadir_time - (input$roi4_duration / 2)
           roi4_end <- nadir_time + (input$roi4_duration / 2)
+          roi3_start <- roi4_start - input$roi3_duration
+          roi5_end <- roi4_end + input$roi5_duration
           
           boundaries <- c(
             min(sensor_data$time_s),                           # data_start
             existing_roi_data$roi1_sens_ingress$start,        # roi1_start (preserved)
             input$roi2_start,                                  # roi2_start (from input)
-            input$roi3_start,                                  # roi3_start (from input)
+            roi3_start,                                        # roi3_start (calculated from duration)
             roi4_start,                                        # roi4_start (calculated)
             roi4_end,                                          # roi4_end (calculated)
-            input$roi5_end,                                    # roi5_end (from input)
+            roi5_end,                                          # roi5_end (calculated from duration)
             input$roi6_end,                                    # roi6_end (from input)
             existing_roi_data$roi7_sens_outgress$end,        # roi7_end (preserved)
             max(sensor_data$time_s)                           # data_end
           )
         } else {
-          # For new delineation: use all input values
+          # For new delineation: use all input values with duration calculations
           times <- roi_times()
           if (is.null(times)) {
             showNotification("ROI times not available", type = "error")
