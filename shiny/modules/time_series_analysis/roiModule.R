@@ -1,4 +1,4 @@
-# ROI Delineation Module - Simplified
+# ROI Delineation Module - Simplified Approach
 
 roiUI <- function(id) {
   ns <- NS(id)
@@ -36,13 +36,13 @@ roiUI <- function(id) {
     fluidRow(
       column(
         width = 12,
-        tags$p("Use the table above to review regions of interest. Each entry corresponds to a delineated region. Check timestamps to ensure accurate event capture."),
+        tags$p("Use the input boxes in the sidebar to set ROI timing, then update the plot and table. Each entry corresponds to a delineated region. Check timestamps to ensure accurate event capture."),
         tags$ul(
           tags$li("ROI 1 Sensor ingress: Mark region sensor enters system from atmospheric pressure or other landmark feature (e.g., injection pipe)"),
           tags$li("ROI 2 Intake passage: Mark region sensor moves through intake structures and pipework leading towards the impeller."),
           tags$li("ROI 3 Pre-nadir: Mark region just before the impeller, highest risk of encountering pressure differentials and swirl flows."),
           tags$li("ROI 4 Nadir: Critical passage analysis zone with direct passage through the impeller. Hydraulic pinch point where maximum acceleration, rotation and minimum pressure likely to occur.
-                  Region calculated using input time box, which is centered on the nadir point. Ensure nadir is correct first."),
+                  Region calculated using duration input, which is centered on the nadir point."),
           tags$li("ROI 5 Post-nadir: Mark region just after the impeller, highest risk of encountering guide vane or other forms of collision, residual turbulences and pressure recovery."),
           tags$li("ROI 6 Outflow passage: Mark region sensor moves through outflow pipework and structures leading towards sensor outgress. Velocity expected to decrease and pressure return to atmospheric pressure."),
           tags$li("ROI 7 Sensor outgress: Mark region sensor exists system from atmospheric pressure or other landmark features (e.g., stable flow indicative of tailwater)."),
@@ -107,17 +107,49 @@ roiSidebarUI <- function(id) {
         
         enhancedSensorSelectionUI(ns("sensor_selector"), status_filter_type = "delineation"),
         
-        h4("Delineate data"),
-        actionButton(ns("create_delineated"), "Apply delineation configuration", class = "btn-success btn-block"),
+        h4("ROI Time Settings"),
+        
+        # ROI timing inputs
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("roi1_start"), "ROI 1 Start (s):", 
+                         value = NULL, step = 0.001, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("roi2_start"), "ROI 2 Start (s):", 
+                         value = NULL, step = 0.001, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("roi3_start"), "ROI 3 Start (s):", 
+                         value = NULL, step = 0.001, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("roi4_duration"), "ROI 4 Duration (s):", 
+                         value = NULL, step = 0.001, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("roi5_end"), "ROI 5 End (s):", 
+                         value = NULL, step = 0.001, width = "100%")),
+        
+        div(style = "margin-bottom: 10px;",
+            numericInput(ns("roi6_end"), "ROI 6 End (s):", 
+                         value = NULL, step = 0.001, width = "100%")),
+        
+        div(style = "margin-bottom: 15px;",
+            numericInput(ns("roi7_end"), "ROI 7 End (s):", 
+                         value = NULL, step = 0.001, width = "100%")),
+        
+        actionButton(ns("update_roi"), "Update plot and table", class = "btn-primary btn-block"),
+        
+        hr(),
+        
+        h4("Apply Delineation"),
+        actionButton(ns("create_delineated"), "Apply delineation to sensor", class = "btn-success btn-block"),
         actionButton(ns("start_over"), "Start Over", class = "btn-danger btn-block"),
         actionButton(ns("trim_sensor"), "Trim sensor start and end", class = "btn-warning btn-block"),
         
         br(),
         
-        configurationSidebarUI(ns("roi_config"), config_type = "roi", 
-                               label = "Delineation configuration:"),
-        
-        hr(), h4("Pressure Nadir Options"),
+        h4("Pressure Nadir Options"),
         textOutput(ns("current_nadir_display")),
         actionButton(ns("nadir_btn"), "Modify Pressure Nadir", class = "btn-warning btn-block"),
         actionButton(ns("cancel_nadir_btn"), "Cancel", class = "btn-danger btn-block"),
@@ -161,25 +193,31 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # /// Reactive values \\\ ####  
     # ============================= #   
     
-    # ROI configuration state
-    roi_values <- reactiveValues(
-      roi_configs = NULL,
-      current_config = NULL
-    )
-    
     # Nadir editing state
     nadir_values <- reactiveValues(
-      edit_mode = FALSE,           # Whether nadir editing is active
-      selected_point = NULL,       # Currently selected nadir point
-      nadir_updated = 0,          # Counter to trigger nadir refresh
-      baseline_click = NULL        # Baseline click for detecting new clicks
+      edit_mode = FALSE,
+      selected_point = NULL,
+      baseline_click = NULL
+    )
+    
+    # ROI state
+    roi_values <- reactiveValues(
+      has_roi_data = FALSE,  # Track if we have ROI timing data
+      # Store the actual ROI values (not reactive to inputs)
+      roi1_start = NULL,
+      roi2_start = NULL,
+      roi3_start = NULL,
+      roi4_duration = NULL,
+      roi5_end = NULL,
+      roi6_end = NULL,
+      roi7_end = NULL
     )
     
     # ============================= #
     # /// Data loading & processing  \\\ ####  
     # ============================= # 
     
-    #Sensor dropdown ####   
+    # Sensor dropdown
     sensor_selector <- enhancedSensorSelectionServer("sensor_selector",
                                                      output_dir, processing_complete,
                                                      status_filter_type = "delineation",
@@ -190,22 +228,22 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # Get nadir info using shared function
     nadir_info <- reactive({
       req(sensor_selector$selected_sensor())
-      global_sensor_state$summary_updated  # Use global
+      global_sensor_state$summary_updated
       get_nadir_info(sensor_selector$selected_sensor(), output_dir())
     })
     
     # Get sensor status using shared function
     sensor_status <- reactive({
       req(sensor_selector$selected_sensor())
-      global_sensor_state$summary_updated  # Use global
-      global_sensor_state$data_updated     # Use global
+      global_sensor_state$summary_updated
+      global_sensor_state$data_updated
       get_sensor_status(sensor_selector$selected_sensor(), output_dir())
     })
     
     # Read selected sensor data (with preference for delineated data)
     selected_sensor_data <- reactive({
       req(sensor_selector$selected_sensor())
-      global_sensor_state$data_updated  # Invalidate when data changes
+      global_sensor_state$data_updated
       
       # Check for delineated file first
       delineated_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
@@ -217,112 +255,226 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       return(read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min"))
     })
     
-    ## Calculate ROI times ####
+    # ============================= #
+    # /// Helper functions \\\ ####  
+    # ============================= # 
     
-    # Calculate ROI times based on configuration and nadir
-    roi_times <- reactive({
-      req(sensor_selector$selected_sensor())
-      global_sensor_state$summary_updated 
-      
-      nadir <- nadir_info()
-      config <- roi_config$current_config()  # Direct dependency
-      
-      if (!nadir$available || is.null(config)) return(NULL)
-      
-      nadir_time <- nadir$time
-      #config <- roi_values$current_config
-      
-      # Calculate ROI boundaries based on nadir time
-      roi4_start <- nadir_time - (config$roi4_nadir / 2)
-      roi4_end <- nadir_time + (config$roi4_nadir / 2)
-      
-      roi3_start <- roi4_start - config$roi3_prenadir
-      roi3_end <- roi4_start
-      
-      roi2_start <- roi3_start - config$roi2_inflow_passage
-      roi2_end <- roi3_start
-      
-      roi1_start <- roi2_start - config$roi1_sens_ingress
-      roi1_end <- roi2_start
-      
-      roi5_start <- roi4_end
-      roi5_end <- roi4_end + config$roi5_postnadir
-      
-      roi6_start <- roi5_end
-      roi6_end <- roi5_end + config$roi6_outflow_passage
-      
-      roi7_start <- roi6_end
-      roi7_end <- roi6_end + config$roi7_sens_outgress
-      
-      # Read sensor data to get actual start/end times
-      sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
-      if (!is.null(sensor_data)) {
-        data_start <- min(sensor_data$time_s)
-        data_end <- max(sensor_data$time_s)
-        
-        roi_times_df <- data.frame(
-          ROI = c("Sensor start trim", "ROI 1: Sensor ingress", "ROI 2: Inflow passage", 
-                  "ROI 3: Pre-nadir", "ROI 4: Nadir", "ROI 5: Post-nadir", 
-                  "ROI 6: Outflow passage", "ROI 7: Sensor outgress", "Sensor end trim"),
-          `Start time` = c(paste(round(data_start, 3), "s"),
-                           paste(round(roi1_start, 3), "s"),
-                           paste(round(roi2_start, 3), "s"),
-                           paste(round(roi3_start, 3), "s"),
-                           paste(round(roi4_start, 3), "s"),
-                           paste(round(roi5_start, 3), "s"),
-                           paste(round(roi6_start, 3), "s"),
-                           paste(round(roi7_start, 3), "s"),
-                           paste(round(roi7_end, 3), "s")),
-          `End Time` = c(paste(round(roi1_start, 3), "s"),
-                         paste(round(roi1_end, 3), "s"),
-                         paste(round(roi2_end, 3), "s"),
-                         paste(round(roi3_end, 3), "s"),
-                         paste(round(roi4_end, 3), "s"),
-                         paste(round(roi5_end, 3), "s"),
-                         paste(round(roi6_end, 3), "s"),
-                         paste(round(roi7_end, 3), "s"),
-                         paste(round(data_end, 3), "s")),
-          Duration = c(paste(round(roi1_start - data_start, 3), "s"),
-                       paste(round(config$roi1_sens_ingress, 3), "s"),
-                       paste(round(config$roi2_inflow_passage, 3), "s"),
-                       paste(round(config$roi3_prenadir, 3), "s"),
-                       paste(round(config$roi4_nadir, 3), "s"),
-                       paste(round(config$roi5_postnadir, 3), "s"),
-                       paste(round(config$roi6_outflow_passage, 3), "s"),
-                       paste(round(config$roi7_sens_outgress, 3), "s"),
-                       paste(round(data_end - roi7_end, 3), "s")),
-          check.names = FALSE
-        )
-        
-        return(list(
-          table = roi_times_df,
-          boundaries = c(data_start, roi1_start, roi2_start, roi3_start, 
-                         roi4_start, roi5_start, roi6_start, roi7_start, roi7_end, data_end)
-        ))
+    # Extract ROI times from delineated file
+    extract_roi_times_from_delineated <- function(sensor_name) {
+      delineated_data <- read_sensor_data(output_dir(), sensor_name, "delineated")
+      if (is.null(delineated_data) || !"roi" %in% names(delineated_data)) {
+        return(NULL)
       }
       
-      return(NULL)
+      roi_levels <- c("roi1_sens_ingress", "roi2_inflow_passage", "roi3_prenadir", 
+                      "roi4_nadir", "roi5_postnadir", "roi6_outflow_passage", "roi7_sens_outgress")
+      
+      roi_times <- list()
+      
+      for (roi in roi_levels) {
+        roi_data <- delineated_data[delineated_data$roi == roi, ]
+        if (nrow(roi_data) > 0) {
+          roi_times[[roi]] <- list(
+            start = min(roi_data$time_s),
+            end = max(roi_data$time_s),
+            duration = max(roi_data$time_s) - min(roi_data$time_s)
+          )
+        }
+      }
+      
+      return(roi_times)
+    }
+    
+    # Populate input boxes from ROI data
+    populate_inputs_from_roi_data <- function(roi_data) {
+      if (is.null(roi_data)) {
+        # Clear all inputs and stored values
+        updateNumericInput(session, "roi1_start", value = NULL)
+        updateNumericInput(session, "roi2_start", value = NULL)
+        updateNumericInput(session, "roi3_start", value = NULL)
+        updateNumericInput(session, "roi4_duration", value = NULL)
+        updateNumericInput(session, "roi5_end", value = NULL)
+        updateNumericInput(session, "roi6_end", value = NULL)
+        updateNumericInput(session, "roi7_end", value = NULL)
+        
+        # Clear stored values
+        roi_values$roi1_start <- NULL
+        roi_values$roi2_start <- NULL
+        roi_values$roi3_start <- NULL
+        roi_values$roi4_duration <- NULL
+        roi_values$roi5_end <- NULL
+        roi_values$roi6_end <- NULL
+        roi_values$roi7_end <- NULL
+        roi_values$has_roi_data <- FALSE
+      } else {
+        # Populate from extracted data
+        updateNumericInput(session, "roi1_start", value = roi_data$roi1_sens_ingress$start)
+        updateNumericInput(session, "roi2_start", value = roi_data$roi2_inflow_passage$start)
+        updateNumericInput(session, "roi3_start", value = roi_data$roi3_prenadir$start)
+        updateNumericInput(session, "roi4_duration", value = roi_data$roi4_nadir$duration)
+        updateNumericInput(session, "roi5_end", value = roi_data$roi5_postnadir$end)
+        updateNumericInput(session, "roi6_end", value = roi_data$roi6_outflow_passage$end)
+        updateNumericInput(session, "roi7_end", value = roi_data$roi7_sens_outgress$end)
+        
+        # Store the values (for non-reactive access)
+        roi_values$roi1_start <- roi_data$roi1_sens_ingress$start
+        roi_values$roi2_start <- roi_data$roi2_inflow_passage$start
+        roi_values$roi3_start <- roi_data$roi3_prenadir$start
+        roi_values$roi4_duration <- roi_data$roi4_nadir$duration
+        roi_values$roi5_end <- roi_data$roi5_postnadir$end
+        roi_values$roi6_end <- roi_data$roi6_outflow_passage$end
+        roi_values$roi7_end <- roi_data$roi7_sens_outgress$end
+        roi_values$has_roi_data <- TRUE
+      }
+    }
+    
+    # Validate ROI inputs
+    validate_roi_inputs <- function() {
+      nadir <- nadir_info()
+      if (!nadir$available) {
+        return(list(valid = FALSE, message = "Nadir information not available"))
+      }
+      
+      # Get all input values
+      roi1_start <- input$roi1_start
+      roi2_start <- input$roi2_start
+      roi3_start <- input$roi3_start
+      roi4_duration <- input$roi4_duration
+      roi5_end <- input$roi5_end
+      roi6_end <- input$roi6_end
+      roi7_end <- input$roi7_end
+      
+      # Check for missing values
+      if (any(is.null(c(roi1_start, roi2_start, roi3_start, roi4_duration, roi5_end, roi6_end, roi7_end)))) {
+        return(list(valid = FALSE, message = "All ROI timing fields must be filled"))
+      }
+      
+      # Calculate ROI 4 boundaries
+      nadir_time <- nadir$time
+      roi4_start <- nadir_time - (roi4_duration / 2)
+      roi4_end <- nadir_time + (roi4_duration / 2)
+      
+      # Validate logical order
+      if (!(roi1_start < roi2_start && roi2_start < roi3_start && roi3_start < roi4_start &&
+            roi4_end < roi5_end && roi5_end < roi6_end && roi6_end < roi7_end)) {
+        return(list(valid = FALSE, message = "ROI times must be in logical order"))
+      }
+      
+      return(list(valid = TRUE))
+    }
+    
+    # ============================= #
+    # /// Initialization \\\ ####  
+    # ============================= # 
+    
+    # Initialize ROI inputs when sensor changes
+    observeEvent(sensor_selector$selected_sensor(), {
+      req(sensor_selector$selected_sensor())
+      
+      # Try to extract ROI times from delineated file
+      roi_data <- extract_roi_times_from_delineated(sensor_selector$selected_sensor())
+      
+      # Populate input boxes
+      populate_inputs_from_roi_data(roi_data)
+    })
+    
+    # ============================= #
+    # /// ROI Times Calculation \\\ ####  
+    # ============================= # 
+    
+    # Calculate ROI times based on stored values (NOT reactive to inputs)
+    roi_times <- reactive({
+      nadir <- nadir_info()
+      if (!nadir$available) return(NULL)
+      
+      # Only calculate if roi_values$has_roi_data is TRUE
+      if (!roi_values$has_roi_data) return(NULL)
+      
+      # Read from stored values (NOT from inputs - this breaks reactivity)
+      roi1_start <- roi_values$roi1_start
+      roi2_start <- roi_values$roi2_start
+      roi3_start <- roi_values$roi3_start
+      roi4_duration <- roi_values$roi4_duration
+      roi5_end <- roi_values$roi5_end
+      roi6_end <- roi_values$roi6_end
+      roi7_end <- roi_values$roi7_end
+      
+      # Check for missing values
+      if (any(is.null(c(roi1_start, roi2_start, roi3_start, roi4_duration, roi5_end, roi6_end, roi7_end)))) {
+        return(NULL)
+      }
+      
+      # Calculate ROI 4 boundaries (centered on nadir)
+      nadir_time <- nadir$time
+      roi4_start <- nadir_time - (roi4_duration / 2)
+      roi4_end <- nadir_time + (roi4_duration / 2)
+      
+      # Calculate other ROI boundaries
+      roi1_end <- roi2_start
+      roi2_end <- roi3_start
+      roi3_end <- roi4_start
+      roi5_start <- roi4_end
+      roi6_start <- roi5_end
+      roi7_start <- roi6_end
+      
+      # Get data start/end times
+      sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
+      if (is.null(sensor_data)) return(NULL)
+      
+      data_start <- min(sensor_data$time_s)
+      data_end <- max(sensor_data$time_s)
+      
+      # Create table
+      roi_times_df <- data.frame(
+        ROI = c("Sensor start trim", "ROI 1: Sensor ingress", "ROI 2: Inflow passage", 
+                "ROI 3: Pre-nadir", "ROI 4: Nadir", "ROI 5: Post-nadir", 
+                "ROI 6: Outflow passage", "ROI 7: Sensor outgress", "Sensor end trim"),
+        `Start time` = c(paste(round(data_start, 3), "s"),
+                         paste(round(roi1_start, 3), "s"),
+                         paste(round(roi2_start, 3), "s"),
+                         paste(round(roi3_start, 3), "s"),
+                         paste(round(roi4_start, 3), "s"),
+                         paste(round(roi5_start, 3), "s"),
+                         paste(round(roi6_start, 3), "s"),
+                         paste(round(roi7_start, 3), "s"),
+                         paste(round(roi7_end, 3), "s")),
+        `End Time` = c(paste(round(roi1_start, 3), "s"),
+                       paste(round(roi1_end, 3), "s"),
+                       paste(round(roi2_end, 3), "s"),
+                       paste(round(roi3_end, 3), "s"),
+                       paste(round(roi4_end, 3), "s"),
+                       paste(round(roi5_end, 3), "s"),
+                       paste(round(roi6_end, 3), "s"),
+                       paste(round(roi7_end, 3), "s"),
+                       paste(round(data_end, 3), "s")),
+        Duration = c(paste(round(roi1_start - data_start, 3), "s"),
+                     paste(round(roi1_end - roi1_start, 3), "s"),
+                     paste(round(roi2_end - roi2_start, 3), "s"),
+                     paste(round(roi3_end - roi3_start, 3), "s"),
+                     paste(round(roi4_duration, 3), "s"),
+                     paste(round(roi5_end - roi5_start, 3), "s"),
+                     paste(round(roi6_end - roi6_start, 3), "s"),
+                     paste(round(roi7_end - roi7_start, 3), "s"),
+                     paste(round(data_end - roi7_end, 3), "s")),
+        check.names = FALSE
+      )
+      
+      return(list(
+        table = roi_times_df,
+        boundaries = c(data_start, roi1_start, roi2_start, roi3_start, 
+                       roi4_start, roi5_start, roi6_start, roi7_start, roi7_end, data_end)
+      ))
     })
     
     # ============================= #
     # /// UI State management \\\ ####  
     # ============================= # 
     
-    # Load ROI configurations and update dropdown
-    roi_config <- configurationServer("roi_config",
-                                      output_dir = output_dir,
-                                      config_type = "roi",
-                                      sensor_name = reactive(sensor_selector$selected_sensor()),
-                                      auto_select_sensor_config = TRUE)
-    
-    
-    ## Normalized checkbox ####
-    
     # Enable/disable normalized checkbox based on sensor status  
     observe({
       req(sensor_selector$selected_sensor())
-      global_sensor_state$summary_updated  # Add this line
-      global_sensor_state$data_updated     # Add this line
+      global_sensor_state$summary_updated
+      global_sensor_state$data_updated
       
       status <- get_sensor_status(sensor_selector$selected_sensor(), output_dir())
       
@@ -341,16 +493,22 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    ## Button state management #####
-    
+    # Button state management
     observe({
       req(sensor_selector$selected_sensor())
       
       nadir <- nadir_info()
       status <- sensor_status()
       
+      # Check if user has entered values in input boxes
+      has_input_values <- !is.null(input$roi1_start) && !is.null(input$roi2_start) && 
+        !is.null(input$roi3_start) && !is.null(input$roi4_duration) &&
+        !is.null(input$roi5_end) && !is.null(input$roi6_end) && 
+        !is.null(input$roi7_end)
+      
       button_states <- list(
-        "create_delineated" = nadir$available && !status$delineated,
+        "update_roi" = has_input_values,  # Enable when user has entered values
+        "create_delineated" = nadir$available && has_input_values && roi_values$has_roi_data,  # Remove !status$delineated
         "start_over" = status$delineated,
         "trim_sensor" = status$delineated && !status$trimmed,
         "normalize_time" = status$delineated && status$trimmed && !status$normalized,
@@ -362,7 +520,22 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       manage_button_states(session, button_states)
     })
     
-    ## Update nadir button ####
+    # Update button text based on delineation status
+    observe({
+      req(sensor_selector$selected_sensor())
+      status <- sensor_status()
+      
+      if (status$delineated) {
+        updateActionButton(session, "create_delineated", label = "Re-apply delineation to sensor")
+        shinyjs::removeClass("create_delineated", "btn-success")
+        shinyjs::addClass("create_delineated", "btn-warning")
+      } else {
+        updateActionButton(session, "create_delineated", label = "Apply delineation to sensor")
+        shinyjs::removeClass("create_delineated", "btn-warning")
+        shinyjs::addClass("create_delineated", "btn-success")
+      }
+    })
+    
     # Update nadir button appearance based on edit mode
     observe({
       if (nadir_values$edit_mode) {
@@ -376,7 +549,23 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           shinyjs::addClass("nadir_btn", "btn-warning")
         }
       } else {
-        # Reset to initial state when not in edit mode
+        updateActionButton(session, "nadir_btn", label = "Select Pressure Nadir")
+        shinyjs::removeClass("nadir_btn", "btn-success")
+        shinyjs::addClass("nadir_btn", "btn-warning")
+      }
+    })
+    observe({
+      if (nadir_values$edit_mode) {
+        if (!is.null(nadir_values$selected_point)) {
+          updateActionButton(session, "nadir_btn", label = "Save Pressure Nadir")
+          shinyjs::removeClass("nadir_btn", "btn-warning")
+          shinyjs::addClass("nadir_btn", "btn-success")
+        } else {
+          updateActionButton(session, "nadir_btn", label = "Select Pressure Nadir")
+          shinyjs::removeClass("nadir_btn", "btn-success")
+          shinyjs::addClass("nadir_btn", "btn-warning")
+        }
+      } else {
         updateActionButton(session, "nadir_btn", label = "Select Pressure Nadir")
         shinyjs::removeClass("nadir_btn", "btn-success")
         shinyjs::addClass("nadir_btn", "btn-warning")
@@ -387,17 +576,229 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # /// Event handlers \\\ ####  
     # ============================= # 
     
-    ## Edit nadir ####
+    # Update ROI button
+    observeEvent(input$update_roi, {
+      validation <- validate_roi_inputs()
+      if (!validation$valid) {
+        showNotification(validation$message, type = "error")
+        return()
+      }
+      
+      # Copy input values to stored values (this triggers roi_times() update)
+      roi_values$roi1_start <- input$roi1_start
+      roi_values$roi2_start <- input$roi2_start
+      roi_values$roi3_start <- input$roi3_start
+      roi_values$roi4_duration <- input$roi4_duration
+      roi_values$roi5_end <- input$roi5_end
+      roi_values$roi6_end <- input$roi6_end
+      roi_values$roi7_end <- input$roi7_end
+      roi_values$has_roi_data <- TRUE
+      
+      showNotification("ROI plot and table updated", type = "message")
+    })
+    
+    # Apply delineation button
+    observeEvent(input$create_delineated, {
+      req(sensor_selector$selected_sensor(), roi_times())
+      
+      validation <- validate_roi_inputs()
+      if (!validation$valid) {
+        showNotification(validation$message, type = "error")
+        return()
+      }
+      
+      # Check if sensor is already delineated
+      status <- sensor_status()
+      
+      if (status$delineated) {
+        # Show confirmation dialog for re-applying
+        showModal(modalDialog(
+          title = "Re-apply Delineation",
+          paste("Sensor", sensor_selector$selected_sensor(), "is already delineated.", 
+                "This will overwrite the existing delineated file and reset trimming, normalization, and passage time calculations.", 
+                "Continue?"),
+          footer = tagList(
+            modalButton("Cancel"),
+            actionButton(ns("confirm_reapply_delineation"), "Re-apply", class = "btn-warning")
+          )
+        ))
+      } else {
+        # Apply delineation directly for new sensors
+        create_delineated_dataset()
+      }
+    })
+    
+    # Confirm re-apply delineation
+    observeEvent(input$confirm_reapply_delineation, {
+      removeModal()
+      create_delineated_dataset()
+    })
+    
+    # [Rest of event handlers remain the same: trim_sensor, start_over, normalize_time, passage_time, nadir editing...]
+    
+    # Trim sensor button
+    observeEvent(input$trim_sensor, {
+      req(sensor_selector$selected_sensor())
+      
+      sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
+      
+      if (is.null(sensor_data)) {
+        showNotification("Failed to read delineated dataset.", type = "error")
+        return()
+      }
+      
+      trimmed_data <- sensor_data[!sensor_data$roi %in% c("trim_start", "trim_end"), ]
+      
+      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
+      write.csv(trimmed_data, delineated_path, row.names = FALSE)
+      
+      success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), list(trimmed = "Y"))
+      
+      if (success) {
+        trigger_data_update()
+        trigger_summary_update()
+        showNotification("Sensor data trimmed successfully!", type = "message")
+      } else {
+        showNotification("Failed to update sensor index", type = "error")
+      }
+    })
+    
+    # Start over button
+    observeEvent(input$start_over, {
+      req(sensor_selector$selected_sensor())
+      
+      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
+      if (file.exists(delineated_path)) {
+        file.remove(delineated_path)
+      }
+      
+      success <- safe_update_sensor_index(
+        output_dir(), 
+        sensor_selector$selected_sensor(),
+        list(
+          delineated = "N",
+          trimmed = "N",
+          normalized = "N",
+          roi_config = "NA",
+          passage_times = "N",
+          passage_duration.mm.ss. = "NA",
+          ingress_nadir_duration.mm.ss. = "NA",
+          nadir_outgress_duration.mm.ss. = "NA"
+        )
+      )
+      
+      if (success) {
+        trigger_data_update()
+        trigger_summary_update()
+        showNotification("Reset to original sensor file", type = "message")
+      } else {
+        showNotification("Failed to reset sensor status", type = "error")
+      }
+    })
+    
+    # Normalize time series
+    observeEvent(input$normalize_time, {
+      req(sensor_selector$selected_sensor())
+      
+      tryCatch({
+        sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
+        
+        if (is.null(sensor_data)) {
+          showNotification("Failed to read delineated dataset", type = "error")
+          return()
+        }
+        
+        nadir <- nadir_info()
+        
+        start_time <- min(sensor_data$time_s)
+        end_time <- max(sensor_data$time_s)
+        mid_time <- nadir$time
+        
+        sensor_data <- sensor_data %>%
+          mutate(time_norm = case_when(
+            time_s <= start_time ~ 0,
+            time_s >= end_time ~ 1,
+            time_s > start_time & time_s < mid_time ~ (time_s - start_time) / (mid_time - start_time) * 0.5,
+            time_s >= mid_time & time_s <= end_time ~ 0.5 + (time_s - mid_time) / (end_time - mid_time) * 0.5
+          ))
+        
+        delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
+        write.csv(sensor_data, delineated_path, row.names = FALSE)
+        
+        success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), list(normalized = "Y"))
+        
+        if (success) {
+          trigger_data_update()
+          trigger_summary_update()
+          showNotification("Time series normalized successfully!", type = "message")
+        } else {
+          showNotification("Warning: Normalization completed but failed to update index", type = "warning")
+        }
+        
+      }, error = function(e) {
+        showNotification(paste("Error normalizing time series:", e$message), type = "error")
+      })
+    })
+    
+    # Calculate passage times
+    observeEvent(input$passage_time, {
+      req(sensor_selector$selected_sensor())
+      
+      tryCatch({
+        sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
+        
+        if (is.null(sensor_data)) {
+          showNotification("Failed to read delineated dataset", type = "error")
+          return()
+        }
+        
+        nadir <- nadir_info()
+        
+        first_time <- min(sensor_data$time_s)
+        last_time <- max(sensor_data$time_s)
+        nadir_time <- nadir$time
+        
+        passage_duration_s <- last_time - first_time
+        ingress_nadir_s <- nadir_time - first_time
+        nadir_outgress_s <- last_time - nadir_time
+        
+        format_mm_ss <- function(seconds) {
+          minutes <- floor(seconds / 60)
+          secs <- round(seconds %% 60)
+          sprintf("%02d:%02d", minutes, secs)
+        }
+        
+        success <- safe_update_sensor_index(
+          output_dir(), 
+          sensor_selector$selected_sensor(),
+          list(
+            passage_times = "Y",
+            passage_duration.mm.ss. = format_mm_ss(passage_duration_s),
+            ingress_nadir_duration.mm.ss. = format_mm_ss(ingress_nadir_s),
+            nadir_outgress_duration.mm.ss. = format_mm_ss(nadir_outgress_s)
+          )
+        )
+        
+        if (success) {
+          trigger_data_update()
+          trigger_summary_update()
+          showNotification("Passage times calculated successfully!", type = "message")
+        } else {
+          showNotification("Failed to update sensor index", type = "error")
+        }
+        
+      }, error = function(e) {
+        showNotification(paste("Error calculating passage times:", e$message), type = "error")
+      })
+    })
     
     # Edit nadir button
     observeEvent(input$nadir_btn, {
       if (!nadir_values$edit_mode) {
-        # Start edit mode
         nadir_values$edit_mode <- TRUE
         nadir_values$selected_point <- NULL
         nadir_values$baseline_click <- event_data("plotly_click", source = "roi_nadir_plot")
       } else if (!is.null(nadir_values$selected_point)) {
-        # Save nadir
         success <- safe_update_sensor_index(
           output_dir(), 
           sensor_selector$selected_sensor(),
@@ -408,8 +809,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         )
         
         if (success) {
-          trigger_data_update()     # Use global trigger
-          trigger_summary_update()  # Use global trigger
+          trigger_data_update()
+          trigger_summary_update()
           nadir_values$edit_mode <- FALSE
           nadir_values$selected_point <- NULL
           showNotification("Nadir updated successfully!", type = "message")
@@ -439,222 +840,25 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    ## Delineate and trim ####
-    
-    observeEvent(input$create_delineated, {
-      req(sensor_selector$selected_sensor(), roi_times())
-      
-      create_delineated_dataset()
-    })
-    
-    # Trim sensor button
-    observeEvent(input$trim_sensor, {
-      req(sensor_selector$selected_sensor())
-      
-      # Read delineated data using shared function
-      sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
-      
-      if (is.null(sensor_data)) {
-        showNotification("Failed to read delineated dataset.", type = "error")
-        return()
-      }
-      
-      # Perform trimming
-      trimmed_data <- sensor_data[!sensor_data$roi %in% c("trim_start", "trim_end"), ]
-      
-      # Save over existing delineated file
-      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
-      write.csv(trimmed_data, delineated_path, row.names = FALSE)
-      
-      # Update sensor index using shared function
-      success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), list(trimmed = "Y"))
-      
-      if (success) {
-        trigger_data_update()     # Use global trigger
-        trigger_summary_update()  # Use global trigger
-        
-        showNotification("Sensor data trimmed successfully!", type = "message")
-      } else {
-        showNotification("Failed to update sensor index", type = "error")
-      }
-    })
-    
-    ## Start over ####
-    
-    observeEvent(input$start_over, {
-      req(sensor_selector$selected_sensor())
-      
-      # Remove delineated file
-      delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
-      if (file.exists(delineated_path)) {
-        file.remove(delineated_path)
-      }
-      
-      # Reset flags in sensor index using shared function
-      success <- safe_update_sensor_index(
-        output_dir(), 
-        sensor_selector$selected_sensor(),
-        list(
-          delineated = "N",
-          trimmed = "N",
-          normalized = "N",
-          roi_config = "NA",
-          passage_times = "N",
-          passage_duration.mm.ss. = "NA",
-          ingress_nadir_duration.mm.ss. = "NA",
-          nadir_outgress_duration.mm.ss. = "NA"
-        )
-      )
-      
-      if (success) {
-        trigger_data_update()     # Use global trigger
-        trigger_summary_update()  # Use global trigger
-        
-        showNotification("Reset to original sensor file", type = "message")
-      } else {
-        showNotification("Failed to reset sensor status", type = "error")
-      }
-    })
-    
-    ## Normalize time series ####
-    
-    observeEvent(input$normalize_time, {
-      req(sensor_selector$selected_sensor())
-      
-      # Perform normalization
-      tryCatch({
-        # Read delineated data
-        sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
-        
-        if (is.null(sensor_data)) {
-          showNotification("Failed to read delineated dataset", type = "error")
-          return()
-        }
-        
-        # Get nadir info
-        nadir <- nadir_info()
-        
-        # Calculate normalization parameters
-        start_time <- min(sensor_data$time_s)
-        end_time <- max(sensor_data$time_s)
-        mid_time <- nadir$time
-        
-        # Create normalized time column
-        sensor_data <- sensor_data %>%
-          mutate(time_norm = case_when(
-            time_s <= start_time ~ 0,
-            time_s >= end_time ~ 1,
-            time_s > start_time & time_s < mid_time ~ (time_s - start_time) / (mid_time - start_time) * 0.5,
-            time_s >= mid_time & time_s <= end_time ~ 0.5 + (time_s - mid_time) / (end_time - mid_time) * 0.5
-          ))
-        
-        # Save updated delineated file
-        delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
-        write.csv(sensor_data, delineated_path, row.names = FALSE)
-        
-        # Update sensor index
-        success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), list(normalized = "Y"))
-        
-        if (success) {
-          trigger_data_update()     # Use global trigger
-          trigger_summary_update()  # Use global trigger
-          
-          showNotification("Time series normalized successfully!", type = "message")
-        } else {
-          showNotification("Warning: Normalization completed but failed to update index", type = "warning")
-        }
-        
-      }, error = function(e) {
-        showNotification(paste("Error normalizing time series:", e$message), type = "error")
-      })
-    })
-    
-    ## Calculate passage times ####
-    
-    observeEvent(input$passage_time, {
-      req(sensor_selector$selected_sensor())
-      
-      # Calculate passage times
-      tryCatch({
-        # Read delineated data
-        sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
-        
-        if (is.null(sensor_data)) {
-          showNotification("Failed to read delineated dataset", type = "error")
-          return()
-        }
-        
-        # Get nadir info
-        nadir <- nadir_info()
-        
-        # Calculate times in seconds
-        first_time <- min(sensor_data$time_s)
-        last_time <- max(sensor_data$time_s)
-        nadir_time <- nadir$time
-        
-        # Calculate durations
-        passage_duration_s <- last_time - first_time
-        ingress_nadir_s <- nadir_time - first_time
-        nadir_outgress_s <- last_time - nadir_time
-        
-        # Convert to mm:ss format
-        format_mm_ss <- function(seconds) {
-          minutes <- floor(seconds / 60)
-          secs <- round(seconds %% 60)
-          sprintf("%02d:%02d", minutes, secs)
-        }
-        
-        # Update sensor index
-        success <- safe_update_sensor_index(
-          output_dir(), 
-          sensor_selector$selected_sensor(),
-          list(
-            passage_times = "Y",
-            passage_duration.mm.ss. = format_mm_ss(passage_duration_s),
-            ingress_nadir_duration.mm.ss. = format_mm_ss(ingress_nadir_s),
-            nadir_outgress_duration.mm.ss. = format_mm_ss(nadir_outgress_s)
-          )
-        )
-        
-        if (success) {
-          trigger_data_update()     # Use global trigger
-          trigger_summary_update()  # Use global trigger
-          
-          showNotification("Passage times calculated successfully!", type = "message")
-        } else {
-          showNotification("Failed to update sensor index", type = "error")
-        }
-        
-      }, error = function(e) {
-        showNotification(paste("Error calculating passage times:", e$message), type = "error")
-      })
-    })
-    
     # ============================= #
-    # /// Helper functions \\\ ####  
+    # /// Helper functions (continued) \\\ ####  
     # ============================= # 
-    
-    ## Create delineated data ####
     
     # Function to create delineated dataset
     create_delineated_dataset <- function() {
       tryCatch({
-        # Read original data using shared function
         sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min")
         
-        # Create delineated folder - always check/create fresh
         delineated_dir <- file.path(output_dir(), "csv", "delineated")
         if (!dir.exists(delineated_dir)) {
           dir.create(delineated_dir, showWarnings = FALSE, recursive = TRUE)
         }
         
-        # Verify directory was created
         if (!dir.exists(delineated_dir)) {
           showNotification("Failed to create delineated directory", type = "error")
           return()
         }
         
-        # Add ROI column
         times <- roi_times()
         if (is.null(times)) {
           showNotification("ROI times not available", type = "error")
@@ -670,26 +874,23 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                           "roi6_outflow_passage", "roi7_sens_outgress", "trim_end"),
                                include.lowest = TRUE, right = FALSE)
         
-        # Save delineated file
         output_file <- file.path(delineated_dir, paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
         write.csv(sensor_data, output_file, row.names = FALSE)
         
-        # Verify file was created
         if (!file.exists(output_file)) {
           showNotification("Failed to create delineated file", type = "error")
           return()
         }
         
-        # Update sensor index using shared function
         success <- safe_update_sensor_index(
           output_dir(),
           sensor_selector$selected_sensor(),
           list(
             delineated = "Y",
-            roi_config = roi_config$current_config()$label,
-            trimmed = "N",
-            normalized = "N",
-            passage_times = "N",
+            roi_config = "Manual",  # No longer using config files
+            trimmed = "N",          # Reset trimming when re-applying
+            normalized = "N",       # Reset normalization when re-applying
+            passage_times = "N",    # Reset passage times when re-applying
             passage_duration.mm.ss. = "NA",
             ingress_nadir_duration.mm.ss. = "NA",
             nadir_outgress_duration.mm.ss. = "NA"
@@ -697,10 +898,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         )
         
         if (success) {
-          trigger_data_update()     # Use global trigger
-          trigger_summary_update()  # Use global trigger
-          
-          showNotification("Delineated dataset created successfully!", type = "message")
+          trigger_data_update()
+          trigger_summary_update()
+          showNotification("Delineation applied successfully!", type = "message")
         } else {
           showNotification("Warning: Dataset created but failed to update index", type = "warning")
         }
@@ -715,8 +915,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # /// Output render \\\ ####  
     # ============================= #    
     
-    # Display current nadir####
-    
+    # Display current nadir
     output$current_nadir_display <- renderText({
       nadir <- nadir_info()
       if (nadir$available) {
@@ -724,7 +923,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    # Delineation, normalization, passage status ####
+    # Status displays
     status_controls <- statusModuleServer("status_display",
                                           sensor_name_reactive = reactive(sensor_selector$selected_sensor()),
                                           output_dir_reactive = reactive(output_dir()),
@@ -732,8 +931,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                           invalidation_trigger = reactive(global_sensor_state$summary_updated),
                                           individual_outputs = TRUE)
     
-    # Nadir editing status display ####
-    
+    # Nadir editing status display
     output$nadir_status <- renderText({
       if (nadir_values$edit_mode) {
         if (!is.null(nadir_values$selected_point)) {
@@ -747,7 +945,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    # Display ROI table ####
+    # Display ROI table
     output$roi_table <- DT::renderDataTable({
       times <- roi_times()
       if (!is.null(times)) {
@@ -768,7 +966,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    # Normalize status output ####
+    # Status outputs
     output$normalize_status <- renderText({
       req(sensor_selector$selected_sensor())
       status <- sensor_status()
@@ -780,7 +978,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    # Passage status output####
     output$passage_status <- renderText({
       req(sensor_selector$selected_sensor())
       status <- sensor_status()
@@ -792,9 +989,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    # Passage duration output #### 
-    
-    # Helper function to generate duration text
+    # Duration text outputs
     generate_duration_text <- function(duration_col, prefix_text) {
       req(sensor_selector$selected_sensor())
       global_sensor_state$summary_updated
@@ -828,8 +1023,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       generate_duration_text("nadir_outgress_duration.mm.ss.", "Nadir to sensor outgress")
     })
     
-    # Create main plot #####
-    # Setup the base plot using plot module
+    # Create main plot
     plot_controls <- plotModuleServer("roi_plot", 
                                       sensor_data = selected_sensor_data,
                                       sensor_name = reactive(sensor_selector$selected_sensor()),
@@ -855,11 +1049,10 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                         }
                                       }),
                                       show_roi_markers = reactive({
-                                        # Show ROI markers when delineated and trimmed
-                                        status <- sensor_status()
-                                        status$delineated && status$trimmed
+                                        # Show ROI markers when we have ROI data
+                                        !is.null(roi_times())
                                       }),
-                                      title_prefix = "ROI Delineated",
+                                      title_prefix = "ROI Delineation",
                                       plot_source = "roi_nadir_plot"
     )
     
