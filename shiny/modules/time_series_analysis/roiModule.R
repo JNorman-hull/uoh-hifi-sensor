@@ -221,16 +221,16 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Calculate ROI times based on configuration and nadir
     roi_times <- reactive({
-      req(sensor_selector$selected_sensor(), roi_values$current_config)
+      req(sensor_selector$selected_sensor())
       global_sensor_state$summary_updated 
-      roi_config$selected_config_name()
       
       nadir <- nadir_info()
+      config <- roi_config$current_config()  # Direct dependency
       
-      if (!nadir$available) return(NULL)
+      if (!nadir$available || is.null(config)) return(NULL)
       
       nadir_time <- nadir$time
-      config <- roi_values$current_config
+      #config <- roi_values$current_config
       
       # Calculate ROI boundaries based on nadir time
       roi4_start <- nadir_time - (config$roi4_nadir / 2)
@@ -315,10 +315,6 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                       sensor_name = reactive(sensor_selector$selected_sensor()),
                                       auto_select_sensor_config = TRUE)
     
-    # Use the config
-    observe({
-      roi_values$current_config <- roi_config$current_config()
-    })
     
     ## Normalized checkbox ####
     
@@ -446,7 +442,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     ## Delineate and trim ####
     
     observeEvent(input$create_delineated, {
-      req(sensor_selector$selected_sensor(), roi_times(), roi_values$current_config)
+      req(sensor_selector$selected_sensor(), roi_times())
       
       create_delineated_dataset()
     })
@@ -690,7 +686,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           sensor_selector$selected_sensor(),
           list(
             delineated = "Y",
-            roi_config = roi_values$current_config$label,
+            roi_config = roi_config$current_config()$label,
             trimmed = "N",
             normalized = "N",
             passage_times = "N",
