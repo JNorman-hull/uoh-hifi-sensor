@@ -126,7 +126,19 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
       if (length(ids) > 0) {
         choices <- c(choices, setNames(ids, ids))
       }
-      updateSelectInput(session, "deployment_filter", choices = choices)
+      
+      # Determine selection: use session state if available and valid, otherwise default
+      selected_value <- if (!is.null(session_state) && 
+                            !is.null(session_state$deployment_filter) && 
+                            session_state$deployment_filter %in% names(choices)) {
+        session_state$deployment_filter
+      } else {
+        "all"
+      }
+      
+      updateSelectInput(session, "deployment_filter", 
+                        choices = choices, 
+                        selected = selected_value)
     })
     
     # Get available treatments based on deployment filter
@@ -157,7 +169,19 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
       if (length(treatments) > 0) {
         choices <- c(choices, setNames(treatments, treatments))
       }
-      updateSelectInput(session, "treatment_filter", choices = choices)
+      
+      # Determine selection: use session state if available and valid
+      selected_value <- if (!is.null(session_state) && 
+                            !is.null(session_state$treatment_filter) && 
+                            session_state$treatment_filter %in% names(choices)) {
+        session_state$treatment_filter
+      } else {
+        "all"
+      }
+      
+      updateSelectInput(session, "treatment_filter", 
+                        choices = choices, 
+                        selected = selected_value)
       
       # Enable/disable based on deployment selection
       if (!is.null(input$deployment_filter) && length(input$deployment_filter) > 0) {
@@ -202,7 +226,19 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
       if (length(runs) > 0) {
         choices <- c(choices, setNames(as.character(runs), as.character(runs)))
       }
-      updateSelectInput(session, "run_filter", choices = choices)
+      
+      # Determine selection: use session state if available and valid
+      selected_value <- if (!is.null(session_state) && 
+                            !is.null(session_state$run_filter) && 
+                            session_state$run_filter %in% names(choices)) {
+        session_state$run_filter
+      } else {
+        "all"
+      }
+      
+      updateSelectInput(session, "run_filter", 
+                        choices = choices, 
+                        selected = selected_value)
       
       # Enable/disable based on treatment selection
       if (!is.null(input$treatment_filter) && length(input$treatment_filter) > 0) {
