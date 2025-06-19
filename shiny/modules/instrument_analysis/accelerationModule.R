@@ -1,98 +1,3 @@
-#Acceleration peak finding functions
-# Follow all existing rules for global state management (always updating global state), safe reading/writing index file and instrument file
-# Manage button states, update generated text
-
-#function: get_peak_params
-# Steps: 
-# Retrieve the config values loaded from the configuration loader: height, prominence, interpeak
-
-
-# function: find_acceleration_peak
-# For selected sensor find acceleration peaks in the 'higacc_mag_g' of the _delineated file
-# Steps: use params from get_peak_params to detect acceleration peaks in the acceleration time series
-# takes the parameters height (e.g., the threshold value of 95g), prominence (e.g., 25g, must rise by 25g above local baseline, scan left and right), interpeak distance (e.g.,  0.002, 4 rows (2 milliseconds). 
-# After the peaks are found (peak_list), they are sorted by time series sequentially and apply a prominence filter to ensure peaks satisfy prominence criteria,
-# neighboring peaks that don't meet interpeak distance removed by evaluation the distance and keeping the maximum peak
-# the peak are listed  as acc_peak_1.time., acc_peak_1.g.
-
-
-#function: evaluate_peak_type
-# Classify each peak as collision or shear based on duration above 70% threshold
-# Compute peak duration: For each event, compute the duration above 70% of the peak amplitude
-#Classify collision vs shear: Compare the duration to 0.0075 s: shorter means collision, longer means shear
-# we run a second filter to determine peak type for each valid peak by compute threshold =  0.7  x peak amplitude, 
-# measure duration above threshold, classify collision if duration < 0.0075s. (e.g., 16 rows), Shear if duration ≥ 0.0075s.
-
-
-#function: generate_peak_text
-# Peak text shows number of peaks found and lists each peak value, time and type
-# Use placeholder textoutputs in UI
-
-#In summary (with example values from config):
-# we 
-# Identify candidate peaks by scanning higacc_mag_g and locate maxima that exceed a height (95).
-# To validate peak candidate, we ensure it is prominent from local acceleration by scanning left and right and saying it must be at least 25g above local
-# To avoid over-counting, we require each peak to be separated by interpeak distance of 0.002 (e.g., 2 milliseconds)
-# For each peak now available, we compute the duration above 70% of the peak amplitude
-# We classify duration of < 0.0075 as collision, and > 0.0075 as shear
-
-# rough example function, do not copy, but it gives you an idea of what we're aiming for 
-# find_acceleration_peaks <- function(accel, timestamps, height = 95, prominence = 25, interpeak_samples = 4, duration_threshold_samples = 15) {
-#   stopifnot(length(accel) == length(timestamps))
-#   
-#   # Step 1: Identify candidate peaks (local maxima above `height`)
-#   peaks <- which(diff(sign(diff(accel))) == -2) + 1  # local maxima
-#   peaks <- peaks[accel[peaks] >= height]  # apply height filter
-#   
-#   # Step 2: Apply prominence filter
-#   valid_peaks <- peaks[
-#     sapply(peaks, function(p) {
-#       left_min <- min(accel[max(1, p - interpeak_samples):p])
-#       right_min <- min(accel[p:min(length(accel), p + interpeak_samples)])
-#       peak_val <- accel[p]
-#       (peak_val - max(left_min, right_min)) >= prominence
-#     })
-#   ]
-#   
-#   # Step 3: Enforce inter-peak distance by removing close neighbors (keep highest peak in neighborhood)
-#   if (length(valid_peaks) > 1) {
-#     to_keep <- logical(length(valid_peaks))
-#     sorted_peaks <- valid_peaks[order(valid_peaks)]
-#     i <- 1
-#     while (i <= length(sorted_peaks)) {
-#       p <- sorted_peaks[i]
-#       window <- which((sorted_peaks > p) & (sorted_peaks <= p + interpeak_samples))
-#       close_group <- c(i, window)
-#       best_peak <- sorted_peaks[close_group][which.max(accel[sorted_peaks[close_group]])]
-#       to_keep[which(sorted_peaks == best_peak)] <- TRUE
-#       i <- max(close_group) + 1
-#     }
-#     valid_peaks <- sorted_peaks[to_keep]
-#   }
-#   
-#   # Step 4: Classify each peak as collision or shear based on duration above 70% threshold
-#   peak_results <- lapply(valid_peaks, function(p) {
-#     peak_val <- accel[p]
-#     threshold <- 0.7 * peak_val
-#     
-#     # walk left and right until accel drops below threshold
-#     left <- p
-#     while (left > 1 && accel[left] >= threshold) left <- left - 1
-#     right <- p
-#     while (right < length(accel) && accel[right] >= threshold) right <- right + 1
-#     
-#     duration_samples <- right - left
-#     peak_type <- if (duration_samples < duration_threshold_samples) "collision" else "shear"
-#     
-#     list(
-#       peak_time = timestamps[p],
-#       peak = peak_val,
-#       peak_type = peak_type
-#     )
-#   })
-#   
-#   do.call(rbind, lapply(peak_results, as.data.frame))
-# }
 
 accelerationUI <- function(id) {
   ns <- NS(id)
@@ -592,10 +497,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
       # Convert time-based parameters to samples
       interpeak_samples <- round(params$interpeak * fs)
       
-      # Use collision_threshold to determine duration classification
-      duration_threshold_samples <- params$collision_threshold
-      
-      # Step 1: Find local maxima above height threshold
+       # Step 1: Find local maxima above height threshold
       if (length(accel) < 3) return(data.frame())
       
       # Find local maxima
@@ -652,7 +554,8 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
         while (right < length(accel) && accel[right] >= threshold) right <- right + 1
         
         duration_samples <- right - left
-        peak_type <- if (duration_samples < duration_threshold_samples) "collision" else "shear"
+        # If duration is less than 0.0075 (15 rows at 2000hz), then collision, if not, then shear
+        peak_type <- if (duration_samples < 15) "collision" else "shear"
         
         tibble(
           peak_number = i,

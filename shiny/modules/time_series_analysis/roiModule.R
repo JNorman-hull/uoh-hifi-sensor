@@ -284,11 +284,16 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
                                       sensor_name = reactive(sensor_selector$selected_sensor()),
                                       auto_select_sensor_config = TRUE)
     
-    # Store current config
+
     # Store current config
     observe({
-      roi_values$current_config <- roi_config$current_config()
-      roi_values$sliders_changed <- FALSE
+      status <- sensor_status()
+      
+      # Only update config for non-delineated sensors
+      if (!status$delineated) {
+        roi_values$current_config <- roi_config$current_config()
+        roi_values$sliders_changed <- FALSE
+      }
     })
     
     # Update slider ranges when sensor changes
@@ -699,6 +704,18 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     # ============================= #
     # /// UI State Management \\\ ####  
     # ============================= #
+    # Disable config dropdown for delineated sensors
+    observe({
+      req(sensor_selector$selected_sensor())
+      
+      status <- sensor_status()
+      
+      if (status$delineated) {
+        shinyjs::disable("roi_config-config_choice")
+      } else {
+        shinyjs::enable("roi_config-config_choice")
+      }
+    })
     
     # Enable/disable normalized checkbox based on sensor status  
     observe({
