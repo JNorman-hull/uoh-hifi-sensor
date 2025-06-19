@@ -544,6 +544,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       # Only run after initial setup
       req(roi_values$baseline_config, sensor_selector$selected_sensor())
       
+      req(!is.na(input$roi4_duration))
+      
       # Get current values
       current_values <- reactiveValuesToList(input)[c(
         "roi1_start", "roi2_start", "roi3_start",
@@ -587,6 +589,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     current_roi_boundaries <- reactive({
       req(input$roi1_start, input$roi2_start, input$roi3_start, 
           input$roi5_end, input$roi6_end, input$roi7_end, input$roi4_duration)
+      
+      req(!is.na(input$roi4_duration))
       
       nadir <- nadir_info()
       if (!nadir$available) return(NULL)
@@ -633,6 +637,8 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     roi_table_data <- reactive({
       boundaries <- current_roi_boundaries_debounced()
       if (is.null(boundaries)) return(NULL)
+      
+      req(!is.na(input$roi4_duration))
       
       nadir <- nadir_info()
       if (!nadir$available) return(NULL)
