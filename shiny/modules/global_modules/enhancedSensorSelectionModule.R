@@ -433,52 +433,55 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
     # Update mark_sensor_bad checkbox when sensor changes
     observe({
       req(input$sensor_selection)
-      status <- sensor_status()
       
-      # Update expected value and current sensor tracking
-      values$current_sensor <- input$sensor_selection
-      values$expected_checkbox_value <- status$bad_sens
-      
-      # Update checkbox to match sensor's actual status
-      updateCheckboxInput(session, "mark_sensor_bad", value = status$bad_sens)
+      # Use isolate to prevent reactive dependencies
+      isolate({
+        status <- sensor_status()
+        
+        # Only update if this is actually a sensor change
+        if (values$current_sensor != input$sensor_selection) {
+          values$current_sensor <- input$sensor_selection
+          values$expected_checkbox_value <- status$bad_sens
+          
+          # Update checkbox to match sensor's actual status
+          updateCheckboxInput(session, "mark_sensor_bad", value = status$bad_sens)
+        }
+      })
     })
     
     # Handle marking sensor as bad/good (only when user deliberately changes it)
     observeEvent(input$mark_sensor_bad, {
       req(input$sensor_selection)
       
-      # Only trigger if the checkbox value differs from what we expect for this sensor
-      # (i.e., user deliberately changed it, not just switching sensors)
-      status <- sensor_status()
-      if (input$mark_sensor_bad == status$bad_sens) {
-        # Checkbox matches current sensor status - this is just a sensor switch, not a user change
-        return()
-      }
+      # Use isolate to get current status without creating reactive dependency
+      current_status <- isolate(sensor_status())
       
-      new_status <- if (input$mark_sensor_bad) "Y" else "N"
-      
-      success <- safe_update_sensor_index(
-        output_dir(), 
-        input$sensor_selection,
-        list(bad_sens = new_status)
-      )
-      
-      if (success) {
-        # Remove: values$index_updated <- values$index_updated + 1
-        trigger_summary_update()  # Use global trigger only
+      # Only proceed if this appears to be a user change, not programmatic
+      if (is.null(values$expected_checkbox_value) || 
+          input$mark_sensor_bad != values$expected_checkbox_value) {
         
-        # Update expected value
-        values$expected_checkbox_value <- input$mark_sensor_bad
+        new_status <- if (input$mark_sensor_bad) "Y" else "N"
         
-        status_text <- if (input$mark_sensor_bad) "bad" else "good"
-        showNotification(
-          paste("Sensor", input$sensor_selection, "marked as", status_text), 
-          type = "message"
+        success <- safe_update_sensor_index(
+          output_dir(), 
+          input$sensor_selection,
+          list(bad_sens = new_status)
         )
-      } else {
-        showNotification("Failed to update sensor status", type = "error")
-        # Revert checkbox if update failed
-        updateCheckboxInput(session, "mark_sensor_bad", value = !input$mark_sensor_bad)
+        
+        if (success) {
+          trigger_summary_update()
+          values$expected_checkbox_value <- input$mark_sensor_bad
+          
+          status_text <- if (input$mark_sensor_bad) "bad" else "good"
+          showNotification(
+            paste("Sensor", input$sensor_selection, "marked as", status_text), 
+            type = "message"
+          )
+        } else {
+          showNotification("Failed to update sensor status", type = "error")
+          # Revert checkbox if update failed
+          updateCheckboxInput(session, "mark_sensor_bad", value = !input$mark_sensor_bad)
+        }
       }
     }, ignoreInit = TRUE)
     
