@@ -241,17 +241,20 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
     
     # Read selected sensor data (with preference for delineated data)
     selected_sensor_data <- reactive({
-      req(sensor_selector$selected_sensor())
+      sensor_name <- sensor_selector$selected_sensor()
+      req(sensor_name, nzchar(sensor_name))  # ← Ensure sensor name is valid
+      
       global_sensor_state$data_updated
       
       # Check for delineated file first
-      delineated_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
+      delineated_data <- read_sensor_data(output_dir(), sensor_name, "delineated")
       if (!is.null(delineated_data)) {
         return(delineated_data)
       }
       
-      # Fall back to regular minimal data
-      return(read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "min"))
+      min_data <- read_sensor_data(output_dir(), sensor_name, "min") 
+      req(min_data)  # ← Ensure we actually have data before returning
+      return(min_data)
     })
     
     # ============================= #
@@ -511,12 +514,12 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       
       status <- get_sensor_status(sensor_selector$selected_sensor(), output_dir())
       
-      if (status$normalized) {
-        shinyjs::enable(paste0("roi_plot-show_normalized"))
-      } else {
-        shinyjs::disable(paste0("roi_plot-show_normalized"))
-        updateCheckboxInput(session, "roi_plot-show_normalized", value = FALSE)
-      }
+        if (status$normalized) {
+          shinyjs::enable(paste0("roi_plot-show_normalized"))
+        } else {
+          shinyjs::disable(paste0("roi_plot-show_normalized"))
+          updateCheckboxInput(session, "roi_plot-show_normalized", value = FALSE)
+        }
     })
     
     # Auto-uncheck nadir when normalized is checked

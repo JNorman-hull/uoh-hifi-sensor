@@ -673,7 +673,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
           if (nrow(peak_results) > 0) {
             # Add individual peak data (only for overall ROI to avoid duplication)
             if (roi == "overall") {
-              for (i in seq_len(min(6, nrow(peak_results)))) {  # Limit to 6 peaks
+              for (i in seq_len(nrow(peak_results))) {
                 peak <- peak_results[i, ]
                 updates[[paste0("acc_peak_", i, ".time.")]] <- peak$peak_time
                 updates[[paste0("acc_peak_", i, ".g.")]] <- peak$peak_value

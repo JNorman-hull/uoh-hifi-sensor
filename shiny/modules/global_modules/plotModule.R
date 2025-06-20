@@ -263,6 +263,9 @@ plotModuleServer <- function(id,
       data <- sensor_data()
       req(data)
       
+      nadir <- nadir_info()
+      
+      boundaries <- roi_boundaries()
       # Get current settings
       sensor_vars <- get_sensor_variables()
       current_left_var <- left_var()
