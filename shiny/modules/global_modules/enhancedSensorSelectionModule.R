@@ -438,8 +438,8 @@ enhancedSensorSelectionServer <- function(id, output_dir, processing_complete = 
       isolate({
         status <- sensor_status()
         
-        # Only update if this is actually a sensor change
-        if (values$current_sensor != input$sensor_selection) {
+        # Only update if this is actually a sensor change (handle NULL case)
+        if (is.null(values$current_sensor) || values$current_sensor != input$sensor_selection) {
           values$current_sensor <- input$sensor_selection
           values$expected_checkbox_value <- status$bad_sens
           
