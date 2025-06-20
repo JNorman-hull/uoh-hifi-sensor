@@ -297,13 +297,14 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         updateNumericInput(session, "roi7_end", value = NULL)
         
         # Clear stored values (defaults will be stored when user clicks "Update")
-        roi_values$roi1_start <- NULL
-        roi_values$roi2_start <- NULL
-        roi_values$roi3_duration <- NULL
-        roi_values$roi4_duration <- NULL
-        roi_values$roi5_duration <- NULL
-        roi_values$roi6_end <- NULL
-        roi_values$roi7_end <- NULL
+        # roi_values$roi1_start <- NULL
+        # roi_values$roi2_start <- NULL
+        # roi_values$roi3_duration <- NULL
+        # roi_values$roi4_duration <- NULL
+        # roi_values$roi5_duration <- NULL
+        # roi_values$roi6_end <- NULL
+        # roi_values$roi7_end <- NULL
+        # roi_values$has_roi_data <- FALSE
         roi_values$has_roi_data <- FALSE
       } else {
         # Populate from extracted data with rounding
@@ -323,7 +324,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         roi_values$roi5_duration <- roi_data$roi5_postnadir$duration
         roi_values$roi6_end <- roi_data$roi6_outflow_passage$end
         roi_values$roi7_end <- roi_data$roi7_sens_outgress$end
-        roi_values$has_roi_data <- TRUE
+        #roi_values$has_roi_data <- TRUE
       }
     }
     
