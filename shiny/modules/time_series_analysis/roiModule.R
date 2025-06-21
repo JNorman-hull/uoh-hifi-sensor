@@ -138,12 +138,12 @@ roiSidebarUI <- function(id) {
             numericInput(ns("roi7_end"), "Data end (ROI 7 End (s)):", 
                          value = NULL, step = 0.001, width = "100%")),
         
-        actionButton(ns("update_roi"), "Update plot and table", class = "btn-primary btn-block"),
+        actionButton(ns("update_roi"), "Build ROI and update plot", class = "btn-primary btn-block"),
         
         hr(),
         
         h4("Apply Delineation"),
-        actionButton(ns("create_delineated"), "Apply delineation and trim", class = "btn-success btn-block"),
+        actionButton(ns("create_delineated"), "Apply delineation, trim and normalize", class = "btn-success btn-block"),
         actionButton(ns("start_over"), "Start Over", class = "btn-danger btn-block"),
         
         br(),
@@ -153,16 +153,6 @@ roiSidebarUI <- function(id) {
         actionButton(ns("nadir_btn"), "Modify Pressure Nadir", class = "btn-warning btn-block"),
         actionButton(ns("cancel_nadir_btn"), "Cancel", class = "btn-danger btn-block"),
         textOutput(ns("nadir_status")),
-        
-        hr(), h4("Time normalization"),
-        actionButton(ns("normalize_time"), "Normalize time series", class = "btn-primary btn-block"),
-        textOutput(ns("normalize_status")),
-        
-        hr(), h4("Passage time calculation"),
-        actionButton(ns("passage_time"), "Calculate passage times", class = "btn-primary btn-block"),
-        textOutput(ns("passage_status")),
-        
-        hr(),
         
         h4("Plot controls"),
         plotSidebarUI(ns("roi_plot"), 
@@ -686,99 +676,7 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
       }
     })
     
-    # Normalize time series
-    observeEvent(input$normalize_time, {
-      req(sensor_selector$selected_sensor())
-      
-      tryCatch({
-        sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
-        
-        if (is.null(sensor_data)) {
-          showNotification("Failed to read delineated dataset", type = "error")
-          return()
-        }
-        
-        nadir <- nadir_info()
-        
-        start_time <- min(sensor_data$time_s)
-        end_time <- max(sensor_data$time_s)
-        mid_time <- nadir$time
-        
-        sensor_data <- sensor_data %>%
-          mutate(time_norm = case_when(
-            time_s <= start_time ~ 0,
-            time_s >= end_time ~ 1,
-            time_s > start_time & time_s < mid_time ~ (time_s - start_time) / (mid_time - start_time) * 0.5,
-            time_s >= mid_time & time_s <= end_time ~ 0.5 + (time_s - mid_time) / (end_time - mid_time) * 0.5
-          ))
-        
-        delineated_path <- file.path(output_dir(), "csv", "delineated", paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
-        write.csv(sensor_data, delineated_path, row.names = FALSE)
-        
-        success <- safe_update_sensor_index(output_dir(), sensor_selector$selected_sensor(), list(normalized = "Y"))
-        
-        if (success) {
-          trigger_summary_update()
-          showNotification("Time series normalized successfully!", type = "message")
-        } else {
-          showNotification("Warning: Normalization completed but failed to update index", type = "warning")
-        }
-        
-      }, error = function(e) {
-        showNotification(paste("Error normalizing time series:", e$message), type = "error")
-      })
-    })
     
-    # Calculate passage times
-    observeEvent(input$passage_time, {
-      req(sensor_selector$selected_sensor())
-      
-      tryCatch({
-        sensor_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
-        
-        if (is.null(sensor_data)) {
-          showNotification("Failed to read delineated dataset", type = "error")
-          return()
-        }
-        
-        nadir <- nadir_info()
-        
-        first_time <- min(sensor_data$time_s)
-        last_time <- max(sensor_data$time_s)
-        nadir_time <- nadir$time
-        
-        passage_duration_s <- last_time - first_time
-        ingress_nadir_s <- nadir_time - first_time
-        nadir_outgress_s <- last_time - nadir_time
-        
-        format_mm_ss <- function(seconds) {
-          minutes <- floor(seconds / 60)
-          secs <- round(seconds %% 60)
-          sprintf("%02d:%02d", minutes, secs)
-        }
-        
-        success <- safe_update_sensor_index(
-          output_dir(), 
-          sensor_selector$selected_sensor(),
-          list(
-            passage_times = "Y",
-            passage_duration.mm.ss. = format_mm_ss(passage_duration_s),
-            ingress_nadir_duration.mm.ss. = format_mm_ss(ingress_nadir_s),
-            nadir_outgress_duration.mm.ss. = format_mm_ss(nadir_outgress_s)
-          )
-        )
-        
-        if (success) {
-          trigger_summary_update()
-          showNotification("Passage times calculated successfully!", type = "message")
-        } else {
-          showNotification("Failed to update sensor index", type = "error")
-        }
-        
-      }, error = function(e) {
-        showNotification(paste("Error calculating passage times:", e$message), type = "error")
-      })
-    })
     
     # Edit nadir button
     observeEvent(input$nadir_btn, {
@@ -901,7 +799,27 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         # Auto-trim: Remove trim regions immediately
         sensor_data <- sensor_data[!sensor_data$roi %in% c("trim_start", "trim_end"), ]
         
-        # Write the trimmed, delineated file
+        # Auto-normalize time series (before writing file)
+        tryCatch({
+          nadir <- nadir_info()
+          if (nadir$available) {
+            start_time <- boundaries[2]  # start of roi1_sens_ingress
+            end_time <- boundaries[9]    # end of roi7_sens_outgress  
+            mid_time <- nadir$time
+            
+            sensor_data <- sensor_data %>%
+              mutate(time_norm = case_when(
+                time_s <= start_time ~ 0,
+                time_s >= end_time ~ 1,
+                time_s > start_time & time_s < mid_time ~ (time_s - start_time) / (mid_time - start_time) * 0.5,
+                time_s >= mid_time & time_s <= end_time ~ 0.5 + (time_s - mid_time) / (end_time - mid_time) * 0.5
+              ))
+          }
+        }, error = function(e) {
+          warning("Time normalization failed: ", e$message)
+        })
+        
+        # Write the trimmed, delineated, and normalized file ONCE
         output_file <- file.path(delineated_dir, paste0(sensor_selector$selected_sensor(), "_delineated.csv"))
         write.csv(sensor_data, output_file, row.names = FALSE)
         
@@ -910,34 +828,61 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
           return()
         }
         
+        # Auto-calculate passage times (after file written, no data modification)
+        passage_updates <- list()
+        tryCatch({
+          nadir <- nadir_info()
+          if (nadir$available) {
+            first_time <- min(sensor_data$time_s)
+            last_time <- max(sensor_data$time_s)
+            nadir_time <- nadir$time
+            
+            passage_duration_s <- last_time - first_time
+            ingress_nadir_s <- nadir_time - first_time
+            nadir_outgress_s <- last_time - nadir_time
+            
+            format_mm_ss <- function(seconds) {
+              minutes <- floor(seconds / 60)
+              secs <- round(seconds %% 60)
+              sprintf("%02d:%02d", minutes, secs)
+            }
+            
+            passage_updates <- list(
+              passage_times = "Y",
+              passage_duration.mm.ss. = format_mm_ss(passage_duration_s),
+              ingress_nadir_duration.mm.ss. = format_mm_ss(ingress_nadir_s),
+              nadir_outgress_duration.mm.ss. = format_mm_ss(nadir_outgress_s)
+            )
+          }
+        }, error = function(e) {
+          warning("Passage time calculation failed: ", e$message)
+          passage_updates <- list()
+        })
+        
         # Determine if this is a re-application
         current_status <- sensor_status()
         
         if (current_status$delineated) {
-          # Re-applying: only update roi_config, preserve other status
+          # Re-applying: update roi_config and auto-calculated fields
           success <- safe_update_sensor_index(
             output_dir(),
             sensor_selector$selected_sensor(),
-            list(roi_config = "Manual")
+            c(list(roi_config = "Manual", normalized = "Y"), passage_updates)
           )
-          message_text <- "Delineation re-applied successfully!"
+          message_text <- "Delineation re-applied with normalization and passage times!"
         } else {
-          # New delineation: set as delineated and trimmed
+          # New delineation: set all flags including auto-calculated ones
           success <- safe_update_sensor_index(
             output_dir(),
             sensor_selector$selected_sensor(),
-            list(
+            c(list(
               delineated = "Y",
-              trimmed = "Y",  # Auto-trimmed
+              trimmed = "Y",
               roi_config = "Manual",
-              normalized = "N",       # Reset dependent processes
-              passage_times = "N",    # Reset dependent processes  
-              passage_duration.mm.ss. = "NA",
-              ingress_nadir_duration.mm.ss. = "NA",
-              nadir_outgress_duration.mm.ss. = "NA"
-            )
+              normalized = "Y"
+            ), passage_updates)
           )
-          message_text <- "Delineation applied and trimmed successfully!"
+          message_text <- "Delineation applied with trimming, normalization and passage times!"
         }
         
         if (success) {

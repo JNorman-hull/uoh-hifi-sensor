@@ -6,6 +6,7 @@ library(shinyjs)
 library(plotly)
 library(patchwork)
 library(shinydashboard)
+library(shinycssloaders)
 
 dir.create("./processed_sens_data", showWarnings = FALSE, recursive = TRUE)
 
