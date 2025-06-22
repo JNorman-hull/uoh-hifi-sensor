@@ -167,7 +167,7 @@ roiSidebarUI <- function(id) {
                       default_show_roi_markers = TRUE,
                       default_show_legend = FALSE,
                       default_left_var = "pressure_kpa",
-                      default_right_var = "higacc_mag_g") 
+                      default_right_var = "none") 
     )
   )
 }
