@@ -68,41 +68,6 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
       req(sensor_reactive(), instrument_variable)
       status <- sensor_status()
       
-      # Check if summary already processed
-      status_col <- paste0(instrument_variable, "_sum_processed")
-      already_processed <- status[[status_col]] %||% FALSE
-      
-      # Button state: enabled when delineated and trimmed
-      can_process <- status$delineated && status$trimmed
-      
-      button_states <- list(
-        "process_summary" = can_process
-      )
-      
-      manage_button_states(session, button_states)
-      
-      # Update button appearance and text
-      if (already_processed) {
-        updateActionButton(session, "process_summary", 
-                           label = "Recalculate summary information")
-        shinyjs::removeClass("process_summary", "btn-success")
-        shinyjs::addClass("process_summary", "btn-warning")
-      } else {
-        updateActionButton(session, "process_summary", 
-                           label = "Process summary information")
-        shinyjs::removeClass("process_summary", "btn-warning") 
-        shinyjs::addClass("process_summary", "btn-success")
-      }
-    })
-    
-    # ============================= #
-    # /// Event handlers \\\ ####  
-    # ============================= # 
-    
-    observe({
-      req(sensor_reactive(), instrument_variable)
-      status <- sensor_status()
-      
       if (instrument_variable == "all") {
         # Check if all summaries are processed
         all_processed <- (status$pres_sum_processed %||% FALSE) && 
@@ -129,7 +94,7 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
         }
         
       } else {
-        # Existing single instrument logic stays the same
+        # Existing single instrument logic
         status_col <- paste0(instrument_variable, "_sum_processed")
         already_processed <- status[[status_col]] %||% FALSE
         can_process <- status$delineated && status$trimmed
@@ -145,6 +110,55 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
           updateActionButton(session, "process_summary", label = "Process summary information")
           shinyjs::removeClass("process_summary", "btn-warning")
           shinyjs::addClass("process_summary", "btn-success")
+        }
+      }
+    })
+    
+    # ============================= #
+    # /// Event handlers \\\ ####  
+    # ============================= # 
+    
+    observeEvent(input$process_summary, {
+      req(sensor_reactive(), instrument_variable)
+      status <- sensor_status()
+      
+      if (instrument_variable == "all") {
+        # For "all" case - check if any summaries already exist
+        any_processed <- (status$pres_sum_processed %||% FALSE) || 
+          (status$acc_sum_processed %||% FALSE) || 
+          (status$rot_sum_processed %||% FALSE)
+        
+        if (any_processed) {
+          showModal(modalDialog(
+            title = "Some Analysis Data Exists",
+            paste("Some summary or analysis data already exists for", sensor_reactive(), 
+                  ". Replace and recalculate everything?"),
+            footer = tagList(
+              modalButton("Cancel"),
+              actionButton(ns("confirm_replace_summary"), "Replace All", class = "btn-warning")
+            )
+          ))
+        } else {
+          calculate_and_save_summary()
+        }
+        
+      } else {
+        # Existing single instrument logic
+        status_col <- paste0(instrument_variable, "_sum_processed")
+        already_processed <- status[[status_col]] %||% FALSE
+        
+        if (already_processed) {
+          showModal(modalDialog(
+            title = "Summary Data Exists",
+            paste("Summary data already exists for", sensor_reactive(), 
+                  ". Replace existing summary data?"),
+            footer = tagList(
+              modalButton("Cancel"),
+              actionButton(ns("confirm_replace_summary"), "Replace", class = "btn-warning")
+            )
+          ))
+        } else {
+          calculate_and_save_summary()
         }
       }
     })
