@@ -197,8 +197,14 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
           if (success) {
             trigger_data_update()
             trigger_summary_update()
-            showNotification("📊 All summaries calculated! Starting pressure analysis...", 
-                             type = "message", duration = 3)
+            
+            if (global_sensor_state$batch_processing %||% FALSE) {
+              showNotification(paste("📊 Summaries complete for", sensor_name, "- Starting pressure analysis..."), 
+                               type = "message", duration = 2)
+            } else {
+              showNotification("📊 All summaries calculated! Starting pressure analysis...", 
+                               type = "message", duration = 3)
+            }
             
             # Step 2: Trigger pressure analysis
             global_sensor_state$magic_processing_sensor <- sensor_name

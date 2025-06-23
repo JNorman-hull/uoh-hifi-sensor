@@ -244,12 +244,24 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
           # Call the existing peak calculation function
           calculate_and_save_peaks()
           
-          showNotification("⚡ Acceleration analysis complete! Magic processing finished! ✨", 
-                           type = "message", duration = 4)
+          if (global_sensor_state$batch_processing %||% FALSE) {
+            showNotification(paste("⚡ Analysis complete for", sensor_selector$selected_sensor()), 
+                             type = "message", duration = 2)
+            
+            # Move to next sensor in batch
+            batch_values$current_sensor_idx <- batch_values$current_sensor_idx + 1
+            process_next_sensor()
+            
+          } else {
+            showNotification("⚡ Acceleration analysis complete! Magic processing finished! ✨", 
+                             type = "message", duration = 4)
+          }
         }
         
-        # Clear the processing sensor
-        global_sensor_state$magic_processing_sensor <- NULL
+        # Clear flags if not batch processing
+        if (!(global_sensor_state$batch_processing %||% FALSE)) {
+          global_sensor_state$magic_processing_sensor <- NULL
+        }
       }
     })
     

@@ -426,9 +426,26 @@ pressureSidebarUI <- function(id) {
         
         div(style = "margin-top: 15px; padding: 10px; background-color: #f0f8ff; border-radius: 5px;",
             h4("🪄 Magic Processing", style = "margin-top: 0; color: #2c3e50;"),
+            
+            # Single sensor processing
             p("Calculate all summaries + pressure + acceleration analyses!", 
               style = "font-size: 12px; margin-bottom: 10px;"),
-            summarytableSidebarUI(ns("magic_summary"))
+            summarytableSidebarUI(ns("magic_summary")),
+            
+            # Batch processing
+            hr(style = "margin: 15px 0;"),
+            div(style = "text-align: center;",
+                h5("🚀 Batch Processing", style = "margin-bottom: 10px; color: #2c3e50;"),
+                div(textOutput(ns("batch_sensor_count")), 
+                    style = "font-size: 12px; margin-bottom: 10px; color: #666;"),
+                actionButton(ns("batch_process_btn"), "Process All Available Sensors", 
+                             class = "btn-warning btn-block", 
+                             style = "font-weight: bold;"),
+                div(style = "margin-top: 8px;",
+                    div(textOutput(ns("batch_progress")), 
+                        style = "font-size: 11px; color: #666;")
+                )
+            )
         ),
         
         summarytableSidebarUI(ns("pressure_summary")),
@@ -560,6 +577,142 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
       get_nadir_info(sensor_selector$selected_sensor(), output_dir())
     })
     
+    ####################
+    
+    batch_values <- reactiveValues(
+      processing = FALSE,
+      current_sensor_idx = 0,
+      total_sensors = 0,
+      sensor_list = character(0)
+    )
+    
+    # Display batch sensor count
+    output$batch_sensor_count <- renderText({
+      available_sensors <- sensor_selector$filtered_sensors()
+      count <- length(available_sensors)
+      
+      if (count == 0) {
+        "No sensors available for batch processing"
+      } else if (count == 1) {
+        "1 sensor available for processing"
+      } else {
+        paste(count, "sensors available for batch processing")
+      }
+    })
+    
+    # Batch processing progress
+    output$batch_progress <- renderText({
+      if (batch_values$processing) {
+        paste("Processing sensor", batch_values$current_sensor_idx, "of", batch_values$total_sensors, 
+              "- Current:", batch_values$sensor_list[batch_values$current_sensor_idx])
+      } else {
+        ""
+      }
+    })
+    
+    # Batch process button state
+    observe({
+      available_sensors <- sensor_selector$filtered_sensors()
+      count <- length(available_sensors)
+      
+      if (batch_values$processing) {
+        updateActionButton(session, "batch_process_btn", label = "⏳ Processing...")
+        shinyjs::disable("batch_process_btn")
+      } else if (count > 1) {
+        updateActionButton(session, "batch_process_btn", 
+                           label = paste("🚀 Process All", count, "Sensors"))
+        shinyjs::enable("batch_process_btn")
+      } else {
+        updateActionButton(session, "batch_process_btn", label = "Need 2+ sensors for batch")
+        shinyjs::disable("batch_process_btn")
+      }
+    })
+    
+    # Batch processing button click
+    observeEvent(input$batch_process_btn, {
+      available_sensors <- sensor_selector$filtered_sensors()
+      
+      if (length(available_sensors) < 2) {
+        showNotification("Need at least 2 sensors for batch processing", type = "warning")
+        return()
+      }
+      
+      # Confirmation dialog
+      showModal(modalDialog(
+        title = "Batch Process All Sensors",
+        paste("Process all", length(available_sensors), "available sensors?", 
+              "This will run magic processing (summaries + pressure + acceleration) for each sensor."),
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton(ns("confirm_batch_process"), "Process All", class = "btn-warning")
+        )
+      ))
+    })
+    
+    # Confirm batch processing
+    observeEvent(input$confirm_batch_process, {
+      removeModal()
+      
+      available_sensors <- sensor_selector$filtered_sensors()
+      
+      # Initialize batch processing
+      batch_values$processing <- TRUE
+      batch_values$sensor_list <- available_sensors
+      batch_values$total_sensors <- length(available_sensors)
+      batch_values$current_sensor_idx <- 1
+      
+      showNotification(paste("🚀 Starting batch processing of", length(available_sensors), "sensors..."), 
+                       type = "message", duration = 3)
+      
+      # Start processing first sensor
+      process_next_sensor()
+    })
+    
+    # Process next sensor function
+    process_next_sensor <- function() {
+      if (batch_values$current_sensor_idx <= batch_values$total_sensors) {
+        current_sensor <- batch_values$sensor_list[batch_values$current_sensor_idx]
+        
+        # Update sensor selection directly using updateSelectInput
+        updateSelectInput(session, "sensor_selector-sensor_selection", selected = current_sensor)
+        
+        showNotification(paste("Processing sensor", batch_values$current_sensor_idx, "of", 
+                               batch_values$total_sensors, ":", current_sensor), 
+                         type = "message", duration = 2)
+        
+        # Trigger magic processing for this sensor
+        global_sensor_state$magic_processing_sensor <- current_sensor
+        global_sensor_state$batch_processing <- TRUE
+        
+        # Trigger the magic summary processing for this sensor
+        # We need to call the magic summary processing directly
+        global_sensor_state$magic_trigger_summary <- TRUE
+        
+      } else {
+        # Batch processing complete
+        batch_values$processing <- FALSE
+        batch_values$current_sensor_idx <- 0
+        global_sensor_state$batch_processing <- FALSE
+        
+        showNotification(paste("✅ Batch processing complete!", batch_values$total_sensors, 
+                               "sensors processed successfully!"), 
+                         type = "message", duration = 5)
+      }
+    }
+    
+    observe({
+      if (global_sensor_state$magic_trigger_summary && 
+          global_sensor_state$magic_processing_sensor == sensor_selector$selected_sensor()) {
+        
+        # Reset the trigger
+        global_sensor_state$magic_trigger_summary <- FALSE
+        
+        # Trigger the magic summary button programmatically
+        # This simulates clicking the magic summary process button
+        shinyjs::click("magic_summary-process_summary")
+      }
+    })
+    
     # ============================= #
     # /// Pressure configuration \\\ ####  
     # ============================= #
@@ -639,8 +792,15 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
           # Call the existing RPC/LRPC calculation function
           calculate_and_save_rpc_lrpc()
           
-          showNotification("🔍 Pressure analysis complete! Starting acceleration analysis...", 
-                           type = "message", duration = 3)
+          # Adjust notification for batch vs single processing
+          if (global_sensor_state$batch_processing %||% FALSE) {
+            showNotification(paste("🔍 Pressure analysis complete for", sensor_selector$selected_sensor(), 
+                                   "- Starting acceleration analysis..."), 
+                             type = "message", duration = 2)
+          } else {
+            showNotification("🔍 Pressure analysis complete! Starting acceleration analysis...", 
+                             type = "message", duration = 3)
+          }
         }
         
         # Trigger acceleration processing next
