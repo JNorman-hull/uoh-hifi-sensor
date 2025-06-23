@@ -320,7 +320,7 @@ pressureUI <- function(id) {
       h3("Pressure Analysis"),
       plotModuleUI(ns("pressure_plot"), height = "600px"),
       br(),
-    
+      
       fluidRow(
         column(
           width = 12,
@@ -334,7 +334,7 @@ pressureUI <- function(id) {
               ),
               column(
                 width = 4,
-                 tags$h4("Sensor pressure summary", style = "margin-top: 0; color: #333;"),
+                tags$h4("Sensor pressure summary", style = "margin-top: 0; color: #333;"),
                 tags$p(textOutput(ns("pressure_nadir_text"))),
                 tags$p(textOutput(ns("rpc_text"))),
                 tags$p(textOutput(ns("lrpc_surface_text"))),
@@ -346,19 +346,19 @@ pressureUI <- function(id) {
       ),
       br(),
       fluidRow(
-            column(
-        width = 6,
-        div(
-          style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
+        column(
+          width = 6,
+          div(
+            style = "background-color: #f8f9fa; border: 1px solid #ccc; padding: 20px; 
                    border-radius: 5px; margin-bottom: 20px;",
-          tags$h4("Barotrauama assesment", style = "margin-top: 0; color: #333;"),
-          p("Hav a species index table (baro.csv) which has (species, age, size, sample size, mortality threshold). Asses our paramters against all thresholds and produce a summary report which is printed in the box, as well as saved  in ./assesment.
+            tags$h4("Barotrauama assesment", style = "margin-top: 0; color: #333;"),
+            p("Hav a species index table (baro.csv) which has (species, age, size, sample size, mortality threshold). Asses our paramters against all thresholds and produce a summary report which is printed in the box, as well as saved  in ./assesment.
           Only active when all calculations have bene done.
           Uses same logic as elsewhere for managing when data is overwritten etc.")
+          )
         )
       )
-    )
-  ))
+    ))
 }
 
 #Method 1: helpText() - styled for instructions
@@ -426,26 +426,9 @@ pressureSidebarUI <- function(id) {
         
         div(style = "margin-top: 15px; padding: 10px; background-color: #f0f8ff; border-radius: 5px;",
             h4("🪄 Magic Processing", style = "margin-top: 0; color: #2c3e50;"),
-            
-            # Single sensor processing
             p("Calculate all summaries + pressure + acceleration analyses!", 
               style = "font-size: 12px; margin-bottom: 10px;"),
-            summarytableSidebarUI(ns("magic_summary")),
-            
-            # Batch processing
-            hr(style = "margin: 15px 0;"),
-            div(style = "text-align: center;",
-                h5("🚀 Batch Processing", style = "margin-bottom: 10px; color: #2c3e50;"),
-                div(textOutput(ns("batch_sensor_count")), 
-                    style = "font-size: 12px; margin-bottom: 10px; color: #666;"),
-                actionButton(ns("batch_process_btn"), "Process All Available Sensors", 
-                             class = "btn-warning btn-block", 
-                             style = "font-weight: bold;"),
-                div(style = "margin-top: 8px;",
-                    div(textOutput(ns("batch_progress")), 
-                        style = "font-size: 11px; color: #666;")
-                )
-            )
+            summarytableSidebarUI(ns("magic_summary"))
         ),
         
         summarytableSidebarUI(ns("pressure_summary")),
@@ -524,15 +507,15 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
     # ============================= #
     # /// Reactive values \\\ ####  
     # ============================= #   
-
-# pressure state ####
+    
+    # pressure state ####
     pressure_values <- reactiveValues(
       pressure_config = NULL,
       baseline_config = NULL,
       inputs_changed = FALSE
     )
     
-# Get roi boundaries ####
+    # Get roi boundaries ####
     roi_boundaries <- reactive({
       get_roi_boundaries(sensor_selector$selected_sensor(), output_dir(), TRUE)
     })
@@ -559,7 +542,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
       req(sensor_selector$selected_sensor())
       global_sensor_state$data_updated
       global_sensor_state$summary_updated 
-
+      
       
       # Check for delineated file first, fall back to minimal data
       delineated_data <- read_sensor_data(output_dir(), sensor_selector$selected_sensor(), "delineated")
@@ -575,142 +558,6 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
       req(sensor_selector$selected_sensor())
       #global_sensor_state$summary_updated  # Use global
       get_nadir_info(sensor_selector$selected_sensor(), output_dir())
-    })
-    
-    ####################
-    
-    batch_values <- reactiveValues(
-      processing = FALSE,
-      current_sensor_idx = 0,
-      total_sensors = 0,
-      sensor_list = character(0)
-    )
-    
-    # Display batch sensor count
-    output$batch_sensor_count <- renderText({
-      available_sensors <- sensor_selector$filtered_sensors()
-      count <- length(available_sensors)
-      
-      if (count == 0) {
-        "No sensors available for batch processing"
-      } else if (count == 1) {
-        "1 sensor available for processing"
-      } else {
-        paste(count, "sensors available for batch processing")
-      }
-    })
-    
-    # Batch processing progress
-    output$batch_progress <- renderText({
-      if (batch_values$processing) {
-        paste("Processing sensor", batch_values$current_sensor_idx, "of", batch_values$total_sensors, 
-              "- Current:", batch_values$sensor_list[batch_values$current_sensor_idx])
-      } else {
-        ""
-      }
-    })
-    
-    # Batch process button state
-    observe({
-      available_sensors <- sensor_selector$filtered_sensors()
-      count <- length(available_sensors)
-      
-      if (batch_values$processing) {
-        updateActionButton(session, "batch_process_btn", label = "⏳ Processing...")
-        shinyjs::disable("batch_process_btn")
-      } else if (count > 1) {
-        updateActionButton(session, "batch_process_btn", 
-                           label = paste("🚀 Process All", count, "Sensors"))
-        shinyjs::enable("batch_process_btn")
-      } else {
-        updateActionButton(session, "batch_process_btn", label = "Need 2+ sensors for batch")
-        shinyjs::disable("batch_process_btn")
-      }
-    })
-    
-    # Batch processing button click
-    observeEvent(input$batch_process_btn, {
-      available_sensors <- sensor_selector$filtered_sensors()
-      
-      if (length(available_sensors) < 2) {
-        showNotification("Need at least 2 sensors for batch processing", type = "warning")
-        return()
-      }
-      
-      # Confirmation dialog
-      showModal(modalDialog(
-        title = "Batch Process All Sensors",
-        paste("Process all", length(available_sensors), "available sensors?", 
-              "This will run magic processing (summaries + pressure + acceleration) for each sensor."),
-        footer = tagList(
-          modalButton("Cancel"),
-          actionButton(ns("confirm_batch_process"), "Process All", class = "btn-warning")
-        )
-      ))
-    })
-    
-    # Confirm batch processing
-    observeEvent(input$confirm_batch_process, {
-      removeModal()
-      
-      available_sensors <- sensor_selector$filtered_sensors()
-      
-      # Initialize batch processing
-      batch_values$processing <- TRUE
-      batch_values$sensor_list <- available_sensors
-      batch_values$total_sensors <- length(available_sensors)
-      batch_values$current_sensor_idx <- 1
-      
-      showNotification(paste("🚀 Starting batch processing of", length(available_sensors), "sensors..."), 
-                       type = "message", duration = 3)
-      
-      # Start processing first sensor
-      process_next_sensor()
-    })
-    
-    # Process next sensor function
-    process_next_sensor <- function() {
-      if (batch_values$current_sensor_idx <= batch_values$total_sensors) {
-        current_sensor <- batch_values$sensor_list[batch_values$current_sensor_idx]
-        
-        # Update sensor selection directly using updateSelectInput
-        updateSelectInput(session, "sensor_selector-sensor_selection", selected = current_sensor)
-        
-        showNotification(paste("Processing sensor", batch_values$current_sensor_idx, "of", 
-                               batch_values$total_sensors, ":", current_sensor), 
-                         type = "message", duration = 2)
-        
-        # Trigger magic processing for this sensor
-        global_sensor_state$magic_processing_sensor <- current_sensor
-        global_sensor_state$batch_processing <- TRUE
-        
-        # Trigger the magic summary processing for this sensor
-        # We need to call the magic summary processing directly
-        global_sensor_state$magic_trigger_summary <- TRUE
-        
-      } else {
-        # Batch processing complete
-        batch_values$processing <- FALSE
-        batch_values$current_sensor_idx <- 0
-        global_sensor_state$batch_processing <- FALSE
-        
-        showNotification(paste("✅ Batch processing complete!", batch_values$total_sensors, 
-                               "sensors processed successfully!"), 
-                         type = "message", duration = 5)
-      }
-    }
-    
-    observe({
-      if (global_sensor_state$magic_trigger_summary && 
-          global_sensor_state$magic_processing_sensor == sensor_selector$selected_sensor()) {
-        
-        # Reset the trigger
-        global_sensor_state$magic_trigger_summary <- FALSE
-        
-        # Trigger the magic summary button programmatically
-        # This simulates clicking the magic summary process button
-        shinyjs::click("magic_summary-process_summary")
-      }
     })
     
     # ============================= #
@@ -786,21 +633,18 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
         # Reset the trigger
         global_sensor_state$magic_trigger_pressure <- FALSE
         
-        # Check if pressure analysis needed
-        status <- sensor_status()
-        if (!status$pres_rpc_processed || !status$pres_lrpc_processed) {
-          # Call the existing RPC/LRPC calculation function
-          calculate_and_save_rpc_lrpc()
-          
-          # Adjust notification for batch vs single processing
-          if (global_sensor_state$batch_processing %||% FALSE) {
-            showNotification(paste("🔍 Pressure analysis complete for", sensor_selector$selected_sensor(), 
-                                   "- Starting acceleration analysis..."), 
-                             type = "message", duration = 2)
-          } else {
-            showNotification("🔍 Pressure analysis complete! Starting acceleration analysis...", 
-                             type = "message", duration = 3)
-          }
+        # For magic processing, ALWAYS recalculate (ignore current status)
+        # Call the existing RPC/LRPC calculation function
+        calculate_and_save_rpc_lrpc()
+        
+        # Adjust notification for batch vs single processing
+        if (global_sensor_state$batch_processing %||% FALSE) {
+          showNotification(paste("🔍 Pressure analysis complete for", sensor_selector$selected_sensor(), 
+                                 "- Starting acceleration analysis..."), 
+                           type = "message", duration = 2)
+        } else {
+          showNotification("🔍 Pressure analysis complete! Starting acceleration analysis...", 
+                           type = "message", duration = 3)
         }
         
         # Trigger acceleration processing next
@@ -813,7 +657,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
       pressure_values$pressure_config <- pressure_config$current_config()
     })
     
-
+    
     # Enable/disable normalized checkbox based on sensor status  
     observe({
       req(sensor_selector$selected_sensor())
@@ -875,7 +719,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
         shinyjs::addClass("rpc_lrpc_btn", "btn-primary")
       }
     })
- 
+    
     # ============================= #
     # /// Event handlers \\\ ####  
     # ============================= # 
@@ -1112,8 +956,8 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
         ""
       }
     })
-  
-# Pressure status display ####
+    
+    # Pressure status display ####
     status_controls <- statusModuleServer("status_display",
                                           sensor_name_reactive = reactive(sensor_selector$selected_sensor()),
                                           output_dir_reactive = reactive(output_dir()),
@@ -1122,7 +966,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
                                           invalidation_trigger = reactive(global_sensor_state$summary_updated),
                                           individual_outputs = TRUE)
     
-# Pressure summary display ####
+    # Pressure summary display ####
     summary_table <- summarytableModuleServer("pressure_summary", 
                                               sensor_reactive = reactive(sensor_selector$selected_sensor()),
                                               output_dir_reactive = reactive(output_dir()),
@@ -1139,7 +983,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
                                               trigger_data_update = trigger_data_update,
                                               trigger_summary_update = trigger_summary_update)
     
-# Pressure plot ####
+    # Pressure plot ####
     plot_controls <- plotModuleServer("pressure_plot", 
                                       sensor_data = selected_sensor_data,
                                       sensor_name = reactive(sensor_selector$selected_sensor()),
@@ -1162,4 +1006,3 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
     
   })
 }  
-  

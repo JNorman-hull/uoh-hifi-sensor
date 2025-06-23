@@ -238,28 +238,24 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
         # Reset the trigger
         global_sensor_state$magic_trigger_acceleration <- FALSE
         
+        # For magic processing, ALWAYS recalculate (ignore current status)
+        # Call the existing peak calculation function
+        calculate_and_save_peaks()
+        
         # Check if acceleration analysis needed
         status <- sensor_status()
-        if (!status$acc_hig_peaks_processed) {
-          # Call the existing peak calculation function
-          calculate_and_save_peaks()
+        if (global_sensor_state$batch_processing %||% FALSE) {
+          showNotification(paste("⚡ Analysis complete for", sensor_selector$selected_sensor()), 
+                           type = "message", duration = 2)
           
-          if (global_sensor_state$batch_processing %||% FALSE) {
-            showNotification(paste("⚡ Analysis complete for", sensor_selector$selected_sensor()), 
-                             type = "message", duration = 2)
-            
-            # Move to next sensor in batch
-            batch_values$current_sensor_idx <- batch_values$current_sensor_idx + 1
-            process_next_sensor()
-            
-          } else {
-            showNotification("⚡ Acceleration analysis complete! Magic processing finished! ✨", 
-                             type = "message", duration = 4)
-          }
-        }
-        
-        # Clear flags if not batch processing
-        if (!(global_sensor_state$batch_processing %||% FALSE)) {
+          # Advance batch processing using global function
+          advance_batch_processing()
+          
+        } else {
+          showNotification("⚡ Acceleration analysis complete! Magic processing finished! ✨", 
+                           type = "message", duration = 4)
+          
+          # Clear the processing sensor for single processing
           global_sensor_state$magic_processing_sensor <- NULL
         }
       }
@@ -529,7 +525,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
       # Convert time-based parameters to samples
       interpeak_samples <- round(params$interpeak * fs)
       
-       # Step 1: Find local maxima above height threshold
+      # Step 1: Find local maxima above height threshold
       if (length(accel) < 3) return(data.frame())
       
       # Find local maxima
@@ -796,7 +792,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
       })
     }
     
-   
+    
     # Save acceleration configuration function
     save_acceleration_configuration <- function() {
       config_name <- trimws(input$acceleration_config_label)
@@ -845,7 +841,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     # ============================= #
     # /// Output render \\\ ####  
     # ============================= #    
-
+    
     
     # Peaks status output
     output$current_peaks <- renderText({

@@ -9,13 +9,13 @@ summarytableModuleUI <- function(id) {
 summarytableSidebarUI <- function(id) {
   ns <- NS(id)
   tagList(
-  h4("Summary measurments"),
-  
-  actionButton(ns("process_summary"), "Process summary information", 
-               class = "btn-success btn-block"),
-  
-  div(style = "margin-top: 10px; margin-bottom: 15px;",
-      textOutput(ns("summary_status")))
+    h4("Summary measurments"),
+    
+    actionButton(ns("process_summary"), "Process summary information", 
+                 class = "btn-success btn-block"),
+    
+    div(style = "margin-top: 10px; margin-bottom: 15px;",
+        textOutput(ns("summary_status")))
   )
 }
 
@@ -29,7 +29,7 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
     # /// Reactive values \\\ ####  
     # ============================= #   
     
-     # ============================= #
+    # ============================= #
     # /// Data loading & processing  \\\ ####  
     # ============================= # 
     
@@ -62,60 +62,6 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
     
     # ============================= #
     # /// UI State management \\\ ####  
-    # ============================= # 
-    
-    observe({
-      req(sensor_reactive(), instrument_variable)
-      status <- sensor_status()
-      
-      if (instrument_variable == "all") {
-        # Check if all summaries are processed
-        all_processed <- (status$pres_sum_processed %||% FALSE) && 
-          (status$acc_sum_processed %||% FALSE) && 
-          (status$rot_sum_processed %||% FALSE)
-        
-        # Button enabled when delineated and trimmed
-        can_process <- status$delineated && status$trimmed
-        
-        if (all_processed) {
-          updateActionButton(session, "process_summary", label = "🔄 Recalculate All + Analyses")
-          shinyjs::removeClass("process_summary", "btn-success")
-          shinyjs::addClass("process_summary", "btn-warning")
-        } else {
-          updateActionButton(session, "process_summary", label = "🪄 Magic Process All")
-          shinyjs::removeClass("process_summary", "btn-warning")
-          shinyjs::addClass("process_summary", "btn-success")
-        }
-        
-        if (can_process) {
-          shinyjs::enable("process_summary")
-        } else {
-          shinyjs::disable("process_summary")
-        }
-        
-      } else {
-        # Existing single instrument logic
-        status_col <- paste0(instrument_variable, "_sum_processed")
-        already_processed <- status[[status_col]] %||% FALSE
-        can_process <- status$delineated && status$trimmed
-        
-        button_states <- list("process_summary" = can_process)
-        manage_button_states(session, button_states)
-        
-        if (already_processed) {
-          updateActionButton(session, "process_summary", label = "Recalculate summary information")
-          shinyjs::removeClass("process_summary", "btn-success")
-          shinyjs::addClass("process_summary", "btn-warning")
-        } else {
-          updateActionButton(session, "process_summary", label = "Process summary information")
-          shinyjs::removeClass("process_summary", "btn-warning")
-          shinyjs::addClass("process_summary", "btn-success")
-        }
-      }
-    })
-    
-    # ============================= #
-    # /// Event handlers \\\ ####  
     # ============================= # 
     
     observeEvent(input$process_summary, {
@@ -163,6 +109,63 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
       }
     })
     
+    # ============================= #
+    # /// Event handlers \\\ ####  
+    # ============================= # 
+    
+    observe({
+      req(sensor_reactive(), instrument_variable)
+      status <- sensor_status()
+      
+      if (instrument_variable == "all") {
+        # Check if all analyses are complete (not just summaries)
+        all_complete <- (status$pres_sum_processed %||% FALSE) && 
+          (status$acc_sum_processed %||% FALSE) && 
+          (status$rot_sum_processed %||% FALSE) &&
+          (status$pres_rpc_processed %||% FALSE) && 
+          (status$pres_lrpc_processed %||% FALSE) &&
+          (status$acc_hig_peaks_processed %||% FALSE)
+        
+        # Button enabled when delineated and trimmed
+        can_process <- status$delineated && status$trimmed
+        
+        if (all_complete) {
+          updateActionButton(session, "process_summary", label = "🔄 Recalculate All + Analyses")
+          shinyjs::removeClass("process_summary", "btn-success")
+          shinyjs::addClass("process_summary", "btn-warning")
+        } else {
+          updateActionButton(session, "process_summary", label = "🪄 Magic Process All")
+          shinyjs::removeClass("process_summary", "btn-warning")
+          shinyjs::addClass("process_summary", "btn-success")
+        }
+        
+        if (can_process) {
+          shinyjs::enable("process_summary")
+        } else {
+          shinyjs::disable("process_summary")
+        }
+        
+      } else {
+        # Existing single instrument logic
+        status_col <- paste0(instrument_variable, "_sum_processed")
+        already_processed <- status[[status_col]] %||% FALSE
+        can_process <- status$delineated && status$trimmed
+        
+        button_states <- list("process_summary" = can_process)
+        manage_button_states(session, button_states)
+        
+        if (already_processed) {
+          updateActionButton(session, "process_summary", label = "Recalculate summary information")
+          shinyjs::removeClass("process_summary", "btn-success")
+          shinyjs::addClass("process_summary", "btn-warning")
+        } else {
+          updateActionButton(session, "process_summary", label = "Process summary information")
+          shinyjs::removeClass("process_summary", "btn-warning")
+          shinyjs::addClass("process_summary", "btn-success")
+        }
+      }
+    })
+    
     observeEvent(input$confirm_replace_summary, {
       removeModal()
       calculate_and_save_summary()
@@ -197,14 +200,8 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
           if (success) {
             trigger_data_update()
             trigger_summary_update()
-            
-            if (global_sensor_state$batch_processing %||% FALSE) {
-              showNotification(paste("📊 Summaries complete for", sensor_name, "- Starting pressure analysis..."), 
-                               type = "message", duration = 2)
-            } else {
-              showNotification("📊 All summaries calculated! Starting pressure analysis...", 
-                               type = "message", duration = 3)
-            }
+            showNotification("📊 All summaries calculated! Starting pressure analysis...", 
+                             type = "message", duration = 3)
             
             # Step 2: Trigger pressure analysis
             global_sensor_state$magic_processing_sensor <- sensor_name
@@ -553,20 +550,20 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
           }
         }
       }
-        
-        # Red cell highlighting for ALL barotrauma events = "Y" (including nadir)
-        baro_cols <- c("Nadir barotrauma", "RPC barotrauma", "LRPC surface barotrauma", "LRPC depth barotrauma")
-        existing_baro_cols <- intersect(baro_cols, names(display_data))
-        
-        for (col in existing_baro_cols) {
-          dt <- dt %>% DT::formatStyle(
-            col,
-            target = "cell",
-            backgroundColor = DT::styleEqual("Y", "red"),
-            color = DT::styleEqual("Y", "white"),
-            fontWeight = DT::styleEqual("Y", "bold")
-          )
-        }
+      
+      # Red cell highlighting for ALL barotrauma events = "Y" (including nadir)
+      baro_cols <- c("Nadir barotrauma", "RPC barotrauma", "LRPC surface barotrauma", "LRPC depth barotrauma")
+      existing_baro_cols <- intersect(baro_cols, names(display_data))
+      
+      for (col in existing_baro_cols) {
+        dt <- dt %>% DT::formatStyle(
+          col,
+          target = "cell",
+          backgroundColor = DT::styleEqual("Y", "red"),
+          color = DT::styleEqual("Y", "white"),
+          fontWeight = DT::styleEqual("Y", "bold")
+        )
+      }
       
       return(dt)
     })

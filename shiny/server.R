@@ -20,9 +20,7 @@ server <- function(input, output, session) {
     processing_updated = 0,     # For processing completion
     magic_trigger_pressure = FALSE,
     magic_trigger_acceleration = FALSE,
-    magic_processing_sensor = NULL,
-    batch_processing = FALSE,
-    magic_trigger_summary = FALSE
+    magic_processing_sensor = NULL
   )
   
   
