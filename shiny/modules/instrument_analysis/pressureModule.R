@@ -424,6 +424,13 @@ pressureSidebarUI <- function(id) {
         
         h4(""),
         
+        div(style = "margin-top: 15px; padding: 10px; background-color: #f0f8ff; border-radius: 5px;",
+            h4("🪄 Magic Processing", style = "margin-top: 0; color: #2c3e50;"),
+            p("Calculate all summaries + pressure + acceleration analyses!", 
+              style = "font-size: 12px; margin-bottom: 10px;"),
+            summarytableSidebarUI(ns("magic_summary"))
+        ),
+        
         summarytableSidebarUI(ns("pressure_summary")),
         
         actionButton(ns("rpc_lrpc_btn"), "Calculate RPC and LRPC", 
@@ -618,6 +625,28 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
     # /// UI State management \\\ ####  
     # ============================= # 
     
+    
+    observe({
+      if (global_sensor_state$magic_trigger_pressure && 
+          global_sensor_state$magic_processing_sensor == sensor_selector$selected_sensor()) {
+        
+        # Reset the trigger
+        global_sensor_state$magic_trigger_pressure <- FALSE
+        
+        # Check if pressure analysis needed
+        status <- sensor_status()
+        if (!status$pres_rpc_processed || !status$pres_lrpc_processed) {
+          # Call the existing RPC/LRPC calculation function
+          calculate_and_save_rpc_lrpc()
+          
+          showNotification("🔍 Pressure analysis complete! Starting acceleration analysis...", 
+                           type = "message", duration = 3)
+        }
+        
+        # Trigger acceleration processing next
+        global_sensor_state$magic_trigger_acceleration <- TRUE
+      }
+    })
     
     # Store current config in reactive values
     observe({
@@ -938,6 +967,14 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
                                               sensor_reactive = reactive(sensor_selector$selected_sensor()),
                                               output_dir_reactive = reactive(output_dir()),
                                               instrument_variable = "pres",
+                                              global_sensor_state = global_sensor_state,
+                                              trigger_data_update = trigger_data_update,
+                                              trigger_summary_update = trigger_summary_update)
+    
+    magic_summary <- summarytableModuleServer("magic_summary", 
+                                              sensor_reactive = reactive(sensor_selector$selected_sensor()),
+                                              output_dir_reactive = reactive(output_dir()),
+                                              instrument_variable = "all",
                                               global_sensor_state = global_sensor_state,
                                               trigger_data_update = trigger_data_update,
                                               trigger_summary_update = trigger_summary_update)

@@ -167,6 +167,9 @@ safe_update_instrument_index <- function(output_dir, sensor_name, roi, updates) 
 ## Get instrument column mappings ####
 get_instrument_column_mapping <- function(instrument_var) {
   switch(instrument_var,
+         "all" = list(
+           instruments = c("pres", "acc", "rot")
+         ),
          "pres" = list(
            data_cols = c("pressure_kpa"),
            prefix = "pres",

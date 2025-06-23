@@ -17,8 +17,12 @@ server <- function(input, output, session) {
   global_sensor_state <- reactiveValues(
     data_updated = 0,           # For any sensor data changes
     summary_updated = 0,        # For summary/status changes
-    processing_updated = 0      # For processing completion
+    processing_updated = 0,     # For processing completion
+    magic_trigger_pressure = FALSE,
+    magic_trigger_acceleration = FALSE,
+    magic_processing_sensor = NULL
   )
+  
   
   # Global trigger functions
   trigger_data_update <- function() {

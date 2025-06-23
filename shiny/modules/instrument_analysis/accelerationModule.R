@@ -231,7 +231,27 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
     # /// UI State management \\\ ####  
     # ============================= # 
     
-    
+    observe({
+      if (global_sensor_state$magic_trigger_acceleration && 
+          global_sensor_state$magic_processing_sensor == sensor_selector$selected_sensor()) {
+        
+        # Reset the trigger
+        global_sensor_state$magic_trigger_acceleration <- FALSE
+        
+        # Check if acceleration analysis needed
+        status <- sensor_status()
+        if (!status$acc_hig_peaks_processed) {
+          # Call the existing peak calculation function
+          calculate_and_save_peaks()
+          
+          showNotification("⚡ Acceleration analysis complete! Magic processing finished! ✨", 
+                           type = "message", duration = 4)
+        }
+        
+        # Clear the processing sensor
+        global_sensor_state$magic_processing_sensor <- NULL
+      }
+    })
     
     # Enable/disable normalized checkbox based on sensor status  
     observe({

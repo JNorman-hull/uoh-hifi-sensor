@@ -99,26 +99,53 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
     # /// Event handlers \\\ ####  
     # ============================= # 
     
-    observeEvent(input$process_summary, {
+    observe({
       req(sensor_reactive(), instrument_variable)
-      
-      # Check if data already exists
       status <- sensor_status()
-      status_col <- paste0(instrument_variable, "_sum_processed")
-      already_processed <- status[[status_col]] %||% FALSE
       
-      if (already_processed) {
-        showModal(modalDialog(
-          title = "Summary Data Exists",
-          paste("Summary data already exists for", sensor_reactive(), 
-                ". Replace existing summary data?"),
-          footer = tagList(
-            modalButton("Cancel"),
-            actionButton(ns("confirm_replace_summary"), "Replace", class = "btn-warning")
-          )
-        ))
+      if (instrument_variable == "all") {
+        # Check if all summaries are processed
+        all_processed <- (status$pres_sum_processed %||% FALSE) && 
+          (status$acc_sum_processed %||% FALSE) && 
+          (status$rot_sum_processed %||% FALSE)
+        
+        # Button enabled when delineated and trimmed
+        can_process <- status$delineated && status$trimmed
+        
+        if (all_processed) {
+          updateActionButton(session, "process_summary", label = "🔄 Recalculate All + Analyses")
+          shinyjs::removeClass("process_summary", "btn-success")
+          shinyjs::addClass("process_summary", "btn-warning")
+        } else {
+          updateActionButton(session, "process_summary", label = "🪄 Magic Process All")
+          shinyjs::removeClass("process_summary", "btn-warning")
+          shinyjs::addClass("process_summary", "btn-success")
+        }
+        
+        if (can_process) {
+          shinyjs::enable("process_summary")
+        } else {
+          shinyjs::disable("process_summary")
+        }
+        
       } else {
-        calculate_and_save_summary()
+        # Existing single instrument logic stays the same
+        status_col <- paste0(instrument_variable, "_sum_processed")
+        already_processed <- status[[status_col]] %||% FALSE
+        can_process <- status$delineated && status$trimmed
+        
+        button_states <- list("process_summary" = can_process)
+        manage_button_states(session, button_states)
+        
+        if (already_processed) {
+          updateActionButton(session, "process_summary", label = "Recalculate summary information")
+          shinyjs::removeClass("process_summary", "btn-success")
+          shinyjs::addClass("process_summary", "btn-warning")
+        } else {
+          updateActionButton(session, "process_summary", label = "Process summary information")
+          shinyjs::removeClass("process_summary", "btn-warning")
+          shinyjs::addClass("process_summary", "btn-success")
+        }
       }
     })
     
@@ -133,104 +160,143 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
     
     calculate_and_save_summary <- function() {
       tryCatch({
-        # Read delineated data
-        sensor_data <- read_sensor_data(output_dir_reactive(), sensor_reactive(), "delineated")
-        
-        if (is.null(sensor_data)) {
-          showNotification("Failed to read delineated dataset", type = "error")
-          return()
-        }
-        
-        # Get instrument column mapping
-        mapping <- get_instrument_column_mapping(instrument_variable)
-        if (is.null(mapping)) {
-          showNotification("Invalid instrument variable", type = "error")
-          return()
-        }
-        
-        # Get actual ROI levels from the data, plus overall
-        roi_levels <- c("overall")
-        if ("roi" %in% names(sensor_data)) {
-          actual_rois <- unique(sensor_data$roi)
-          # Remove trim regions and add to roi_levels
-          actual_rois <- actual_rois[!actual_rois %in% c("trim_start", "trim_end")]
-          roi_levels <- c(roi_levels, actual_rois)
-        }
-        
-        # Process each ROI
-        for (roi in roi_levels) {
-          # Filter data for this ROI
-          if (roi == "overall") {
-            roi_data <- sensor_data
-          } else {
-            roi_data <- sensor_data[sensor_data$roi == roi, ]
+        # Handle "all" case - process everything!
+        if (instrument_variable == "all") {
+          sensor_name <- sensor_reactive()
+          
+          # Step 1: Calculate summaries for all instruments
+          instruments_to_process <- c("pres", "acc", "rot")
+          
+          for (inst in instruments_to_process) {
+            process_single_instrument(inst)
           }
           
-          if (nrow(roi_data) == 0) next
-          
-          # Calculate summary for each instrument column
-          updates <- list()
-          
-          for (i in seq_along(mapping$data_cols)) {
-            col <- mapping$data_cols[i]
-            prefix <- mapping$prefix[i]
-            unit <- mapping$units[i]
-            
-            if (!col %in% names(roi_data)) next
-            
-            # Calculate statistics
-            min_idx <- which.min(roi_data[[col]])
-            max_idx <- which.max(roi_data[[col]])
-            
-            min_val <- roi_data[[col]][min_idx]
-            min_time <- roi_data$time_s[min_idx]
-            max_val <- roi_data[[col]][max_idx]
-            max_time <- roi_data$time_s[max_idx]
-            median_val <- median(roi_data[[col]], na.rm = TRUE)
-            iqr_val <- IQR(roi_data[[col]], na.rm = TRUE)
-            
-            # Create column names matching instrument index structure
-            updates[[paste0(prefix, "_min", unit)]] <- round(min_val, 2)
-            updates[[paste0(prefix, "_min.time.")]] <- round(min_time, 2)
-            updates[[paste0(prefix, "_max", unit)]] <- round(max_val, 2)
-            updates[[paste0(prefix, "_max.time.")]] <- round(max_time, 2)
-            updates[[paste0(prefix, "_median", unit)]] <- round(median_val, 2)
-            updates[[paste0(prefix, "_iqr", unit)]] <- round(iqr_val, 2)
-          }
-          
-          # Save to instrument index using the actual ROI name
-          success <- safe_update_instrument_index(
-            output_dir_reactive(), 
-            sensor_reactive(),
-            roi,
-            updates
+          # Update all summary status flags
+          status_updates <- list(
+            "pres_sum_processed" = "Y",
+            "acc_sum_processed" = "Y", 
+            "rot_sum_processed" = "Y"
           )
           
-          if (!success) {
-            showNotification(paste("Failed to save summary for", roi), type = "warning")
+          success <- safe_update_sensor_index(output_dir_reactive(), sensor_name, status_updates)
+          
+          if (success) {
+            trigger_data_update()
+            trigger_summary_update()
+            showNotification("📊 All summaries calculated! Starting pressure analysis...", 
+                             type = "message", duration = 3)
+            
+            # Step 2: Trigger pressure analysis
+            global_sensor_state$magic_processing_sensor <- sensor_name
+            global_sensor_state$magic_trigger_pressure <- TRUE
           }
-        }
-        
-        # Update status flag in sensor index
-        status_col <- paste0(instrument_variable, "_sum_processed")
-        success <- safe_update_sensor_index(
-          output_dir_reactive(), 
-          sensor_reactive(),
-          setNames(list("Y"), status_col)
-        )
-        
-        if (success) {
-          trigger_data_update()
-          trigger_summary_update() 
-          showNotification(paste("Summary information calculated and saved for", sensor_reactive()), 
-                           type = "message")
+          
         } else {
-          showNotification("Summary calculated but failed to update sensor status", type = "warning")
+          # Existing single instrument processing
+          process_single_instrument(instrument_variable)
+          
+          # Update status flag in sensor index
+          status_col <- paste0(instrument_variable, "_sum_processed")
+          success <- safe_update_sensor_index(
+            output_dir_reactive(), 
+            sensor_reactive(),
+            setNames(list("Y"), status_col)
+          )
+          
+          if (success) {
+            trigger_data_update()
+            trigger_summary_update()
+            showNotification(paste("Summary information calculated and saved for", sensor_reactive()), 
+                             type = "message")
+          } else {
+            showNotification("Summary calculated but failed to update sensor status", type = "warning")
+          }
         }
         
       }, error = function(e) {
         showNotification(paste("Error calculating summary:", e$message), type = "error")
       })
+    }
+    
+    # ADD THIS NEW HELPER FUNCTION:
+    process_single_instrument <- function(inst_var) {
+      # Read delineated data
+      sensor_data <- read_sensor_data(output_dir_reactive(), sensor_reactive(), "delineated")
+      
+      if (is.null(sensor_data)) {
+        showNotification("Failed to read delineated dataset", type = "error")
+        return()
+      }
+      
+      # Get instrument column mapping
+      mapping <- get_instrument_column_mapping(inst_var)
+      if (is.null(mapping)) {
+        showNotification("Invalid instrument variable", type = "error")
+        return()
+      }
+      
+      # Get actual ROI levels from the data, plus overall
+      roi_levels <- c("overall")
+      if ("roi" %in% names(sensor_data)) {
+        actual_rois <- unique(sensor_data$roi)
+        # Remove trim regions and add to roi_levels
+        actual_rois <- actual_rois[!actual_rois %in% c("trim_start", "trim_end")]
+        roi_levels <- c(roi_levels, actual_rois)
+      }
+      
+      # Process each ROI
+      for (roi in roi_levels) {
+        # Filter data for this ROI
+        if (roi == "overall") {
+          roi_data <- sensor_data
+        } else {
+          roi_data <- sensor_data[sensor_data$roi == roi, ]
+        }
+        
+        if (nrow(roi_data) == 0) next
+        
+        # Calculate summary for each instrument column
+        updates <- list()
+        
+        for (i in seq_along(mapping$data_cols)) {
+          col <- mapping$data_cols[i]
+          prefix <- mapping$prefix[i]
+          unit <- mapping$units[i]
+          
+          if (!col %in% names(roi_data)) next
+          
+          # Calculate statistics
+          min_idx <- which.min(roi_data[[col]])
+          max_idx <- which.max(roi_data[[col]])
+          
+          min_val <- roi_data[[col]][min_idx]
+          min_time <- roi_data$time_s[min_idx]
+          max_val <- roi_data[[col]][max_idx]
+          max_time <- roi_data$time_s[max_idx]
+          median_val <- median(roi_data[[col]], na.rm = TRUE)
+          iqr_val <- IQR(roi_data[[col]], na.rm = TRUE)
+          
+          # Create column names matching instrument index structure
+          updates[[paste0(prefix, "_min", unit)]] <- round(min_val, 2)
+          updates[[paste0(prefix, "_min.time.")]] <- round(min_time, 2)
+          updates[[paste0(prefix, "_max", unit)]] <- round(max_val, 2)
+          updates[[paste0(prefix, "_max.time.")]] <- round(max_time, 2)
+          updates[[paste0(prefix, "_median", unit)]] <- round(median_val, 2)
+          updates[[paste0(prefix, "_iqr", unit)]] <- round(iqr_val, 2)
+        }
+        
+        # Save to instrument index using the actual ROI name
+        success <- safe_update_instrument_index(
+          output_dir_reactive(), 
+          sensor_reactive(),
+          roi,
+          updates
+        )
+        
+        if (!success) {
+          showNotification(paste("Failed to save summary for", roi), type = "warning")
+        }
+      }
     }
     
     # ============================= #
