@@ -5,6 +5,8 @@ ui <- navbarPage(
   ),
   id = "mainTabset",
   
+  
+  
   footer = tags$div(
     "Hull International Fisheries Institute (2025)", 
     style = "font-size: 12px; color: #666; text-align: center;"
@@ -14,6 +16,16 @@ ui <- navbarPage(
   header = tags$head(
     # Initialize shinyjs inside header
     shinyjs::useShinyjs(),
+    
+    waiter_set_theme(html = spin_3(), color = "white"),
+    
+    #waiter::useWaiter(),
+    autoWaiter(c(
+      "roi-roi_plot-plot",
+      "pressure-pressure_plot-plot", 
+      "acceleration-acceleration_plot-plot",
+      "rotation-rotation_plot-plot"
+    )),
     
     # JavaScript for log updates and processing completion
     tags$script(HTML("
@@ -33,6 +45,8 @@ ui <- navbarPage(
     ")),
     
    ),
+  
+  
   
   ## Sensor index and Dashboard page ##
   tabPanel(

@@ -63,7 +63,7 @@ plotModuleUI <- function(id, height = "600px") {
   ns <- NS(id)
   
   tagList(
-    plotlyOutput(ns("plot"), height = height) %>% withSpinner(color = "#0dc5c1")
+    plotlyOutput(ns("plot"), height = height)
   )
 }
 
