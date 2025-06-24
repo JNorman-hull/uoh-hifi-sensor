@@ -29,7 +29,6 @@ library(kableExtra)
 # 3. Helper functions
 
 ```{r CI}
-
 calculate_proportion_ci <- function(n, x, confidence_level = 0.95) {
   # Calculate observed proportion
   p <- x / n
@@ -49,11 +48,11 @@ calculate_proportion_ci <- function(n, x, confidence_level = 0.95) {
 }
 ```
 
-
 # 4. Import data
 
 ```{r delineated_list, echo=FALSE}
-delineated_file_list <- list.files("./shiny/processed_sens_data/csv/delineated/", pattern = "_delineated\\.csv$", full.names = TRUE)
+delineated_file_list <- list.files("./shiny/processed_sens_data/csv/delineated/", 
+                                   pattern = "_delineated\\.csv$", full.names = TRUE)
 ```
 
 ```{r index_data}
@@ -61,179 +60,606 @@ sensor_index <- read_csv("./shiny/processed_sens_data/index/global_sensor_index.
 instrument_index <- read_csv("./shiny/processed_sens_data/instrument_data/global_processed_instrument_data.csv")
 ```
 
-
 # 5. Clean, merge, typeset
 
 ```{r data_cleanup}
+# Append sensor_index to instrument_index
+# Only join good sensors (bad_sens = N) and overall roi data
+merged_data <- instrument_index %>%
+  filter(roi == "overall") %>%
+  left_join(sensor_index %>% 
+              filter(bad_sens == "N") %>%
+              select(file, sensor, deployment_id, treatment, 
+                     passage_duration.mm.ss., ingress_nadir_duration.mm.ss., 
+                     nadir_outgress_duration.mm.ss.), 
+            by = "file") %>%
+  # Setup data types
+  mutate(
+    treatment = factor(treatment, 
+                      levels = c("treatment_1", "treatment_2", "treatment_3", "treatment_4"),
+                      labels = c("Treatment 1", "Treatment 2", "Treatment 3", "Treatment 4")),
+    roi = factor(roi,
+                 levels = c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
+                           "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                           "roi6_outflow_passage", "roi7_sens_outgress"),
+                 labels = c("Overall", "ROI 1", "ROI 2", "ROI 3", "ROI 4", 
+                           "ROI 5", "ROI 6", "ROI 7")),
+    acc_strike = factor(acc_strike,
+                       levels = c("N", "Y"),
+                       labels = c("No blade strike", "Blade strike")),
+    # Convert event columns to integers
+    acc_event_95g = as.integer(acc_event_95g),
+    acc_event_200g = as.integer(acc_event_200g),
+    acc_event_400g = as.integer(acc_event_400g),
+    acc_shear = as.integer(acc_shear),
+    acc_collision = as.integer(acc_collision)
+  )
 
-#Append sensor_index to instrument_index
-# use the file from sensor_index to add the sensor_index information to the instrument_index
-# each row of file should be used to add sensor, bad_sens, deployment_id, treatment, passage_duration.mm.ss., ingress_nadir_duration.mm.ss., nadir_outgress_duration.mm.ss. columns and append the info to the 'overall' roi
-
-#Something like 
-
-instrument_index %>%
-  left_join(sensor_index %>% select(file, sensor, deployment_id, treatment, passage_duration.mm.ss., ingress_nadir_duration.mm.ss., nadir_outgress_duration.mm.ss.), by = "file")
-#Only join good sensors (bad_sens = N)
-
-
-#Setup datatypes
-
-instrument_index <- instrument_index %>%
-  mutate()
-
-#factors
-# # treatment = factor(treatment, 
-#                       levels = c("treatment_1", "treatment_2", "treatment_3", "treatment_4"),
-#                       labels = c("Treatment 1", "Treatment 2", "Treatment 3",
-#                                  "Treatment 4")),
-# bad_sens = factor(bad_sens,
-#                           levels = c("N", "Y"),
-#                           labels = c("Good", "Bad")),
-# roi = factor(roi,
-#              levels = c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
-#                 "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
-#                 "roi6_outflow_passage", "roi7_sens_outgress"),
-#                       labels = c("Overall", "ROI 1", "ROI 2", 
-#                 "ROI 3", "ROI 4", "ROI 5", 
-#                 "ROI 6", "ROI 7")),
-
-#nadir_baro 	rpc_baro	lrpc_baro_surface	lrpc_baro_depth they're all factos, but only have level N (No), except for one case of Y which as an outlier
-
-#intergers for count data - acc_event_95g	acc_event_200g	acc_event_400g		acc_shear	acc_collision
-
-# acc_srike = factor(acc_strike,
-#                           levels = c("N", "Y"),
-#                           labels = c("No blade strike", "Blade strike")),
-   
-# Passage duration in 00:00 mm:ss format   
-#passage_duration.mm.ss., ingress_nadir_duration.mm.ss., nadir_outgress_duration.mm.ss.
-
-
-
+# Get all ROI data with proper factors
+all_roi_data <- instrument_index %>%
+  left_join(sensor_index %>% 
+              filter(bad_sens == "N") %>%
+              select(file, sensor, deployment_id, treatment), 
+            by = "file") %>%
+  filter(!is.na(treatment)) %>%
+  mutate(
+    treatment = factor(treatment, 
+                      levels = c("treatment_1", "treatment_2", "treatment_3", "treatment_4"),
+                      labels = c("Treatment 1", "Treatment 2", "Treatment 3", "Treatment 4")),
+    roi = factor(roi,
+                 levels = c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
+                           "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                           "roi6_outflow_passage", "roi7_sens_outgress"),
+                 labels = c("Overall", "ROI 1", "ROI 2", "ROI 3", "ROI 4", 
+                           "ROI 5", "ROI 6", "ROI 7")),
+    # Convert event columns to integers
+    acc_event_95g = as.integer(acc_event_95g),
+    acc_event_200g = as.integer(acc_event_200g),
+    acc_event_400g = as.integer(acc_event_400g),
+    acc_shear = as.integer(acc_shear),
+    acc_collision = as.integer(acc_collision)
+  )
 ```
 
-# 5. Utility rate
+# 6. Utility rate
 
 ```{r data-quality}
-
 utility_rate <- sensor_index %>%
-  
-  
-#Utility rate 
-# columns = treatment (group), total file, total good, total bad, utility rate (%)
-# bind with Overall utility rate by all sensors
+  group_by(treatment) %>%
+  summarise(
+    total_files = n(),
+    total_good = sum(bad_sens == "N", na.rm = TRUE),
+    total_bad = sum(bad_sens == "Y", na.rm = TRUE),
+    utility_rate_pct = round((total_good / total_files) * 100, 1),
+    .groups = 'drop'
+  ) %>%
+  # Add overall row
+  bind_rows(
+    sensor_index %>%
+      summarise(
+        treatment = "Overall",
+        total_files = n(),
+        total_good = sum(bad_sens == "N", na.rm = TRUE),
+        total_bad = sum(bad_sens == "Y", na.rm = TRUE),
+        utility_rate_pct = round((total_good / total_files) * 100, 1)
+      )
+  )
 
-kable(utility_rate)%>%
+kable(utility_rate, 
+      col.names = c("Treatment", "Total Files", "Good", "Bad", "Utility Rate (%)"),
+      caption = "Sensor Utility Rate by Treatment") %>%
   kable_styling(full_width = FALSE, 
                 bootstrap_options = c("striped", "hover", "condensed"))
 ```
 
+# 7. Collision and blade strike assessment
 
-# 5. Comprehnsive summary statistics
+```{r collision_sum}
+# Create summary statistics table for impact events by ROI
+collision_summary <- all_roi_data %>%
+  group_by(roi) %>%
+  summarise(
+    n_sensors = n(),
+    event_95g = sum(acc_event_95g, na.rm = TRUE),
+    event_200g = sum(acc_event_200g, na.rm = TRUE),
+    event_400g = sum(acc_event_400g, na.rm = TRUE),
+    shear_n = sum(acc_shear, na.rm = TRUE),
+    collision_n = sum(acc_collision, na.rm = TRUE),
+    blade_strike_n = ifelse(roi == "Overall", 
+                           sum(acc_strike == "Blade strike", na.rm = TRUE), NA),
+    .groups = 'drop'
+  ) %>%
+  # Calculate probabilities and confidence intervals
+  mutate(
+    # Shear probability and CI
+    shear_prob = shear_n / n_sensors,
+    shear_ci = map2(n_sensors, shear_n, ~calculate_proportion_ci(.x, .y)),
+    shear_prob_ci = map_chr(shear_ci, ~paste0(round(.x$lower_bound, 3), "-", round(.x$upper_bound, 3))),
+    
+    # Collision probability and CI
+    collision_prob = collision_n / n_sensors,
+    collision_ci = map2(n_sensors, collision_n, ~calculate_proportion_ci(.x, .y)),
+    collision_prob_ci = map_chr(collision_ci, ~paste0(round(.x$lower_bound, 3), "-", round(.x$upper_bound, 3))),
+    
+    # Blade strike probability and CI (only for Overall)
+    blade_strike_prob = ifelse(!is.na(blade_strike_n), blade_strike_n / n_sensors, NA),
+    blade_strike_ci = ifelse(!is.na(blade_strike_n), 
+                            map2(n_sensors, blade_strike_n, ~calculate_proportion_ci(.x, .y)),
+                            list(NA)),
+    blade_strike_prob_ci = ifelse(!is.na(blade_strike_n),
+                                 map_chr(blade_strike_ci, ~paste0(round(.x$lower_bound, 3), "-", round(.x$upper_bound, 3))),
+                                 NA)
+  ) %>%
+  select(-shear_ci, -collision_ci, -blade_strike_ci)
+
+# Format table with gt
+collision_summary %>%
+  select(roi, event_95g, event_200g, event_400g, 
+         shear_n, shear_prob, shear_prob_ci,
+         collision_n, collision_prob, collision_prob_ci,
+         blade_strike_n, blade_strike_prob, blade_strike_prob_ci) %>%
+  gt() %>%
+  tab_header(title = "Impact Event Summary by ROI") %>%
+  cols_label(
+    roi = "ROI",
+    event_95g = "≥95g Events",
+    event_200g = "≥200g Events", 
+    event_400g = "≥400g Events",
+    shear_n = "Shear (n)",
+    shear_prob = "Shear Prob",
+    shear_prob_ci = "Shear 95% CI",
+    collision_n = "Collision (n)",
+    collision_prob = "Collision Prob", 
+    collision_prob_ci = "Collision 95% CI",
+    blade_strike_n = "Blade Strike (n)",
+    blade_strike_prob = "Blade Strike Prob",
+    blade_strike_prob_ci = "Blade Strike 95% CI"
+  ) %>%
+  fmt_number(columns = c(shear_prob, collision_prob, blade_strike_prob), decimals = 3) %>%
+  sub_missing(missing_text = "-")
+```
+
+```{r blade_strike_metric}
+# Blade strike comparison table
+strike_data <- merged_data %>%
+  mutate(strike_status = ifelse(acc_strike == "Blade strike", "Strike", "No Strike")) %>%
+  filter(!is.na(strike_status))
+
+# Get nadir pressure from ROI 4
+nadir_pressure <- all_roi_data %>%
+  filter(roi == "ROI 4") %>%
+  select(file, nadir_pres = pres_min.kPa.)
+
+strike_comparison <- strike_data %>%
+  left_join(nadir_pressure, by = "file") %>%
+  select(strike_status, acc_hig_max.g., nadir_pres, rot_max.degs.) %>%
+  gather(metric, value, -strike_status) %>%
+  filter(!is.na(value)) %>%
+  group_by(metric, strike_status) %>%
+  summarise(
+    median = median(value, na.rm = TRUE),
+    q1 = quantile(value, 0.25, na.rm = TRUE),
+    q3 = quantile(value, 0.75, na.rm = TRUE),
+    iqr = q3 - q1,
+    .groups = 'drop'
+  ) %>%
+  spread(strike_status, median) %>%
+  rename(strike_median = Strike, no_strike_median = `No Strike`) %>%
+  # Calculate p-values using Wilcoxon test
+  left_join(
+    strike_data %>%
+      left_join(nadir_pressure, by = "file") %>%
+      select(strike_status, acc_hig_max.g., nadir_pres, rot_max.degs.) %>%
+      gather(metric, value, -strike_status) %>%
+      filter(!is.na(value)) %>%
+      group_by(metric) %>%
+      summarise(
+        p_value = tryCatch({
+          wilcox.test(value ~ strike_status)$p.value
+        }, error = function(e) NA),
+        .groups = 'drop'
+      ),
+    by = "metric"
+  )
+
+strike_comparison %>%
+  mutate(
+    metric = case_when(
+      metric == "acc_hig_max.g." ~ "Max Acceleration (g)",
+      metric == "nadir_pres" ~ "Pressure Nadir (kPa)", 
+      metric == "rot_max.degs." ~ "Max Rotation (°)"
+    )
+  ) %>%
+  gt() %>%
+  tab_header(title = "Blade Strike vs No Strike Comparison") %>%
+  cols_label(
+    metric = "Metric",
+    strike_median = "Strike Median",
+    no_strike_median = "No Strike Median", 
+    iqr = "IQR",
+    p_value = "P-value"
+  ) %>%
+  fmt_number(columns = c(strike_median, no_strike_median, iqr), decimals = 2) %>%
+  fmt_number(columns = p_value, decimals = 4)
+```
+
+# 8. Comprehensive summary statistics
 
 ```{r pres_sum}
+# Function to read and summarize delineated data
+summarize_delineated_data <- function(file_list, data_col, roi_filter = NULL) {
+  map_dfr(file_list, function(file) {
+    tryCatch({
+      data <- read_csv(file, show_col_types = FALSE)
+      file_name <- tools::file_path_sans_ext(basename(file))
+      file_name <- str_remove(file_name, "_delineated")
+      
+      if (!data_col %in% names(data)) return(NULL)
+      
+      if (!is.null(roi_filter)) {
+        data <- data %>% filter(roi == roi_filter)
+      }
+      
+      data %>%
+        filter(!is.na(.data[[data_col]])) %>%
+        summarise(
+          file = file_name,
+          median_val = median(.data[[data_col]], na.rm = TRUE),
+          iqr_val = IQR(.data[[data_col]], na.rm = TRUE)
+        )
+    }, error = function(e) NULL)
+  })
+}
 
-#create summary statistics table for pressure and format neatly with gt
+# Pressure summary statistics by ROI
+pres_summary <- all_roi_data %>%
+  group_by(roi) %>%
+  summarise(
+    pres_min_min = min(pres_min.kPa., na.rm = TRUE),
+    pres_min_max = max(pres_min.kPa., na.rm = TRUE),
+    pres_min_med = median(pres_min.kPa., na.rm = TRUE),
+    pres_min_iqr = IQR(pres_min.kPa., na.rm = TRUE),
+    pres_max_min = min(pres_max.kPa., na.rm = TRUE),
+    pres_max_max = max(pres_max.kPa., na.rm = TRUE),
+    pres_max_med = median(pres_max.kPa., na.rm = TRUE),
+    pres_max_iqr = IQR(pres_max.kPa., na.rm = TRUE),
+    .groups = 'drop'
+  )
 
-#min	max	med	iqr for pres_min.kPa.	pres_max.kPa.	in each roi
+# Get median pressure from delineated files by ROI
+if (length(delineated_file_list) > 0) {
+  delineated_pres <- map_dfr(c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
+                              "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                              "roi6_outflow_passage", "roi7_sens_outgress"), function(roi_val) {
+    roi_summary <- summarize_delineated_data(delineated_file_list, "pressure_kpa", roi_val)
+    if (nrow(roi_summary) > 0) {
+      roi_summary %>%
+        summarise(
+          roi = roi_val,
+          median_from_delineated = median(median_val, na.rm = TRUE),
+          iqr_from_delineated = median(iqr_val, na.rm = TRUE)
+        )
+    }
+  })
+  
+  if (nrow(delineated_pres) > 0) {
+    pres_summary <- pres_summary %>%
+      left_join(delineated_pres, by = "roi")
+  }
+}
 
-#calculate the median pressure_kpa for each roi by using the delineated_file_list to get the median and iqr directly from sensor data,
-
-#format neat output table (rows = roi, columns = each summary statistic, so should end up with 10 columns and 8 rows)
-
+pres_summary %>%
+  gt() %>%
+  tab_header(title = "Pressure Summary Statistics by ROI") %>%
+  cols_label(
+    roi = "ROI",
+    pres_min_min = "Min Pres Min",
+    pres_min_max = "Max Pres Min", 
+    pres_min_med = "Med Pres Min",
+    pres_min_iqr = "IQR Pres Min",
+    pres_max_min = "Min Pres Max",
+    pres_max_max = "Max Pres Max",
+    pres_max_med = "Med Pres Max", 
+    pres_max_iqr = "IQR Pres Max"
+  ) %>%
+  fmt_number(columns = where(is.numeric), decimals = 2)
 ```
 
 ```{r acc_hig_sum}
+# High acceleration summary statistics by ROI
+acc_hig_summary <- all_roi_data %>%
+  group_by(roi) %>%
+  summarise(
+    acc_hig_min_min = min(acc_hig_min.g., na.rm = TRUE),
+    acc_hig_min_max = max(acc_hig_min.g., na.rm = TRUE),
+    acc_hig_min_med = median(acc_hig_min.g., na.rm = TRUE),
+    acc_hig_min_iqr = IQR(acc_hig_min.g., na.rm = TRUE),
+    acc_hig_max_min = min(acc_hig_max.g., na.rm = TRUE),
+    acc_hig_max_max = max(acc_hig_max.g., na.rm = TRUE),
+    acc_hig_max_med = median(acc_hig_max.g., na.rm = TRUE),
+    acc_hig_max_iqr = IQR(acc_hig_max.g., na.rm = TRUE),
+    .groups = 'drop'
+  )
 
-#create summary statistics table for hig and format neatly with gt
+# Get median HIG acceleration from delineated files by ROI
+if (length(delineated_file_list) > 0) {
+  delineated_hig <- map_dfr(c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
+                             "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                             "roi6_outflow_passage", "roi7_sens_outgress"), function(roi_val) {
+    roi_summary <- summarize_delineated_data(delineated_file_list, "higacc_mag_g", roi_val)
+    if (nrow(roi_summary) > 0) {
+      roi_summary %>%
+        summarise(
+          roi = roi_val,
+          median_from_delineated = median(median_val, na.rm = TRUE),
+          iqr_from_delineated = median(iqr_val, na.rm = TRUE)
+        )
+    }
+  })
+  
+  if (nrow(delineated_hig) > 0) {
+    acc_hig_summary <- acc_hig_summary %>%
+      left_join(delineated_hig, by = "roi")
+  }
+}
 
-#min	max	med	iqr for acc_hig_min.g.b acc_hig_max.g.	in each roi
-
-#calculate the median higacc_mag_g for each roi by using the delineated_file_list to get the median and iqr directly from sensor data,
-
-#format neat output table (rows = roi, columns = each summary statistic, so should end up with 10 columns and 8 rows)
-
+acc_hig_summary %>%
+  gt() %>%
+  tab_header(title = "High Acceleration Summary Statistics by ROI") %>%
+  cols_label(
+    roi = "ROI",
+    acc_hig_min_min = "Min HIG Min",
+    acc_hig_min_max = "Max HIG Min",
+    acc_hig_min_med = "Med HIG Min", 
+    acc_hig_min_iqr = "IQR HIG Min",
+    acc_hig_max_min = "Min HIG Max",
+    acc_hig_max_max = "Max HIG Max",
+    acc_hig_max_med = "Med HIG Max",
+    acc_hig_max_iqr = "IQR HIG Max"
+  ) %>%
+  fmt_number(columns = where(is.numeric), decimals = 2)
 ```
-
 
 ```{r acc_inacc_sum}
+# Inertial acceleration summary statistics by ROI
+acc_inacc_summary <- all_roi_data %>%
+  group_by(roi) %>%
+  summarise(
+    acc_inacc_min_min = min(acc_inacc_min.ms., na.rm = TRUE),
+    acc_inacc_min_max = max(acc_inacc_min.ms., na.rm = TRUE),
+    acc_inacc_min_med = median(acc_inacc_min.ms., na.rm = TRUE),
+    acc_inacc_min_iqr = IQR(acc_inacc_min.ms., na.rm = TRUE),
+    acc_inacc_max_min = min(acc_inacc_max.ms., na.rm = TRUE),
+    acc_inacc_max_max = max(acc_inacc_max.ms., na.rm = TRUE),
+    acc_inacc_max_med = median(acc_inacc_max.ms., na.rm = TRUE),
+    acc_inacc_max_iqr = IQR(acc_inacc_max.ms., na.rm = TRUE),
+    .groups = 'drop'
+  )
 
-#create summary statistics table for inacc and format neatly with gt
+# Get median inacc from delineated files by ROI
+if (length(delineated_file_list) > 0) {
+  delineated_inacc <- map_dfr(c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
+                               "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                               "roi6_outflow_passage", "roi7_sens_outgress"), function(roi_val) {
+    roi_summary <- summarize_delineated_data(delineated_file_list, "inacc_mag_ms", roi_val)
+    if (nrow(roi_summary) > 0) {
+      roi_summary %>%
+        summarise(
+          roi = roi_val,
+          median_from_delineated = median(median_val, na.rm = TRUE),
+          iqr_from_delineated = median(iqr_val, na.rm = TRUE)
+        )
+    }
+  })
+  
+  if (nrow(delineated_inacc) > 0) {
+    acc_inacc_summary <- acc_inacc_summary %>%
+      left_join(delineated_inacc, by = "roi")
+  }
+}
 
-#min	max	med	iqr for acc_inacc_min.ms.	acc_inacc_max.ms.	in each roi
-
-#calculate the median inacc_mag_ms for each roi by using the delineated_file_list to get the median and iqr directly from sensor data,
-
-#format neat output table (rows = roi, columns = each summary statistic, so should end up with 10 columns and 8 rows)
-
+acc_inacc_summary %>%
+  gt() %>%
+  tab_header(title = "Inertial Acceleration Summary Statistics by ROI") %>%
+  cols_label(
+    roi = "ROI",
+    acc_inacc_min_min = "Min INACC Min",
+    acc_inacc_min_max = "Max INACC Min",
+    acc_inacc_min_med = "Med INACC Min",
+    acc_inacc_min_iqr = "IQR INACC Min", 
+    acc_inacc_max_min = "Min INACC Max",
+    acc_inacc_max_max = "Max INACC Max",
+    acc_inacc_max_med = "Med INACC Max",
+    acc_inacc_max_iqr = "IQR INACC Max"
+  ) %>%
+  fmt_number(columns = where(is.numeric), decimals = 2)
 ```
 
-```{r pres_sum}
+```{r rot_sum}
+# Rotation summary statistics by ROI
+rot_summary <- all_roi_data %>%
+  group_by(roi) %>%
+  summarise(
+    rot_min_min = min(rot_min.degs., na.rm = TRUE),
+    rot_min_max = max(rot_min.degs., na.rm = TRUE),
+    rot_min_med = median(rot_min.degs., na.rm = TRUE),
+    rot_min_iqr = IQR(rot_min.degs., na.rm = TRUE),
+    rot_max_min = min(rot_max.degs., na.rm = TRUE),
+    rot_max_max = max(rot_max.degs., na.rm = TRUE),
+    rot_max_med = median(rot_max.degs., na.rm = TRUE),
+    rot_max_iqr = IQR(rot_max.degs., na.rm = TRUE),
+    .groups = 'drop'
+  )
 
-#create summary statistics table for rot and format neatly with gt
+# Get median rotation from delineated files by ROI
+if (length(delineated_file_list) > 0) {
+  delineated_rot <- map_dfr(c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
+                             "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                             "roi6_outflow_passage", "roi7_sens_outgress"), function(roi_val) {
+    roi_summary <- summarize_delineated_data(delineated_file_list, "rot_mag_degs", roi_val)
+    if (nrow(roi_summary) > 0) {
+      roi_summary %>%
+        summarise(
+          roi = roi_val,
+          median_from_delineated = median(median_val, na.rm = TRUE),
+          iqr_from_delineated = median(iqr_val, na.rm = TRUE)
+        )
+    }
+  })
+  
+  if (nrow(delineated_rot) > 0) {
+    rot_summary <- rot_summary %>%
+      left_join(delineated_rot, by = "roi")
+  }
+}
 
-#min	max	med	iqr for rot_min.degs.	rot_max.degs.	in each roi
-
-#calculate the median rot_mag_degs  for each roi by using the delineated_file_list to get the median and iqr directly from sensor data,
-
-#format neat output table (rows = roi, columns = each summary statistic, so should end up with 10 columns and 8 rows)
-
+rot_summary %>%
+  gt() %>%
+  tab_header(title = "Rotation Summary Statistics by ROI") %>%
+  cols_label(
+    roi = "ROI",
+    rot_min_min = "Min Rot Min",
+    rot_min_max = "Max Rot Min",
+    rot_min_med = "Med Rot Min",
+    rot_min_iqr = "IQR Rot Min",
+    rot_max_min = "Min Rot Max", 
+    rot_max_max = "Max Rot Max",
+    rot_max_med = "Med Rot Max",
+    rot_max_iqr = "IQR Rot Max"
+  ) %>%
+  fmt_number(columns = where(is.numeric), decimals = 2)
 ```
 
-
-# 5. Barotrauma assesment
+# 9. Barotrauma assessment
 
 ```{r baro_sum}
+# Barotrauma summary using overall ROI data and nadir from ROI 4
+nadir_data <- all_roi_data %>%
+  filter(roi == "ROI 4") %>%
+  select(file, nadir_pressure = pres_min.kPa.)
 
-#create summary statistics table for pressure barotrauma indicators and format neatly with gt
+baro_data <- merged_data %>%
+  left_join(nadir_data, by = "file") %>%
+  summarise(
+    # Counts
+    nadir_baro_count = sum(nadir_baro == "Y", na.rm = TRUE),
+    rpc_baro_count = sum(rpc_baro == "Y", na.rm = TRUE),
+    lrpc_baro_surface_count = sum(lrpc_baro_surface == "Y", na.rm = TRUE),
+    lrpc_baro_depth_count = sum(lrpc_baro_depth == "Y", na.rm = TRUE),
+    
+    # Statistics for nadir (from ROI 4)
+    nadir_min = min(nadir_pressure, na.rm = TRUE),
+    nadir_max = max(nadir_pressure, na.rm = TRUE),
+    nadir_med = median(nadir_pressure, na.rm = TRUE),
+    nadir_iqr = IQR(nadir_pressure, na.rm = TRUE),
+    
+    # Statistics for RPC
+    rpc_min = min(pres_rpc, na.rm = TRUE),
+    rpc_max = max(pres_rpc, na.rm = TRUE),
+    rpc_med = median(pres_rpc, na.rm = TRUE),
+    rpc_iqr = IQR(pres_rpc, na.rm = TRUE),
+    
+    # Statistics for LRPC surface
+    lrpc_surface_min = min(pres_lrpc_surface, na.rm = TRUE),
+    lrpc_surface_max = max(pres_lrpc_surface, na.rm = TRUE),
+    lrpc_surface_med = median(pres_lrpc_surface, na.rm = TRUE),
+    lrpc_surface_iqr = IQR(pres_lrpc_surface, na.rm = TRUE),
+    
+    # Statistics for LRPC depth
+    lrpc_depth_min = min(pres_lrpc_depth, na.rm = TRUE),
+    lrpc_depth_max = max(pres_lrpc_depth, na.rm = TRUE),
+    lrpc_depth_med = median(pres_lrpc_depth, na.rm = TRUE),
+    lrpc_depth_iqr = IQR(pres_lrpc_depth, na.rm = TRUE)
+  )
 
-#Using only roi = overall
-#counts (the nadir_baro	rpc_baro	lrpc_baro_surface	lrpc_baro_depth variables), and min	max	med	iqr for pres_rpc pres_lrpc_surface	pres_lrpc_depth. for nadir, take the pres_min.kPa. for roi = roi 4.
+# Transpose for better display
+baro_summary_long <- baro_data %>%
+  select(nadir_baro_count, nadir_min, nadir_max, nadir_med, nadir_iqr,
+         rpc_baro_count, rpc_min, rpc_max, rpc_med, rpc_iqr,
+         lrpc_baro_surface_count, lrpc_surface_min, lrpc_surface_max, lrpc_surface_med, lrpc_surface_iqr,
+         lrpc_baro_depth_count, lrpc_depth_min, lrpc_depth_max, lrpc_depth_med, lrpc_depth_iqr) %>%
+  pivot_longer(everything()) %>%
+  separate(name, into = c("indicator", "statistic"), sep = "_(?=count|min|max|med|iqr)") %>%
+  mutate(
+    indicator = case_when(
+      str_detect(indicator, "nadir") ~ "Nadir",
+      str_detect(indicator, "^rpc") ~ "RPC", 
+      str_detect(indicator, "lrpc.*surface") ~ "LRPC Surface",
+      str_detect(indicator, "lrpc.*depth") ~ "LRPC Depth"
+    )
+  ) %>%
+  pivot_wider(names_from = indicator, values_from = value)
 
-#format neat output table (rows = count , min, max, med, iqr), columns = nadir, rpc, lrpc(surface), lrpc(depth) so should end up with 4 columns and 5 rows)
-
+baro_summary_long %>%
+  gt() %>%
+  tab_header(title = "Barotrauma Indicators Summary") %>%
+  cols_label(
+    statistic = "Statistic",
+    Nadir = "Nadir",
+    RPC = "RPC",
+    `LRPC Surface` = "LRPC (Surface)",
+    `LRPC Depth` = "LRPC (Depth)"
+  ) %>%
+  fmt_number(columns = where(is.numeric), decimals = 2)
 ```
 
-
 ```{r baro_proxim}
-
 # Define thresholds
 nadir_threshold <- 50  # kPa
 rpc_threshold <- 550   # kPa  
 lrpc_threshold <- 0.5
 
-#Determine how many sensors recorded pressure values within 10% of thresholds
-#use overall roi for pres_rpc pres_lrpc_surface	pres_lrpc_depth. for nadir, take the pres_min.kPa. for roi = roi 4.
+# Get nadir data from ROI 4
+nadir_threshold_data <- all_roi_data %>%
+  filter(roi == "ROI 4") %>%
+  select(file, nadir_pressure = pres_min.kPa.)
 
+# Calculate proximity to thresholds
+proximity_analysis <- merged_data %>%
+  left_join(nadir_threshold_data, by = "file") %>%
+  summarise(
+    # Within 10% of nadir threshold (50 kPa)
+    nadir_within_10pct = sum(abs(nadir_pressure - nadir_threshold) <= (nadir_threshold * 0.1), na.rm = TRUE),
+    nadir_total = sum(!is.na(nadir_pressure)),
+    
+    # Within 10% of RPC threshold (550 kPa)
+    rpc_within_10pct = sum(abs(pres_rpc - rpc_threshold) <= (rpc_threshold * 0.1), na.rm = TRUE),
+    rpc_total = sum(!is.na(pres_rpc)),
+    
+    # Within 10% of LRPC surface threshold (0.5)
+    lrpc_surface_within_10pct = sum(abs(pres_lrpc_surface - lrpc_threshold) <= (lrpc_threshold * 0.1), na.rm = TRUE),
+    lrpc_surface_total = sum(!is.na(pres_lrpc_surface)),
+    
+    # Within 10% of LRPC depth threshold (0.5)
+    lrpc_depth_within_10pct = sum(abs(pres_lrpc_depth - lrpc_threshold) <= (lrpc_threshold * 0.1), na.rm = TRUE),
+    lrpc_depth_total = sum(!is.na(pres_lrpc_depth))
+  ) %>%
+  mutate(
+    nadir_pct = round((nadir_within_10pct / nadir_total) * 100, 1),
+    rpc_pct = round((rpc_within_10pct / rpc_total) * 100, 1),
+    lrpc_surface_pct = round((lrpc_surface_within_10pct / lrpc_surface_total) * 100, 1),
+    lrpc_depth_pct = round((lrpc_depth_within_10pct / lrpc_depth_total) * 100, 1)
+  )
 
+# Display proximity results
+proximity_summary <- tibble(
+  Indicator = c("Nadir (50 kPa)", "RPC (550 kPa)", "LRPC Surface (0.5)", "LRPC Depth (0.5)"),
+  `Within 10% of Threshold` = c(proximity_analysis$nadir_within_10pct,
+                               proximity_analysis$rpc_within_10pct,
+                               proximity_analysis$lrpc_surface_within_10pct,
+                               proximity_analysis$lrpc_depth_within_10pct),
+  `Total Sensors` = c(proximity_analysis$nadir_total,
+                     proximity_analysis$rpc_total,
+                     proximity_analysis$lrpc_surface_total,
+                     proximity_analysis$lrpc_depth_total),
+  `Percentage` = c(proximity_analysis$nadir_pct,
+                  proximity_analysis$rpc_pct,
+                  proximity_analysis$lrpc_surface_pct,
+                  proximity_analysis$lrpc_depth_pct)
+)
+
+proximity_summary %>%
+  gt() %>%
+  tab_header(title = "Sensors Within 10% of Barotrauma Thresholds") %>%
+  fmt_number(columns = Percentage, decimals = 1)
 ```
-
-# 6. Collision and blade strike assesment
-
-```{r collision_sum}
-
-#create summary statistics table for impact event counts, collision probability and blade strike probability and format neatly with gt
-
-#groupo by roi (rows)
-#count total 95, 200, 400 , shear, collision and blade strike events
-# For shear, collision and blade strike events, calculate probability for each roi, including 95% CI. Blade strike is only relevant to the overall roi.
-
-
-#format neat output table (rows = roi), columns = 95g, 200g, 400g, shear (n), shear (prob incl. 95%), collision (n), collision (prob incl. 95%), blade strike (n) (prob, incl. 95%)
-
-```
-
-```{r blade_strike_metric}
-
-#Create simple table which contains maximum acceleration, pressure nadir and maximum rotation sensors experienced during strike and no strike events
-
-#rows = acc_hig_max.g., Pressure nadir (pres_min.kPa. for roi = roi 4), rot_max.degs
-#Columns = strike (med, iqr), no strike (med, iqr), test statistic, p value
-
-# I think wilcoxon will be suitable for statistical comparison
-
-```
-
-
-
