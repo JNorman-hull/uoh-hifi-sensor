@@ -1,0 +1,239 @@
+---
+title: "KL Analysis"
+author: "Josh Norman UoH"
+date: "2025-24-06"
+output: html_document
+---
+
+# 1. Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 8,
+  fig.height = 6,
+  fig.align = "center"
+)
+```
+
+# 2. Required libraries
+
+```{r libraries, echo=FALSE}
+library(tidyverse)
+library(gt)
+library(kableExtra)
+```
+
+# 3. Helper functions
+
+```{r CI}
+
+calculate_proportion_ci <- function(n, x, confidence_level = 0.95) {
+  # Calculate observed proportion
+  p <- x / n
+  
+  # Calculate z-score for the confidence level
+  z <- qnorm((1 + confidence_level) / 2)
+  
+  # Calculate margin of error
+  margin_of_error <- z * sqrt((p * (1 - p)) / n)
+  
+  # Calculate the confidence interval
+  lower_bound <- max(0, p - margin_of_error)
+  upper_bound <- min(1, p + margin_of_error)
+  
+  # Return lower and upper bounds
+  return(list(lower_bound = lower_bound, upper_bound = upper_bound))
+}
+```
+
+
+# 4. Import data
+
+```{r delineated_list, echo=FALSE}
+delineated_file_list <- list.files("./shiny/processed_sens_data/csv/delineated/", pattern = "_delineated\\.csv$", full.names = TRUE)
+```
+
+```{r index_data}
+sensor_index <- read_csv("./shiny/processed_sens_data/index/global_sensor_index.csv")
+instrument_index <- read_csv("./shiny/processed_sens_data/instrument_data/global_processed_instrument_data.csv")
+```
+
+
+# 5. Clean, merge, typeset
+
+```{r data_cleanup}
+
+#Append sensor_index to instrument_index
+# use the file from sensor_index to add the sensor_index information to the instrument_index
+# each row of file should be used to add sensor, bad_sens, deployment_id, treatment, passage_duration.mm.ss., ingress_nadir_duration.mm.ss., nadir_outgress_duration.mm.ss. columns and append the info to the 'overall' roi
+
+#Something like 
+
+instrument_index %>%
+  left_join(sensor_index %>% select(file, sensor, deployment_id, treatment, passage_duration.mm.ss., ingress_nadir_duration.mm.ss., nadir_outgress_duration.mm.ss.), by = "file")
+#Only join good sensors (bad_sens = N)
+
+
+#Setup datatypes
+
+instrument_index <- instrument_index %>%
+  mutate()
+
+#factors
+# # treatment = factor(treatment, 
+#                       levels = c("treatment_1", "treatment_2", "treatment_3", "treatment_4"),
+#                       labels = c("Treatment 1", "Treatment 2", "Treatment 3",
+#                                  "Treatment 4")),
+# bad_sens = factor(bad_sens,
+#                           levels = c("N", "Y"),
+#                           labels = c("Good", "Bad")),
+# roi = factor(roi,
+#              levels = c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
+#                 "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+#                 "roi6_outflow_passage", "roi7_sens_outgress"),
+#                       labels = c("Overall", "ROI 1", "ROI 2", 
+#                 "ROI 3", "ROI 4", "ROI 5", 
+#                 "ROI 6", "ROI 7")),
+
+#nadir_baro 	rpc_baro	lrpc_baro_surface	lrpc_baro_depth they're all factos, but only have level N (No), except for one case of Y which as an outlier
+
+#intergers for count data - acc_event_95g	acc_event_200g	acc_event_400g		acc_shear	acc_collision
+
+# acc_srike = factor(acc_strike,
+#                           levels = c("N", "Y"),
+#                           labels = c("No blade strike", "Blade strike")),
+   
+# Passage duration in 00:00 mm:ss format   
+#passage_duration.mm.ss., ingress_nadir_duration.mm.ss., nadir_outgress_duration.mm.ss.
+
+
+
+```
+
+# 5. Utility rate
+
+```{r data-quality}
+
+utility_rate <- sensor_index %>%
+  
+  
+#Utility rate 
+# columns = treatment (group), total file, total good, total bad, utility rate (%)
+# bind with Overall utility rate by all sensors
+
+kable(utility_rate)%>%
+  kable_styling(full_width = FALSE, 
+                bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+
+# 5. Comprehnsive summary statistics
+
+```{r pres_sum}
+
+#create summary statistics table for pressure and format neatly with gt
+
+#min	max	med	iqr for pres_min.kPa.	pres_max.kPa.	in each roi
+
+#calculate the median pressure_kpa for each roi by using the delineated_file_list to get the median and iqr directly from sensor data,
+
+#format neat output table (rows = roi, columns = each summary statistic, so should end up with 10 columns and 8 rows)
+
+```
+
+```{r acc_hig_sum}
+
+#create summary statistics table for hig and format neatly with gt
+
+#min	max	med	iqr for acc_hig_min.g.b acc_hig_max.g.	in each roi
+
+#calculate the median higacc_mag_g for each roi by using the delineated_file_list to get the median and iqr directly from sensor data,
+
+#format neat output table (rows = roi, columns = each summary statistic, so should end up with 10 columns and 8 rows)
+
+```
+
+
+```{r acc_inacc_sum}
+
+#create summary statistics table for inacc and format neatly with gt
+
+#min	max	med	iqr for acc_inacc_min.ms.	acc_inacc_max.ms.	in each roi
+
+#calculate the median inacc_mag_ms for each roi by using the delineated_file_list to get the median and iqr directly from sensor data,
+
+#format neat output table (rows = roi, columns = each summary statistic, so should end up with 10 columns and 8 rows)
+
+```
+
+```{r pres_sum}
+
+#create summary statistics table for rot and format neatly with gt
+
+#min	max	med	iqr for rot_min.degs.	rot_max.degs.	in each roi
+
+#calculate the median rot_mag_degs  for each roi by using the delineated_file_list to get the median and iqr directly from sensor data,
+
+#format neat output table (rows = roi, columns = each summary statistic, so should end up with 10 columns and 8 rows)
+
+```
+
+
+# 5. Barotrauma assesment
+
+```{r baro_sum}
+
+#create summary statistics table for pressure barotrauma indicators and format neatly with gt
+
+#Using only roi = overall
+#counts (the nadir_baro	rpc_baro	lrpc_baro_surface	lrpc_baro_depth variables), and min	max	med	iqr for pres_rpc pres_lrpc_surface	pres_lrpc_depth. for nadir, take the pres_min.kPa. for roi = roi 4.
+
+#format neat output table (rows = count , min, max, med, iqr), columns = nadir, rpc, lrpc(surface), lrpc(depth) so should end up with 4 columns and 5 rows)
+
+```
+
+
+```{r baro_proxim}
+
+# Define thresholds
+nadir_threshold <- 50  # kPa
+rpc_threshold <- 550   # kPa  
+lrpc_threshold <- 0.5
+
+#Determine how many sensors recorded pressure values within 10% of thresholds
+#use overall roi for pres_rpc pres_lrpc_surface	pres_lrpc_depth. for nadir, take the pres_min.kPa. for roi = roi 4.
+
+
+```
+
+# 6. Collision and blade strike assesment
+
+```{r collision_sum}
+
+#create summary statistics table for impact event counts, collision probability and blade strike probability and format neatly with gt
+
+#groupo by roi (rows)
+#count total 95, 200, 400 , shear, collision and blade strike events
+# For shear, collision and blade strike events, calculate probability for each roi, including 95% CI. Blade strike is only relevant to the overall roi.
+
+
+#format neat output table (rows = roi), columns = 95g, 200g, 400g, shear (n), shear (prob incl. 95%), collision (n), collision (prob incl. 95%), blade strike (n) (prob, incl. 95%)
+
+```
+
+```{r blade_strike_metric}
+
+#Create simple table which contains maximum acceleration, pressure nadir and maximum rotation sensors experienced during strike and no strike events
+
+#rows = acc_hig_max.g., Pressure nadir (pres_min.kPa. for roi = roi 4), rot_max.degs
+#Columns = strike (med, iqr), no strike (med, iqr), test statistic, p value
+
+# I think wilcoxon will be suitable for statistical comparison
+
+```
+
+
+
