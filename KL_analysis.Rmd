@@ -157,7 +157,6 @@ save_kable(utility,"utility.html")
 ```
 
 # 7. Collision and blade strike assessment
-
 ```{r collision_sum}
 # Create summary statistics table for impact events by ROI
 collision_summary <- all_roi_data %>%
@@ -169,8 +168,19 @@ collision_summary <- all_roi_data %>%
     event_400g = sum(acc_event_400g, na.rm = TRUE),
     # Collision statistics
     collision_total = sum(acc_collision, na.rm = TRUE),
+    collision_sensors = sum(acc_collision >= 1, na.rm = TRUE),  # Count sensors with ≥1 collision
+    collision_prob = collision_sensors / n_sensors,            # Calculate probability
     .groups = 'drop'
-  )
+  ) %>%
+  # Calculate confidence intervals for each ROI
+  rowwise() %>%
+  mutate(
+    collision_ci = list(calculate_proportion_ci(n_sensors, collision_sensors)),
+    collision_prob_ci = paste0("[", round(collision_ci$lower_bound * 100, 1), " - ", 
+                              round(collision_ci$upper_bound * 100, 1), "]")
+  ) %>%
+  ungroup() %>%
+  select(-collision_ci)  # Remove the list column
 
 # Calculate blade strike separately (only for Overall, using total sensors)
 total_sensors <- nrow(merged_data)
@@ -191,29 +201,148 @@ collision_summary <- collision_summary %>%
 # Format table with gt
 collision_summary_table <- collision_summary %>%
   select(roi, event_95g, event_200g, event_400g, 
-         collision_total, n_sensors,
+         collision_total, collision_sensors, n_sensors,
+         collision_prob, collision_prob_ci,
          blade_strike_n, blade_strike_prob, blade_strike_prob_ci) %>%
   gt() %>%
   tab_header(title = "Impact Event Summary by ROI") %>%
   cols_label(
-    roi = "ROI",
-    event_95g = "≥95g Events",
-    event_200g = "≥200g Events", 
-    event_400g = "≥400g Events",
-    collision_total = "Collision Total",
-    n_sensors = "Total Sensors",
+    roi = "Region Of Interest",
+    event_95g = "≥95g",
+    event_200g = "≥200g", 
+    event_400g = "≥400g",
+    collision_total = "Total collisions",
+    collision_sensors = "Total ≥1 collision",
+    collision_prob = "Probability",
+    collision_prob_ci = "95% CI",
+    n_sensors = "Total sensors",
     blade_strike_n = "Blade Strike (n)",
     blade_strike_prob = "Blade Strike Prob",
     blade_strike_prob_ci = "Blade Strike 95% CI"
   ) %>%
-  fmt_number(columns = blade_strike_prob, decimals = 3) %>%
+  fmt_percent(columns = c(collision_prob, blade_strike_prob), decimals = 1) %>%
   sub_missing(missing_text = "-")
 
 gtsave(collision_summary_table, "collision_summary_table.html")
-
-
 ```
 
+
+```{r collision_severity_analysis}
+# Compare collision severity between ROI 4 and other ROIs
+
+# Get collision data for all ROIs with acceleration magnitude
+collision_severity <- all_roi_data %>%
+  filter(acc_collision >= 1) %>%  # Only sensors with collisions
+  mutate(
+    roi_group = ifelse(roi == "ROI 4", "ROI 4 (Nadir)", "Other ROIs"),
+    severity_metric = acc_hig_max.g.  # Use HIG max as severity indicator
+  ) %>%
+  filter(!is.na(severity_metric)) %>%  # Remove missing values
+  select(file, roi, roi_group, severity_metric, acc_collision, acc_event_95g, acc_event_200g, acc_event_400g)
+
+# Calculate summary statistics by ROI group
+severity_summary <- collision_severity %>%
+  group_by(roi_group) %>%
+  summarise(
+    n_sensors = n(),
+    median_severity = median(severity_metric, na.rm = TRUE),
+    max_severity = max(severity_metric, na.rm = TRUE),
+    min_severity = min(severity_metric, na.rm = TRUE),
+    q75_severity = quantile(severity_metric, 0.75, na.rm = TRUE),
+    q25_severity = quantile(severity_metric, 0.25, na.rm = TRUE),
+    mean_collisions = mean(acc_collision, na.rm = TRUE),
+    total_400g_events = sum(acc_event_400g, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Display summary table
+severity_table <- severity_summary %>%
+  gt() %>%
+  tab_header(title = "Collision Severity: ROI 4 vs Other ROIs") %>%
+  cols_label(
+    roi_group = "Region",
+    n_sensors = "Sensors with Collisions",
+    median_severity = "Median Peak (g)",
+    max_severity = "Maximum Peak (g)", 
+    min_severity = "Minimum Peak (g)",
+    q75_severity = "75th Percentile (g)",
+    q25_severity = "25th Percentile (g)",
+    mean_collisions = "Mean Collisions per Sensor",
+    total_400g_events = "Total ≥400g Events"
+  ) %>%
+  fmt_number(columns = c(median_severity, max_severity, min_severity, q75_severity, q25_severity), decimals = 1) %>%
+  fmt_number(columns = mean_collisions, decimals = 2) %>%
+  tab_style(
+    style = cell_fill(color = "#FFE0B2"),
+    locations = cells_body(rows = roi_group == "ROI 4 (Nadir)")
+  )
+
+print(severity_table)
+
+# Statistical test for difference in severity
+wilcox_test <- wilcox.test(
+  severity_metric ~ roi_group, 
+  data = collision_severity,
+  alternative = "two.sided"
+)
+
+# Detailed breakdown by individual ROI
+roi_breakdown <- collision_severity %>%
+  group_by(roi) %>%
+  summarise(
+    n_sensors = n(),
+    median_severity = median(severity_metric, na.rm = TRUE),
+    max_severity = max(severity_metric, na.rm = TRUE),
+    total_collisions = sum(acc_collision, na.rm = TRUE),
+    severe_events_400g = sum(acc_event_400g, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(median_severity))
+
+roi_breakdown_table <- roi_breakdown %>%
+  gt() %>%
+  tab_header(title = "Collision Severity by Individual ROI") %>%
+  cols_label(
+    roi = "ROI",
+    n_sensors = "Sensors with Collisions",
+    median_severity = "Median Peak (g)",
+    max_severity = "Maximum Peak (g)",
+    total_collisions = "Total Collision Events",
+    severe_events_400g = "Events ≥400g"
+  ) %>%
+  fmt_number(columns = c(median_severity, max_severity), decimals = 1) %>%
+  tab_style(
+    style = cell_fill(color = "#FFE0B2"),
+    locations = cells_body(rows = roi == "ROI 4")
+  )
+
+print(roi_breakdown_table)
+
+# Summary statistics for text
+roi4_median <- collision_severity %>% 
+  filter(roi_group == "ROI 4 (Nadir)") %>% 
+  pull(severity_metric) %>% 
+  median(na.rm = TRUE)
+
+other_median <- collision_severity %>% 
+  filter(roi_group == "Other ROIs") %>% 
+  pull(severity_metric) %>% 
+  median(na.rm = TRUE)
+
+severity_ratio <- roi4_median / other_median
+
+cat("\n=== KEY FINDINGS ===\n")
+cat(sprintf("ROI 4 median collision severity: %.1f g\n", roi4_median))
+cat(sprintf("Other ROIs median collision severity: %.1f g\n", other_median))
+cat(sprintf("ROI 4 is %.1fx more severe than other ROIs\n", severity_ratio))
+cat(sprintf("Wilcoxon test p-value: %.6f\n", wilcox_test$p.value))
+
+if(wilcox_test$p.value < 0.001) {
+  cat("*** HIGHLY SIGNIFICANT difference in collision severity (p < 0.001) ***\n")
+} else if(wilcox_test$p.value < 0.05) {
+  cat("** Significant difference in collision severity (p < 0.05) **\n")
+}
+```
 
 ```{r blade_strike_metric}
 # Blade strike comparison table - all metrics from ROI 4
