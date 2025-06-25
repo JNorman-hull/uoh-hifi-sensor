@@ -127,6 +127,7 @@ all_roi_data <- instrument_index %>%
 utility_rate <- sensor_index %>%
   group_by(treatment) %>%
   summarise(
+    unique_sensors = n_distinct(sensor),
     total_files = n(),
     total_good = sum(bad_sens == "N", na.rm = TRUE),
     total_bad = sum(bad_sens == "Y", na.rm = TRUE),
@@ -138,6 +139,7 @@ utility_rate <- sensor_index %>%
     sensor_index %>%
       summarise(
         treatment = "Overall",
+        unique_sensors = n_distinct(sensor),
         total_files = n(),
         total_good = sum(bad_sens == "N", na.rm = TRUE),
         total_bad = sum(bad_sens == "Y", na.rm = TRUE),
@@ -145,11 +147,13 @@ utility_rate <- sensor_index %>%
       )
   )
 
-kable(utility_rate, 
-      col.names = c("Treatment", "Total Files", "Good", "Bad", "Utility Rate (%)"),
+utility<-kable(utility_rate, 
+      col.names = c("Treatment", "Unique Sensors", "Total Files", "Good", "Bad", "Utility Rate (%)"),
       caption = "Sensor Utility Rate by Treatment") %>%
   kable_styling(full_width = FALSE, 
                 bootstrap_options = c("striped", "hover", "condensed"))
+save_kable(utility,"utility.html")
+
 ```
 
 # 7. Collision and blade strike assessment
@@ -163,40 +167,31 @@ collision_summary <- all_roi_data %>%
     event_95g = sum(acc_event_95g, na.rm = TRUE),
     event_200g = sum(acc_event_200g, na.rm = TRUE),
     event_400g = sum(acc_event_400g, na.rm = TRUE),
-    shear_n = sum(acc_shear, na.rm = TRUE),
-    collision_n = sum(acc_collision, na.rm = TRUE),
-    blade_strike_n = ifelse(roi == "Overall", 
-                           sum(acc_strike == "Blade strike", na.rm = TRUE), NA),
+    # Collision statistics
+    collision_total = sum(acc_collision, na.rm = TRUE),
     .groups = 'drop'
-  ) %>%
-  # Calculate probabilities and confidence intervals
+  )
+
+# Calculate blade strike separately (only for Overall, using total sensors)
+total_sensors <- nrow(merged_data)
+total_blade_strikes <- sum(merged_data$acc_strike == "Blade strike", na.rm = TRUE)
+
+blade_strike_prob <- total_blade_strikes / total_sensors
+blade_strike_ci <- calculate_proportion_ci(total_sensors, total_blade_strikes)
+blade_strike_prob_ci <- paste0(round(blade_strike_ci$lower_bound, 3), "-", round(blade_strike_ci$upper_bound, 3))
+
+# Add blade strike info only to Overall row
+collision_summary <- collision_summary %>%
   mutate(
-    # Shear probability and CI
-    shear_prob = shear_n / n_sensors,
-    shear_ci = map2(n_sensors, shear_n, ~calculate_proportion_ci(.x, .y)),
-    shear_prob_ci = map_chr(shear_ci, ~paste0(round(.x$lower_bound, 3), "-", round(.x$upper_bound, 3))),
-    
-    # Collision probability and CI
-    collision_prob = collision_n / n_sensors,
-    collision_ci = map2(n_sensors, collision_n, ~calculate_proportion_ci(.x, .y)),
-    collision_prob_ci = map_chr(collision_ci, ~paste0(round(.x$lower_bound, 3), "-", round(.x$upper_bound, 3))),
-    
-    # Blade strike probability and CI (only for Overall)
-    blade_strike_prob = ifelse(!is.na(blade_strike_n), blade_strike_n / n_sensors, NA),
-    blade_strike_ci = ifelse(!is.na(blade_strike_n), 
-                            map2(n_sensors, blade_strike_n, ~calculate_proportion_ci(.x, .y)),
-                            list(NA)),
-    blade_strike_prob_ci = ifelse(!is.na(blade_strike_n),
-                                 map_chr(blade_strike_ci, ~paste0(round(.x$lower_bound, 3), "-", round(.x$upper_bound, 3))),
-                                 NA)
-  ) %>%
-  select(-shear_ci, -collision_ci, -blade_strike_ci)
+    blade_strike_n = ifelse(roi == "Overall", total_blade_strikes, NA),
+    blade_strike_prob = ifelse(roi == "Overall", blade_strike_prob, NA),
+    blade_strike_prob_ci = ifelse(roi == "Overall", blade_strike_prob_ci, NA)
+  )
 
 # Format table with gt
 collision_summary %>%
   select(roi, event_95g, event_200g, event_400g, 
-         shear_n, shear_prob, shear_prob_ci,
-         collision_n, collision_prob, collision_prob_ci,
+         collision_total, n_sensors,
          blade_strike_n, blade_strike_prob, blade_strike_prob_ci) %>%
   gt() %>%
   tab_header(title = "Impact Event Summary by ROI") %>%
@@ -205,81 +200,89 @@ collision_summary %>%
     event_95g = "≥95g Events",
     event_200g = "≥200g Events", 
     event_400g = "≥400g Events",
-    shear_n = "Shear (n)",
-    shear_prob = "Shear Prob",
-    shear_prob_ci = "Shear 95% CI",
-    collision_n = "Collision (n)",
-    collision_prob = "Collision Prob", 
-    collision_prob_ci = "Collision 95% CI",
+    collision_total = "Collision Total",
+    n_sensors = "Total Sensors",
     blade_strike_n = "Blade Strike (n)",
     blade_strike_prob = "Blade Strike Prob",
     blade_strike_prob_ci = "Blade Strike 95% CI"
   ) %>%
-  fmt_number(columns = c(shear_prob, collision_prob, blade_strike_prob), decimals = 3) %>%
+  fmt_number(columns = blade_strike_prob, decimals = 3) %>%
   sub_missing(missing_text = "-")
 ```
 
+
 ```{r blade_strike_metric}
-# Blade strike comparison table
+# Blade strike comparison table - all metrics from ROI 4
 strike_data <- merged_data %>%
   mutate(strike_status = ifelse(acc_strike == "Blade strike", "Strike", "No Strike")) %>%
-  filter(!is.na(strike_status))
+  filter(!is.na(strike_status)) %>%
+  select(file, strike_status)  # Only keep file and strike status
 
-# Get nadir pressure from ROI 4
-nadir_pressure <- all_roi_data %>%
+# Get all metrics from ROI 4
+roi4_metrics <- all_roi_data %>%
   filter(roi == "ROI 4") %>%
-  select(file, nadir_pres = pres_min.kPa.)
+  select(file, 
+         max_hig = acc_hig_max.g., 
+         nadir_pres = pres_min.kPa., 
+         max_rot = rot_max.degs.)
 
-strike_comparison <- strike_data %>%
-  left_join(nadir_pressure, by = "file") %>%
-  select(strike_status, acc_hig_max.g., nadir_pres, rot_max.degs.) %>%
-  gather(metric, value, -strike_status) %>%
-  filter(!is.na(value)) %>%
-  group_by(metric, strike_status) %>%
-  summarise(
-    median = median(value, na.rm = TRUE),
-    q1 = quantile(value, 0.25, na.rm = TRUE),
-    q3 = quantile(value, 0.75, na.rm = TRUE),
-    iqr = q3 - q1,
-    .groups = 'drop'
-  ) %>%
-  spread(strike_status, median) %>%
-  rename(strike_median = Strike, no_strike_median = `No Strike`) %>%
-  # Calculate p-values using Wilcoxon test
-  left_join(
-    strike_data %>%
-      left_join(nadir_pressure, by = "file") %>%
-      select(strike_status, acc_hig_max.g., nadir_pres, rot_max.degs.) %>%
-      gather(metric, value, -strike_status) %>%
-      filter(!is.na(value)) %>%
-      group_by(metric) %>%
-      summarise(
-        p_value = tryCatch({
-          wilcox.test(value ~ strike_status)$p.value
-        }, error = function(e) NA),
-        .groups = 'drop'
-      ),
-    by = "metric"
+# Join strike status with ROI 4 metrics
+comparison_data <- strike_data %>%
+  left_join(roi4_metrics, by = "file") %>%
+  filter(!is.na(max_hig) | !is.na(nadir_pres) | !is.na(max_rot))
+
+# Calculate summary statistics for each metric and strike status
+strike_summary <- tibble(
+  metric = c("Max Acceleration (g)", "Pressure Nadir (kPa)", "Max Rotation (°)"),
+  strike_median = c(
+    median(comparison_data$max_hig[comparison_data$strike_status == "Strike"], na.rm = TRUE),
+    median(comparison_data$nadir_pres[comparison_data$strike_status == "Strike"], na.rm = TRUE),
+    median(comparison_data$max_rot[comparison_data$strike_status == "Strike"], na.rm = TRUE)
+  ),
+  strike_iqr = c(
+    IQR(comparison_data$max_hig[comparison_data$strike_status == "Strike"], na.rm = TRUE),
+    IQR(comparison_data$nadir_pres[comparison_data$strike_status == "Strike"], na.rm = TRUE),
+    IQR(comparison_data$max_rot[comparison_data$strike_status == "Strike"], na.rm = TRUE)
+  ),
+  no_strike_median = c(
+    median(comparison_data$max_hig[comparison_data$strike_status == "No Strike"], na.rm = TRUE),
+    median(comparison_data$nadir_pres[comparison_data$strike_status == "No Strike"], na.rm = TRUE),
+    median(comparison_data$max_rot[comparison_data$strike_status == "No Strike"], na.rm = TRUE)
+  ),
+  no_strike_iqr = c(
+    IQR(comparison_data$max_hig[comparison_data$strike_status == "No Strike"], na.rm = TRUE),
+    IQR(comparison_data$nadir_pres[comparison_data$strike_status == "No Strike"], na.rm = TRUE),
+    IQR(comparison_data$max_rot[comparison_data$strike_status == "No Strike"], na.rm = TRUE)
+  ),
+  p_value = c(
+    # Wilcoxon test for max acceleration
+    tryCatch({
+      wilcox.test(max_hig ~ strike_status, data = comparison_data)$p.value
+    }, error = function(e) NA),
+    # Wilcoxon test for nadir pressure
+    tryCatch({
+      wilcox.test(nadir_pres ~ strike_status, data = comparison_data)$p.value
+    }, error = function(e) NA),
+    # Wilcoxon test for max rotation
+    tryCatch({
+      wilcox.test(max_rot ~ strike_status, data = comparison_data)$p.value
+    }, error = function(e) NA)
   )
+)
 
-strike_comparison %>%
-  mutate(
-    metric = case_when(
-      metric == "acc_hig_max.g." ~ "Max Acceleration (g)",
-      metric == "nadir_pres" ~ "Pressure Nadir (kPa)", 
-      metric == "rot_max.degs." ~ "Max Rotation (°)"
-    )
-  ) %>%
+# Display the table
+strike_summary %>%
   gt() %>%
-  tab_header(title = "Blade Strike vs No Strike Comparison") %>%
+  tab_header(title = "Blade Strike vs No Strike Comparison (ROI 4 Metrics)") %>%
   cols_label(
     metric = "Metric",
     strike_median = "Strike Median",
-    no_strike_median = "No Strike Median", 
-    iqr = "IQR",
+    strike_iqr = "Strike IQR",
+    no_strike_median = "No Strike Median",
+    no_strike_iqr = "No Strike IQR",
     p_value = "P-value"
   ) %>%
-  fmt_number(columns = c(strike_median, no_strike_median, iqr), decimals = 2) %>%
+  fmt_number(columns = c(strike_median, strike_iqr, no_strike_median, no_strike_iqr), decimals = 2) %>%
   fmt_number(columns = p_value, decimals = 4)
 ```
 
@@ -287,31 +290,6 @@ strike_comparison %>%
 
 ```{r pres_sum}
 # Function to read and summarize delineated data
-summarize_delineated_data <- function(file_list, data_col, roi_filter = NULL) {
-  map_dfr(file_list, function(file) {
-    tryCatch({
-      data <- read_csv(file, show_col_types = FALSE)
-      file_name <- tools::file_path_sans_ext(basename(file))
-      file_name <- str_remove(file_name, "_delineated")
-      
-      if (!data_col %in% names(data)) return(NULL)
-      
-      if (!is.null(roi_filter)) {
-        data <- data %>% filter(roi == roi_filter)
-      }
-      
-      data %>%
-        filter(!is.na(.data[[data_col]])) %>%
-        summarise(
-          file = file_name,
-          median_val = median(.data[[data_col]], na.rm = TRUE),
-          iqr_val = IQR(.data[[data_col]], na.rm = TRUE)
-        )
-    }, error = function(e) NULL)
-  })
-}
-
-# Pressure summary statistics by ROI
 pres_summary <- all_roi_data %>%
   group_by(roi) %>%
   summarise(
@@ -326,23 +304,37 @@ pres_summary <- all_roi_data %>%
     .groups = 'drop'
   )
 
+# Create ROI mapping for delineated files
+roi_mapping <- tibble(
+  original_roi = c("roi1_sens_ingress", "roi2_inflow_passage", 
+                   "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                   "roi6_outflow_passage", "roi7_sens_outgress"),
+  roi_factor = c("ROI 1", "ROI 2", "ROI 3", "ROI 4", "ROI 5", "ROI 6", "ROI 7")
+)
+
 # Get median pressure from delineated files by ROI
 if (length(delineated_file_list) > 0) {
-  delineated_pres <- map_dfr(c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
-                              "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
-                              "roi6_outflow_passage", "roi7_sens_outgress"), function(roi_val) {
+  delineated_pres <- map_dfr(roi_mapping$original_roi, function(roi_val) {
     roi_summary <- summarize_delineated_data(delineated_file_list, "pressure_kpa", roi_val)
+    
     if (nrow(roi_summary) > 0) {
       roi_summary %>%
         summarise(
-          roi = roi_val,
+          original_roi = roi_val,
           median_from_delineated = median(median_val, na.rm = TRUE),
           iqr_from_delineated = median(iqr_val, na.rm = TRUE)
         )
+    } else {
+      return(NULL)
     }
   })
   
-  if (nrow(delineated_pres) > 0) {
+  if (!is.null(delineated_pres) && nrow(delineated_pres) > 0) {
+    # Map back to factor labels for joining
+    delineated_pres <- delineated_pres %>%
+      left_join(roi_mapping, by = "original_roi") %>%
+      select(roi = roi_factor, median_from_delineated, iqr_from_delineated)
+    
     pres_summary <- pres_summary %>%
       left_join(delineated_pres, by = "roi")
   }
@@ -360,7 +352,9 @@ pres_summary %>%
     pres_max_min = "Min Pres Max",
     pres_max_max = "Max Pres Max",
     pres_max_med = "Med Pres Max", 
-    pres_max_iqr = "IQR Pres Max"
+    pres_max_iqr = "IQR Pres Max",
+    median_from_delineated = "Delineated Median",
+    iqr_from_delineated = "Delineated IQR"
   ) %>%
   fmt_number(columns = where(is.numeric), decimals = 2)
 ```
