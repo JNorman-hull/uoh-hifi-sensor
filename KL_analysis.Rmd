@@ -189,7 +189,7 @@ collision_summary <- collision_summary %>%
   )
 
 # Format table with gt
-collision_summary %>%
+collision_summary_table <- collision_summary %>%
   select(roi, event_95g, event_200g, event_400g, 
          collision_total, n_sensors,
          blade_strike_n, blade_strike_prob, blade_strike_prob_ci) %>%
@@ -208,6 +208,10 @@ collision_summary %>%
   ) %>%
   fmt_number(columns = blade_strike_prob, decimals = 3) %>%
   sub_missing(missing_text = "-")
+
+gtsave(collision_summary_table, "collision_summary_table.html")
+
+
 ```
 
 
@@ -223,47 +227,91 @@ roi4_metrics <- all_roi_data %>%
   filter(roi == "ROI 4") %>%
   select(file, 
          max_hig = acc_hig_max.g., 
+         max_inacc = acc_inacc_max.ms.,
          nadir_pres = pres_min.kPa., 
          max_rot = rot_max.degs.)
 
 # Join strike status with ROI 4 metrics
 comparison_data <- strike_data %>%
   left_join(roi4_metrics, by = "file") %>%
-  filter(!is.na(max_hig) | !is.na(nadir_pres) | !is.na(max_rot))
+  filter(!is.na(max_hig) | !is.na(max_inacc) | !is.na(nadir_pres) | !is.na(max_rot))
+
+# Calculate sample sizes for each metric
+sample_sizes <- comparison_data %>%
+  summarise(
+    hig_strike_n = sum(!is.na(max_hig) & strike_status == "Strike"),
+    hig_no_strike_n = sum(!is.na(max_hig) & strike_status == "No Strike"),
+    inacc_strike_n = sum(!is.na(max_inacc) & strike_status == "Strike"),
+    inacc_no_strike_n = sum(!is.na(max_inacc) & strike_status == "No Strike"),
+    pres_strike_n = sum(!is.na(nadir_pres) & strike_status == "Strike"),
+    pres_no_strike_n = sum(!is.na(nadir_pres) & strike_status == "No Strike"),
+    rot_strike_n = sum(!is.na(max_rot) & strike_status == "Strike"),
+    rot_no_strike_n = sum(!is.na(max_rot) & strike_status == "No Strike")
+  )
 
 # Calculate summary statistics for each metric and strike status
 strike_summary <- tibble(
-  metric = c("Max Acceleration (g)", "Pressure Nadir (kPa)", "Max Rotation (°)"),
+  metric = c("Max Acceleration (g)", "Max Inertial Acceleration (ms²)", "Pressure Nadir (kPa)", "Max Rotation (°)"),
+  strike_n = c(sample_sizes$hig_strike_n, sample_sizes$inacc_strike_n, 
+               sample_sizes$pres_strike_n, sample_sizes$rot_strike_n),
+  no_strike_n = c(sample_sizes$hig_no_strike_n, sample_sizes$inacc_no_strike_n,
+                  sample_sizes$pres_no_strike_n, sample_sizes$rot_no_strike_n),
   strike_median = c(
     median(comparison_data$max_hig[comparison_data$strike_status == "Strike"], na.rm = TRUE),
+    median(comparison_data$max_inacc[comparison_data$strike_status == "Strike"], na.rm = TRUE),
     median(comparison_data$nadir_pres[comparison_data$strike_status == "Strike"], na.rm = TRUE),
     median(comparison_data$max_rot[comparison_data$strike_status == "Strike"], na.rm = TRUE)
   ),
   strike_iqr = c(
     IQR(comparison_data$max_hig[comparison_data$strike_status == "Strike"], na.rm = TRUE),
+    IQR(comparison_data$max_inacc[comparison_data$strike_status == "Strike"], na.rm = TRUE),
     IQR(comparison_data$nadir_pres[comparison_data$strike_status == "Strike"], na.rm = TRUE),
     IQR(comparison_data$max_rot[comparison_data$strike_status == "Strike"], na.rm = TRUE)
   ),
   no_strike_median = c(
     median(comparison_data$max_hig[comparison_data$strike_status == "No Strike"], na.rm = TRUE),
+    median(comparison_data$max_inacc[comparison_data$strike_status == "No Strike"], na.rm = TRUE),
     median(comparison_data$nadir_pres[comparison_data$strike_status == "No Strike"], na.rm = TRUE),
     median(comparison_data$max_rot[comparison_data$strike_status == "No Strike"], na.rm = TRUE)
   ),
   no_strike_iqr = c(
     IQR(comparison_data$max_hig[comparison_data$strike_status == "No Strike"], na.rm = TRUE),
+    IQR(comparison_data$max_inacc[comparison_data$strike_status == "No Strike"], na.rm = TRUE),
     IQR(comparison_data$nadir_pres[comparison_data$strike_status == "No Strike"], na.rm = TRUE),
     IQR(comparison_data$max_rot[comparison_data$strike_status == "No Strike"], na.rm = TRUE)
   ),
+  w_statistic = c(
+    # Wilcoxon W statistic for max acceleration
+    tryCatch({
+      wilcox.test(max_hig ~ strike_status, data = comparison_data)$statistic
+    }, error = function(e) NA),
+    # Wilcoxon W statistic for max inertial acceleration
+    tryCatch({
+      wilcox.test(max_inacc ~ strike_status, data = comparison_data)$statistic
+    }, error = function(e) NA),
+    # Wilcoxon W statistic for nadir pressure
+    tryCatch({
+      wilcox.test(nadir_pres ~ strike_status, data = comparison_data)$statistic
+    }, error = function(e) NA),
+    # Wilcoxon W statistic for max rotation
+    tryCatch({
+      wilcox.test(max_rot ~ strike_status, data = comparison_data)$statistic
+    }, error = function(e) NA)
+  ),
   p_value = c(
-    # Wilcoxon test for max acceleration
+    # Wilcoxon test p-value for max acceleration
     tryCatch({
       wilcox.test(max_hig ~ strike_status, data = comparison_data)$p.value
     }, error = function(e) NA),
-    # Wilcoxon test for nadir pressure
+    # Wilcoxon test p-value for max inertial acceleration
+    tryCatch({
+      wilcox.test(max_inacc ~ strike_status, data = comparison_data)$p.value
+    }, error = function(e) NA),
+    # Wilcoxon test p-value for nadir pressure
     tryCatch({
       wilcox.test(nadir_pres ~ strike_status, data = comparison_data)$p.value
     }, error = function(e) NA),
-    # Wilcoxon test for max rotation
+    # Wilcoxon test p-value for max rotation
     tryCatch({
       wilcox.test(max_rot ~ strike_status, data = comparison_data)$p.value
     }, error = function(e) NA)
@@ -271,19 +319,24 @@ strike_summary <- tibble(
 )
 
 # Display the table
-strike_summary %>%
+strike_table <- strike_summary %>%
   gt() %>%
   tab_header(title = "Blade Strike vs No Strike Comparison (ROI 4 Metrics)") %>%
   cols_label(
     metric = "Metric",
+    strike_n = "Strike (n)",
+    no_strike_n = "No Strike (n)",
     strike_median = "Strike Median",
     strike_iqr = "Strike IQR",
     no_strike_median = "No Strike Median",
     no_strike_iqr = "No Strike IQR",
+    w_statistic = "W Statistic",
     p_value = "P-value"
   ) %>%
   fmt_number(columns = c(strike_median, strike_iqr, no_strike_median, no_strike_iqr), decimals = 2) %>%
-  fmt_number(columns = p_value, decimals = 4)
+  fmt_number(columns = c(w_statistic, p_value), decimals = 4)
+
+gtsave(strike_table, "strike_table.html")
 ```
 
 # 8. Comprehensive summary statistics
@@ -340,7 +393,7 @@ if (length(delineated_file_list) > 0) {
   }
 }
 
-pres_summary %>%
+pres_table <-pres_summary %>%
   gt() %>%
   tab_header(title = "Pressure Summary Statistics by ROI") %>%
   cols_label(
@@ -357,6 +410,8 @@ pres_summary %>%
     iqr_from_delineated = "Delineated IQR"
   ) %>%
   fmt_number(columns = where(is.numeric), decimals = 2)
+
+gtsave(pres_table, "pres_table.html")
 ```
 
 ```{r acc_hig_sum}
@@ -375,23 +430,37 @@ acc_hig_summary <- all_roi_data %>%
     .groups = 'drop'
   )
 
-# Get median HIG acceleration from delineated files by ROI
+# Create ROI mapping for delineated files
+roi_mapping <- tibble(
+  original_roi = c("roi1_sens_ingress", "roi2_inflow_passage", 
+                   "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                   "roi6_outflow_passage", "roi7_sens_outgress"),
+  roi_factor = c("ROI 1", "ROI 2", "ROI 3", "ROI 4", "ROI 5", "ROI 6", "ROI 7")
+)
+
+# Get median high acceleration from delineated files by ROI
 if (length(delineated_file_list) > 0) {
-  delineated_hig <- map_dfr(c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
-                             "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
-                             "roi6_outflow_passage", "roi7_sens_outgress"), function(roi_val) {
+  delineated_hig <- map_dfr(roi_mapping$original_roi, function(roi_val) {
     roi_summary <- summarize_delineated_data(delineated_file_list, "higacc_mag_g", roi_val)
+    
     if (nrow(roi_summary) > 0) {
       roi_summary %>%
         summarise(
-          roi = roi_val,
+          original_roi = roi_val,
           median_from_delineated = median(median_val, na.rm = TRUE),
           iqr_from_delineated = median(iqr_val, na.rm = TRUE)
         )
+    } else {
+      return(NULL)
     }
   })
   
-  if (nrow(delineated_hig) > 0) {
+  if (!is.null(delineated_hig) && nrow(delineated_hig) > 0) {
+    # Map back to factor labels for joining
+    delineated_hig <- delineated_hig %>%
+      left_join(roi_mapping, by = "original_roi") %>%
+      select(roi = roi_factor, median_from_delineated, iqr_from_delineated)
+    
     acc_hig_summary <- acc_hig_summary %>%
       left_join(delineated_hig, by = "roi")
   }
@@ -409,7 +478,9 @@ acc_hig_summary %>%
     acc_hig_max_min = "Min HIG Max",
     acc_hig_max_max = "Max HIG Max",
     acc_hig_max_med = "Med HIG Max",
-    acc_hig_max_iqr = "IQR HIG Max"
+    acc_hig_max_iqr = "IQR HIG Max",
+    median_from_delineated = "Delineated Median",
+    iqr_from_delineated = "Delineated IQR"
   ) %>%
   fmt_number(columns = where(is.numeric), decimals = 2)
 ```
@@ -430,23 +501,37 @@ acc_inacc_summary <- all_roi_data %>%
     .groups = 'drop'
   )
 
-# Get median inacc from delineated files by ROI
+# Create ROI mapping for delineated files
+roi_mapping <- tibble(
+  original_roi = c("roi1_sens_ingress", "roi2_inflow_passage", 
+                   "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                   "roi6_outflow_passage", "roi7_sens_outgress"),
+  roi_factor = c("ROI 1", "ROI 2", "ROI 3", "ROI 4", "ROI 5", "ROI 6", "ROI 7")
+)
+
+# Get median inertial acceleration from delineated files by ROI
 if (length(delineated_file_list) > 0) {
-  delineated_inacc <- map_dfr(c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
-                               "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
-                               "roi6_outflow_passage", "roi7_sens_outgress"), function(roi_val) {
+  delineated_inacc <- map_dfr(roi_mapping$original_roi, function(roi_val) {
     roi_summary <- summarize_delineated_data(delineated_file_list, "inacc_mag_ms", roi_val)
+    
     if (nrow(roi_summary) > 0) {
       roi_summary %>%
         summarise(
-          roi = roi_val,
+          original_roi = roi_val,
           median_from_delineated = median(median_val, na.rm = TRUE),
           iqr_from_delineated = median(iqr_val, na.rm = TRUE)
         )
+    } else {
+      return(NULL)
     }
   })
   
-  if (nrow(delineated_inacc) > 0) {
+  if (!is.null(delineated_inacc) && nrow(delineated_inacc) > 0) {
+    # Map back to factor labels for joining
+    delineated_inacc <- delineated_inacc %>%
+      left_join(roi_mapping, by = "original_roi") %>%
+      select(roi = roi_factor, median_from_delineated, iqr_from_delineated)
+    
     acc_inacc_summary <- acc_inacc_summary %>%
       left_join(delineated_inacc, by = "roi")
   }
@@ -464,7 +549,9 @@ acc_inacc_summary %>%
     acc_inacc_max_min = "Min INACC Max",
     acc_inacc_max_max = "Max INACC Max",
     acc_inacc_max_med = "Med INACC Max",
-    acc_inacc_max_iqr = "IQR INACC Max"
+    acc_inacc_max_iqr = "IQR INACC Max",
+    median_from_delineated = "Delineated Median",
+    iqr_from_delineated = "Delineated IQR"
   ) %>%
   fmt_number(columns = where(is.numeric), decimals = 2)
 ```
@@ -485,23 +572,37 @@ rot_summary <- all_roi_data %>%
     .groups = 'drop'
   )
 
+# Create ROI mapping for delineated files
+roi_mapping <- tibble(
+  original_roi = c("roi1_sens_ingress", "roi2_inflow_passage", 
+                   "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
+                   "roi6_outflow_passage", "roi7_sens_outgress"),
+  roi_factor = c("ROI 1", "ROI 2", "ROI 3", "ROI 4", "ROI 5", "ROI 6", "ROI 7")
+)
+
 # Get median rotation from delineated files by ROI
 if (length(delineated_file_list) > 0) {
-  delineated_rot <- map_dfr(c("overall", "roi1_sens_ingress", "roi2_inflow_passage", 
-                             "roi3_prenadir", "roi4_nadir", "roi5_postnadir", 
-                             "roi6_outflow_passage", "roi7_sens_outgress"), function(roi_val) {
+  delineated_rot <- map_dfr(roi_mapping$original_roi, function(roi_val) {
     roi_summary <- summarize_delineated_data(delineated_file_list, "rot_mag_degs", roi_val)
+    
     if (nrow(roi_summary) > 0) {
       roi_summary %>%
         summarise(
-          roi = roi_val,
+          original_roi = roi_val,
           median_from_delineated = median(median_val, na.rm = TRUE),
           iqr_from_delineated = median(iqr_val, na.rm = TRUE)
         )
+    } else {
+      return(NULL)
     }
   })
   
-  if (nrow(delineated_rot) > 0) {
+  if (!is.null(delineated_rot) && nrow(delineated_rot) > 0) {
+    # Map back to factor labels for joining
+    delineated_rot <- delineated_rot %>%
+      left_join(roi_mapping, by = "original_roi") %>%
+      select(roi = roi_factor, median_from_delineated, iqr_from_delineated)
+    
     rot_summary <- rot_summary %>%
       left_join(delineated_rot, by = "roi")
   }
@@ -519,7 +620,9 @@ rot_summary %>%
     rot_max_min = "Min Rot Max", 
     rot_max_max = "Max Rot Max",
     rot_max_med = "Med Rot Max",
-    rot_max_iqr = "IQR Rot Max"
+    rot_max_iqr = "IQR Rot Max",
+    median_from_delineated = "Delineated Median",
+    iqr_from_delineated = "Delineated IQR"
   ) %>%
   fmt_number(columns = where(is.numeric), decimals = 2)
 ```
@@ -584,7 +687,7 @@ baro_summary_long <- baro_data %>%
   ) %>%
   pivot_wider(names_from = indicator, values_from = value)
 
-baro_summary_long %>%
+baro_table <- baro_summary_long %>%
   gt() %>%
   tab_header(title = "Barotrauma Indicators Summary") %>%
   cols_label(
@@ -595,6 +698,9 @@ baro_summary_long %>%
     `LRPC Depth` = "LRPC (Depth)"
   ) %>%
   fmt_number(columns = where(is.numeric), decimals = 2)
+
+gtsave(baro_table, "baro_table.html")
+
 ```
 
 ```{r baro_proxim}
@@ -656,4 +762,134 @@ proximity_summary %>%
   gt() %>%
   tab_header(title = "Sensors Within 10% of Barotrauma Thresholds") %>%
   fmt_number(columns = Percentage, decimals = 1)
+```
+
+
+
+
+
+```{r duration_summary}
+# Duration measurements summary
+duration_summary <- sensor_index %>%
+  filter(bad_sens == "N") %>%
+  select(treatment, passage_duration.mm.ss., ingress_nadir_duration.mm.ss., 
+         nadir_outgress_duration.mm.ss.) %>%
+  # Convert mm:ss format to seconds for calculations
+  mutate(
+    passage_duration_sec = as.numeric(str_extract(passage_duration.mm.ss., "\\d+")) * 60 + 
+                          as.numeric(str_extract(passage_duration.mm.ss., "(?<=:)\\d+")),
+    ingress_nadir_sec = as.numeric(str_extract(ingress_nadir_duration.mm.ss., "\\d+")) * 60 + 
+                       as.numeric(str_extract(ingress_nadir_duration.mm.ss., "(?<=:)\\d+")),
+    nadir_outgress_sec = as.numeric(str_extract(nadir_outgress_duration.mm.ss., "\\d+")) * 60 + 
+                        as.numeric(str_extract(nadir_outgress_duration.mm.ss., "(?<=:)\\d+"))
+  ) %>%
+  group_by(treatment) %>%
+  summarise(
+    n = n(),
+    # Passage duration
+    passage_mean = mean(passage_duration_sec, na.rm = TRUE),
+    passage_median = median(passage_duration_sec, na.rm = TRUE),
+    passage_sd = sd(passage_duration_sec, na.rm = TRUE),
+    passage_min = min(passage_duration_sec, na.rm = TRUE),
+    passage_max = max(passage_duration_sec, na.rm = TRUE),
+    # Ingress to nadir duration
+    ingress_nadir_mean = mean(ingress_nadir_sec, na.rm = TRUE),
+    ingress_nadir_median = median(ingress_nadir_sec, na.rm = TRUE),
+    ingress_nadir_sd = sd(ingress_nadir_sec, na.rm = TRUE),
+    ingress_nadir_min = min(ingress_nadir_sec, na.rm = TRUE),
+    ingress_nadir_max = max(ingress_nadir_sec, na.rm = TRUE),
+    # Nadir to outgress duration
+    nadir_outgress_mean = mean(nadir_outgress_sec, na.rm = TRUE),
+    nadir_outgress_median = median(nadir_outgress_sec, na.rm = TRUE),
+    nadir_outgress_sd = sd(nadir_outgress_sec, na.rm = TRUE),
+    nadir_outgress_min = min(nadir_outgress_sec, na.rm = TRUE),
+    nadir_outgress_max = max(nadir_outgress_sec, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  # Add overall summary
+  bind_rows(
+    sensor_index %>%
+      filter(bad_sens == "N") %>%
+      select(passage_duration.mm.ss., ingress_nadir_duration.mm.ss., 
+             nadir_outgress_duration.mm.ss.) %>%
+      mutate(
+        passage_duration_sec = as.numeric(str_extract(passage_duration.mm.ss., "\\d+")) * 60 + 
+                              as.numeric(str_extract(passage_duration.mm.ss., "(?<=:)\\d+")),
+        ingress_nadir_sec = as.numeric(str_extract(ingress_nadir_duration.mm.ss., "\\d+")) * 60 + 
+                           as.numeric(str_extract(ingress_nadir_duration.mm.ss., "(?<=:)\\d+")),
+        nadir_outgress_sec = as.numeric(str_extract(nadir_outgress_duration.mm.ss., "\\d+")) * 60 + 
+                            as.numeric(str_extract(nadir_outgress_duration.mm.ss., "(?<=:)\\d+"))
+      ) %>%
+      summarise(
+        treatment = "Overall",
+        n = n(),
+        passage_mean = mean(passage_duration_sec, na.rm = TRUE),
+        passage_median = median(passage_duration_sec, na.rm = TRUE),
+        passage_sd = sd(passage_duration_sec, na.rm = TRUE),
+        passage_min = min(passage_duration_sec, na.rm = TRUE),
+        passage_max = max(passage_duration_sec, na.rm = TRUE),
+        ingress_nadir_mean = mean(ingress_nadir_sec, na.rm = TRUE),
+        ingress_nadir_median = median(ingress_nadir_sec, na.rm = TRUE),
+        ingress_nadir_sd = sd(ingress_nadir_sec, na.rm = TRUE),
+        ingress_nadir_min = min(ingress_nadir_sec, na.rm = TRUE),
+        ingress_nadir_max = max(ingress_nadir_sec, na.rm = TRUE),
+        nadir_outgress_mean = mean(nadir_outgress_sec, na.rm = TRUE),
+        nadir_outgress_median = median(nadir_outgress_sec, na.rm = TRUE),
+        nadir_outgress_sd = sd(nadir_outgress_sec, na.rm = TRUE),
+        nadir_outgress_min = min(nadir_outgress_sec, na.rm = TRUE),
+        nadir_outgress_max = max(nadir_outgress_sec, na.rm = TRUE)
+      )
+  )
+
+# Create formatted table
+duration_summary %>%
+  gt() %>%
+  tab_header(title = "Fish Passage Duration Summary Statistics") %>%
+  tab_spanner(
+    label = "Total Passage Duration (s)",
+    columns = c(passage_mean, passage_median, passage_sd, passage_min, passage_max)
+  ) %>%
+  tab_spanner(
+    label = "Ingress to Nadir Duration (s)",
+    columns = c(ingress_nadir_mean, ingress_nadir_median, ingress_nadir_sd, 
+                ingress_nadir_min, ingress_nadir_max)
+  ) %>%
+  tab_spanner(
+    label = "Nadir to Outgress Duration (s)",
+    columns = c(nadir_outgress_mean, nadir_outgress_median, nadir_outgress_sd,
+                nadir_outgress_min, nadir_outgress_max)
+  ) %>%
+  cols_label(
+    treatment = "Treatment",
+    n = "n",
+    passage_mean = "Mean",
+    passage_median = "Median", 
+    passage_sd = "SD",
+    passage_min = "Min",
+    passage_max = "Max",
+    ingress_nadir_mean = "Mean",
+    ingress_nadir_median = "Median",
+    ingress_nadir_sd = "SD", 
+    ingress_nadir_min = "Min",
+    ingress_nadir_max = "Max",
+    nadir_outgress_mean = "Mean",
+    nadir_outgress_median = "Median",
+    nadir_outgress_sd = "SD",
+    nadir_outgress_min = "Min",
+    nadir_outgress_max = "Max"
+  ) %>%
+  fmt_number(
+    columns = where(is.numeric) & !n,
+    decimals = 2
+  ) %>%
+  tab_style(
+    style = cell_borders(
+      sides = "bottom",
+      color = "black"
+    ),
+    locations = cells_column_labels()
+  ) %>%
+  tab_options(
+    column_labels.font.weight = "bold"
+  )
 ```
