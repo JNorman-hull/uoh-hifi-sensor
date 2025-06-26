@@ -24,6 +24,9 @@ knitr::opts_chunk$set(
 library(tidyverse)
 library(gt)
 library(kableExtra)
+library(ggbreak)
+library(cowplot)
+library(ggpubr)
 ```
 
 # 3. Helper functions
@@ -831,6 +834,99 @@ baro_table <- baro_summary_long %>%
 gtsave(baro_table, "baro_table.html")
 
 ```
+
+
+
+```{r}
+
+# Prepare nadir data from ROI 4
+nadir_data <- all_roi_data %>%
+  filter(roi == "ROI 4") %>%
+  select(file, nadir_pressure = pres_min.kPa.)
+
+theme_JN <- function(base_size=10){ 
+  theme_grey() %+replace%
+    theme(
+      axis.text = element_text(colour="black"),
+      axis.title = element_text(colour="black"),
+      axis.ticks = element_line(colour="black"),
+      panel.border = element_rect(colour = "black", fill=NA),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.background = element_blank(),
+      strip.background = element_rect(colour = "black",fill = NA),
+      panel.spacing.x = unit(12, "pt")
+    ) 
+}
+
+
+# Nadir plot - single box for all treatments
+nadir_plot <- nadir_data %>%
+  ggplot(aes(x = "", y = nadir_pressure)) +
+  stat_boxplot(geom = "errorbar", width = 0.3, position = position_dodge(0.9)) +
+  geom_boxplot(outlier.shape = 4, outlier.alpha = 0.8) +
+  geom_hline(yintercept = 50, color = "red", linetype = "dashed") +
+  labs(y = "Nadir pressure (kPa)") +
+  scale_y_continuous(limits = c(0,120),
+                     breaks = seq(0, 120, 10)) +
+  coord_cartesian(clip = "off") +
+  theme_JN()+
+  theme(axis.title.x = element_blank())
+
+# RPC plot - single box for all treatments using merged_data
+rpc_plot <- merged_data %>%
+  ggplot(aes(x = "", y = pres_rpc)) +
+  stat_boxplot(geom = "errorbar", width = 0.3, position = position_dodge(0.9)) +
+  geom_boxplot(outlier.shape = 4, outlier.alpha = 0.8) +
+  geom_hline(yintercept = 550, color = "red", linetype = "dashed") +
+  labs(y = expression("Rate pressure change (kPa s"^-1*")")) +
+  scale_y_continuous(breaks = seq(0, 560, 50)) +
+  coord_cartesian( clip = "off") +
+  theme_JN()+
+  theme(axis.title.x = element_blank())
+
+# LRPC plot - surface and depth as x-axis categories
+lrpc_data <- merged_data %>%
+  select(file, pres_lrpc_surface, pres_lrpc_depth) %>%
+  pivot_longer(cols = c(pres_lrpc_surface, pres_lrpc_depth),
+               names_to = "type",
+               values_to = "lrpc_value") %>%
+  mutate(type = case_when(
+    type == "pres_lrpc_surface" ~ "Surface",
+    type == "pres_lrpc_depth" ~ "Depth"
+  )) %>%
+  filter(!is.na(lrpc_value))
+
+lrpc_plot <- lrpc_data %>%
+  ggplot(aes(x = "", y = lrpc_value, fill = type)) +
+  stat_boxplot(geom = "errorbar", width = 0.3, position = position_dodge(0.9)) +
+  geom_boxplot(outlier.shape = 4, outlier.alpha = 0.8, position = position_dodge(0.9)) +
+  geom_hline(yintercept = 0.5, color = "red", linetype = "dashed") +
+  labs(y = "Log ratio pressure change",
+       fill = "Acclimation Type") +
+  scale_fill_manual(values = c("Surface" = "white", "Depth" = "grey70")) +
+  scale_y_continuous(limits = c(0,1),
+                     breaks = seq(0, 1, 0.1)) +
+  coord_cartesian(clip = "off") +
+  theme_JN() +
+  theme(legend.position = "none",
+        axis.title.x = element_blank())
+
+# Combine plots
+pres_plots <- plot_grid(nadir_plot, rpc_plot, lrpc_plot,
+                        ncol = 3, nrow = 1)
+
+pres_plots2 <- annotate_figure(pres_plots,
+                               bottom = text_grob("All sensors"))
+
+pres_plots2
+
+ggsave(filename = "pres_plots2.svg", plot = pres_plots2,
+       device = "svg", units = "cm", width = 16, height = 8, dpi = 300)
+
+
+```
+
 
 ```{r baro_proxim}
 # Define thresholds
