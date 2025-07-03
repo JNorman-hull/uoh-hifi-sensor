@@ -1,8 +1,9 @@
 # server.R - Better approach
 server <- function(input, output, session) {
   
-  raw_data_path <- reactive("C:/Users/joshn/OneDrive - hull.ac.uk/REDEEM 2.0/HS_JOSH_NORMAN/RAPID_processing/uoh-hifi-sensor/shiny/raw_sens_data")
-  output_dir <- reactive("./processed_sens_data")
+  raw_data_path <- reactive("C:/users/591302/OneDrive - hull.ac.uk/REDEEM 2.0/HS_JOSH_NORMAN/RAPID_processing/uoh-hifi-sensor_/shiny/raw_sens_data")
+  
+  output_dir <- reactive("C:/users/591302/OneDrive - hull.ac.uk/REDEEM 2.0/HS_JOSH_NORMAN/RAPID_processing/uoh-hifi-sensor_/shiny/processed_sens_data")
   
   session_state <- reactiveValues(
     selected_sensor = NULL,
