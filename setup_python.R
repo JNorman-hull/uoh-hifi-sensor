@@ -19,7 +19,7 @@ miniconda_exists <- tryCatch({
 
 if (!miniconda_exists) {
   cat("Installing miniconda...\n")
-  install_miniconda()
+  install_miniconda(force = TRUE)
 }
 
 # Check if environment exists
