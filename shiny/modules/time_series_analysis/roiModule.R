@@ -283,9 +283,9 @@ roiServer <- function(id, output_dir, summary_data, processing_complete = reacti
         # Clear all inputs and stored values
         updateNumericInput(session, "roi1_start", value = NULL)
         updateNumericInput(session, "roi2_start", value = NULL)
-        updateNumericInput(session, "roi3_duration", value = 0.5)
+        updateNumericInput(session, "roi3_duration", value = 0.3)
         updateNumericInput(session, "roi4_duration", value = 0.2)
-        updateNumericInput(session, "roi5_duration", value = 0.5)
+        updateNumericInput(session, "roi5_duration", value = 0.3)
         updateNumericInput(session, "roi6_end", value = NULL)
         updateNumericInput(session, "roi7_end", value = NULL)
         
