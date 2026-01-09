@@ -1,0 +1,68 @@
+---
+title: "PF Velcoity calc"
+author: "Josh Norman"
+date: "2026-01-09"
+output: html_document
+---
+
+1. Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 8,
+  fig.height = 6,
+  fig.align = "center"
+)
+```
+
+# 2. Required libraries
+
+```{r libraries, echo=FALSE}
+library(tidyverse)
+library(gt)
+library(kableExtra)
+library(ggbreak)
+library(cowplot)
+library(ggpubr)
+```
+
+# 4. Import data
+
+```{r delineated_list, echo=FALSE}
+#Get all delineated files
+delineated_file_list <- list.files("C:/users/591302/OneDrive - hull.ac.uk/FSE Hull International Fisheries Institute - Documents/REDEEM 2.0/
+                                   HS_JOSH_NORMAN/RAPID_processing/processed_sens_data/csv/delineated/", 
+                                   pattern = "_delineated\\.csv$", full.names = TRUE)
+#Get all sensor data files
+full_sens_file_list <- list.files("C:/users/591302/OneDrive - hull.ac.uk/FSE Hull International Fisheries Institute - Documents/REDEEM 2.0/
+                                  HS_JOSH_NORMAN/RAPID_processing/processed_sens_data/csv/",
+                                  pattern = "\\.csv$", full.names = TRUE)
+
+# Remove any files appended with _min
+full_sens_file_list <- full_sens_file_list[!grepl("_min\\.csv$", full_sens_file_list)]
+
+```
+
+
+```{r data}
+#Main index data
+sensor_index <- read_csv("./shiny/processed_sens_data/index/global_sensor_index.csv")
+instrument_index <- read_csv("./shiny/processed_sens_data/instrument_data/global_processed_instrument_data.csv")
+
+#Pump flow meta data
+pf_meta <- read_csv("./shiny/processed_sens_data/PumpFlow META/all_pro_rapid_data.csv")
+
+```
+
+1. Filter data to just pumpflow data, so only need delineated and full sensor files where sensor_index 'deployment' == PF_Test_Rig_2024
+2. For each unique 'file' in the filtered sensor_index, find the associated _delineated file
+3. In each _delineated file, filter to only copntain 'roi' == roi4_nadir
+4. Using the associated time_s data for each sensors (roi 4 only), retrieve the associated full sensor file and extract the rows corrosponding to the time_s
+5. Filter this data to only contain the columns time_s	higacc_x_g	higacc_y_g	higacc_z_g	higacc_mag_g
+6. bind all sensor data into new dataframe 'pf_roi4_hig_3axis'
+
+
+# 5. Clean, merge, typeset

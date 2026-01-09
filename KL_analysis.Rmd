@@ -5,6 +5,10 @@ date: "2025-24-06"
 output: html_document
 ---
 
+
+This analysis scripts expects only Kl data is present in the csv files and indexes. Need to adjust scripting to allow for site selection etc 
+
+
 # 1. Setup
 
 ```{r setup, include=FALSE}
