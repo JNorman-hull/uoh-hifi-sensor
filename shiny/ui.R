@@ -1,14 +1,14 @@
 ui <- navbarPage(
   title = tags$div(
-    tags$span( style = "color: red; vertical-align: sub; font-weight: bold; margin: 0; padding: 0;", "RAP",
-              tags$sub(style = "color: blue;  vertical-align: sup; font-style: italic; ; margin: 0; padding: 0;", "pro"))
+    tags$span( style = "color: red; vertical-align: sub; font-weight: bold; margin: 0; padding: 0;", "HIFI",
+              tags$sub(style = "color: blue;  vertical-align: sup; font-style: italic; ; margin: 0; padding: 0;", "rapid"))
   ),
   id = "mainTabset",
   
   
   
   footer = tags$div(
-    "Hull International Fisheries Institute (2025)", 
+    "Hull International Fisheries Institute (2026)", 
     style = "font-size: 12px; color: #666; text-align: center;"
   ),
   

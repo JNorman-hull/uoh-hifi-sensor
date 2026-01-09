@@ -425,7 +425,7 @@ pressureSidebarUI <- function(id) {
         h4(""),
         
         div(style = "margin-top: 15px; padding: 10px; background-color: #f0f8ff; border-radius: 5px;",
-            h4("🪄 Magic Processing", style = "margin-top: 0; color: #2c3e50;"),
+            h4("Process all", style = "margin-top: 0; color: #2c3e50;"),
             p("Calculate all summaries + pressure + acceleration analyses!", 
               style = "font-size: 12px; margin-bottom: 10px;"),
             summarytableSidebarUI(ns("magic_summary"))
@@ -633,7 +633,7 @@ pressureServer <- function(id, raw_data_path, output_dir, processing_complete,
         # Reset the trigger
         global_sensor_state$magic_trigger_pressure <- FALSE
         
-        # For magic processing, ALWAYS recalculate (ignore current status)
+        # For  processing all, ALWAYS recalculate (ignore current status)
         # Call the existing RPC/LRPC calculation function
         calculate_and_save_rpc_lrpc()
         

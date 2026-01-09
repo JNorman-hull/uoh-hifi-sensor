@@ -238,7 +238,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
         # Reset the trigger
         global_sensor_state$magic_trigger_acceleration <- FALSE
         
-        # For magic processing, ALWAYS recalculate (ignore current status)
+        # For processing all, ALWAYS recalculate (ignore current status)
         # Call the existing peak calculation function
         calculate_and_save_peaks()
         
@@ -252,7 +252,7 @@ accelerationServer <- function(id, raw_data_path, output_dir, processing_complet
           advance_batch_processing()
           
         } else {
-          showNotification("⚡ Acceleration analysis complete! Magic processing finished! ✨", 
+          showNotification("Acceleration analysis complete", 
                            type = "message", duration = 4)
           
           # Clear the processing sensor for single processing

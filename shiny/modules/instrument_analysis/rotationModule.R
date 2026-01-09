@@ -4,7 +4,7 @@ rotationUI <- function(id) {
   tagList(
     # Introductory text at the top
     tagList(
-      h3("rotation Analysis"),
+      h3("Rotation Analysis"),
       plotModuleUI(ns("rotation_plot"), height = "600px"),
       br(),
       

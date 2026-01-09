@@ -106,7 +106,6 @@ def read_imp_raw(filename):
     return pd.DataFrame(dataExportCSV, columns=column_names_raw)
 
 def read_hig_raw(filename):
-    """Optimized version of read_hig_raw with performance improvements"""
     filename = Path(filename)
     packetSize = 11
     FS = 2000
@@ -147,9 +146,6 @@ def read_hig_raw(filename):
     return pd.DataFrame(dataExportCSV, columns=column_names_raw)
 
 def process_imp_hig_direct(imp_filename, hig_filename, output_dir):
-    """
-    Optimized version using the original logic but with performance improvements
-    """
     imp_data = read_imp_raw(imp_filename)
     hig_data = read_hig_raw(hig_filename)
     

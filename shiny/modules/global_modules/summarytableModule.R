@@ -134,7 +134,7 @@ summarytableModuleServer <- function(id, sensor_reactive, output_dir_reactive, i
           shinyjs::removeClass("process_summary", "btn-success")
           shinyjs::addClass("process_summary", "btn-warning")
         } else {
-          updateActionButton(session, "process_summary", label = "🪄 Magic Process All")
+          updateActionButton(session, "process_summary", label = "Process All")
           shinyjs::removeClass("process_summary", "btn-warning")
           shinyjs::addClass("process_summary", "btn-success")
         }

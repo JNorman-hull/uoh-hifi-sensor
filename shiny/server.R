@@ -1,11 +1,18 @@
 # server.R - Better approach
 server <- function(input, output, session) {
   
-  raw_data_path <- reactive("C:/users/591302/OneDrive - hull.ac.uk/REDEEM 2.0/HS_JOSH_NORMAN/RAPID_processing/uoh-hifi-sensor_/shiny/raw_sens_data")
+  #App runs off local distribution but uses OneDrive for raw/processed storage
+  #Causes conflicts with permissions for global and instrument indexes but works
   
-  output_dir <- reactive("C:/users/591302/OneDrive - hull.ac.uk/REDEEM 2.0/HS_JOSH_NORMAN/RAPID_processing/uoh-hifi-sensor_/shiny/processed_sens_data")
+  raw_data_path <- reactive("C:/users/591302/OneDrive - hull.ac.uk/FSE Hull International Fisheries Institute - Documents/REDEEM 2.0/HS_JOSH_NORMAN/RAPID_processing/uoh-hifi-sensor_/shiny/raw_sens_data")
+  #Switch to local C drive
+  #raw_data_path <- reactive("./raw_sens_data")
   
-  session_state <- reactiveValues(
+  output_dir <- reactive("C:/users/591302/OneDrive - hull.ac.uk/FSE Hull International Fisheries Institute - Documents/REDEEM 2.0/HS_JOSH_NORMAN/RAPID_processing/uoh-hifi-sensor_/shiny/processed_sens_data")
+  #Switch to local C drive
+  #output_dir <- reactive("./processed_sens_data")
+  
+   session_state <- reactiveValues(
     selected_sensor = NULL,
     deployment_filter = "all",
     treatment_filter = "all", 
