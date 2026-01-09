@@ -33,12 +33,10 @@ library(ggpubr)
 
 ```{r delineated_list, echo=FALSE}
 #Get all delineated files
-delineated_file_list <- list.files("C:/users/591302/OneDrive - hull.ac.uk/FSE Hull International Fisheries Institute - Documents/REDEEM 2.0/
-                                   HS_JOSH_NORMAN/RAPID_processing/processed_sens_data/csv/delineated/", 
+delineated_file_list <- list.files("C:/users/591302/OneDrive - hull.ac.uk/FSE Hull International Fisheries Institute - Documents/REDEEM 2.0/HS_JOSH_NORMAN/RAPID_processing/processed_sens_data/csv/delineated/", 
                                    pattern = "_delineated\\.csv$", full.names = TRUE)
 #Get all sensor data files
-full_sens_file_list <- list.files("C:/users/591302/OneDrive - hull.ac.uk/FSE Hull International Fisheries Institute - Documents/REDEEM 2.0/
-                                  HS_JOSH_NORMAN/RAPID_processing/processed_sens_data/csv/",
+full_sens_file_list <- list.files("C:/users/591302/OneDrive - hull.ac.uk/FSE Hull International Fisheries Institute - Documents/REDEEM 2.0/HS_JOSH_NORMAN/RAPID_processing/processed_sens_data/csv/",
                                   pattern = "\\.csv$", full.names = TRUE)
 
 # Remove any files appended with _min
@@ -57,12 +55,289 @@ pf_meta <- read_csv("./shiny/processed_sens_data/PumpFlow META/all_pro_rapid_dat
 
 ```
 
-1. Filter data to just pumpflow data, so only need delineated and full sensor files where sensor_index 'deployment' == PF_Test_Rig_2024
-2. For each unique 'file' in the filtered sensor_index, find the associated _delineated file
-3. In each _delineated file, filter to only copntain 'roi' == roi4_nadir
-4. Using the associated time_s data for each sensors (roi 4 only), retrieve the associated full sensor file and extract the rows corrosponding to the time_s
-5. Filter this data to only contain the columns time_s	higacc_x_g	higacc_y_g	higacc_z_g	higacc_mag_g
-6. bind all sensor data into new dataframe 'pf_roi4_hig_3axis'
+```{r check_files}
+
+full_sens_names <- basename(full_sens_file_list) %>%
+  str_replace("\\.csv$", "")
+
+index_names <- sensor_index$file
+
+missing_from_index <- setdiff(full_sens_names, index_names)
+if (length(missing_from_index) > 0) {
+  warning("Files in full_sens_file_list but NOT in sensor_index:")
+  print(missing_from_index)
+}
+
+missing_from_files <- setdiff(index_names, full_sens_names)
+if (length(missing_from_files) > 0) {
+  warning("Files in sensor_index but NOT in full_sens_file_list:")
+  print(missing_from_files)
+}
+
+```
 
 
-# 5. Clean, merge, typeset
+
+```{r}
+
+# Step 1: Filter sensor_index to PF_Test_Rig_2024
+pf_sensors <- sensor_index %>%
+  filter(deployment_id == "PF_Test_Rig_2024")
+
+# Steps 2 Process each sensor
+pf_roi4_hig_3axis <- pf_sensors %>%
+  pull(file) %>%
+  unique() %>%
+  #head(10) %>%  # Just first 10 sensors for testing
+  map_dfr(function(sensor_name) {
+    
+    # Step 2: Find the matching delineated file from your list
+    delineated_file <- delineated_file_list[grepl(paste0(sensor_name, "_delineated\\.csv$"), delineated_file_list)]
+    
+    if (length(delineated_file) == 0) {
+      warning(paste("Delineated file not found for:", sensor_name))
+      return(NULL)
+    }
+    
+    # Step 3: Read delineated and filter to roi4_nadir
+    delineated_data <- read_csv(delineated_file, show_col_types = FALSE) %>%
+      filter(roi == "roi4_nadir")
+    
+    # Step 4: Extract time_s values for roi4
+    # Get min and max times from delineated (with small buffer for precision)
+    # Avoids floating-point precision issue
+    min_time <- min(delineated_data$time_s) - 0.0001
+    max_time <- max(delineated_data$time_s) + 0.0001
+    
+    # Find the matching full sensor file from your list
+    sensor_file <- full_sens_file_list[grepl(paste0(sensor_name, "\\.csv$"), full_sens_file_list)]
+    
+    if (length(sensor_file) == 0) {
+      warning(paste("Sensor file not found for:", sensor_name))
+      return(NULL)
+    }
+    
+    # Step 5-6: Extract matching rows and select 3-axis columns, add file and roi
+      read_csv(sensor_file, show_col_types = FALSE) %>%
+      filter(time_s >= min_time & time_s <= max_time) %>%
+      select(time_s, higacc_x_g, higacc_y_g, higacc_z_g, higacc_mag_g) %>%
+      mutate(file = sensor_name,
+             roi = "roi4_nadir") %>%
+      select(file, roi, everything()) 
+  })
+
+# Check
+head(pf_roi4_hig_3axis)
+unique(pf_roi4_hig_3axis$file)
+pf_roi4_hig_3axis %>%
+  count(file)
+
+# Hmm, not all files same length +1 or -1
+
+pf_roi4_hig_3axis %>%
+  count(file) %>%
+  filter(!n %in% c(400, 800))
+# This is from delineation process
+# Remove rows in cases where 401 or 801, duplicate last row in cases where 799
+
+
+# Standardize row counts: 400 or 800 exactly
+pf_roi4_hig_3axis <- pf_roi4_hig_3axis %>%
+  group_by(file) %>%
+  mutate(n_rows = n()) %>%
+  group_modify(~{
+    n <- nrow(.x)
+    
+    if (n == 401) {
+      # Remove last row
+      slice_head(.x, n = 400)
+    } else if (n == 801) {
+      # Remove last row
+      slice_head(.x, n = 800)
+    } else if (n == 399) {
+      # Duplicate last row
+      bind_rows(.x, slice_tail(.x, n = 1))
+    } else if (n == 799) {
+      # Duplicate last row
+      bind_rows(.x, slice_tail(.x, n = 1))
+    } else {
+      # Keep as is
+      .x
+    }
+  }) %>%
+  select(-n_rows) %>%
+  ungroup()
+
+# Verify the fix
+pf_roi4_hig_3axis %>%
+  count(file) %>%
+  count(n, name = "n_files")
+
+pf_roi4_hig_3axis %>%
+  count(file)
+
+
+```
+
+
+
+```{r}
+# Join with pf_meta, accounting for _imp suffix
+pf_roi4_hig_3axis <- pf_roi4_hig_3axis %>%
+  left_join(
+    pf_meta %>%
+      mutate(file = str_replace(file, "_imp$", "")) %>%  # Remove _imp suffix
+      select(file, treatment, clear_passage, rotate_hub, pres_force, 
+             passage_loc, centre_hub_contact, blade_contact, n_contact, 
+             c_1_bl, c_1_sl, c_1_bv, c_1_type),
+    by = "file"
+  )
+
+# Check the result
+glimpse(pf_roi4_hig_3axis)
+
+# Verify all files matched
+pf_roi4_hig_3axis %>%
+  filter(is.na(treatment)) %>%
+  distinct(file)
+
+
+```
+
+Max HIG time for each roi4 passage
+
+roll back 2 rows, then + 13 forward = acceleration event
+
+
+
+```{r}
+
+
+# Step 1: Get list of files to keep (excluding treatment 400 (50%))
+files_to_keep <- pf_roi4_hig_3axis %>%
+  filter(treatment != "400 (50%)") %>%
+  distinct(file) %>%
+  pull(file)
+
+# Step 2: Get max acceleration timestamps, filtered to only those files
+max_acc_times <- instrument_index %>%
+  filter(roi == "roi4_nadir") %>%
+  filter(file %in% files_to_keep) %>%  # Only files we want
+  select(file, acc_hig_max.time.) %>%
+  filter(!is.na(acc_hig_max.time.))
+
+# Step 3: Extract feature vectors (±15 rows around max, 30 rows total)
+pf_max_acc_features <- pf_roi4_hig_3axis %>%
+  filter(treatment != "400 (50%)") %>% 
+  inner_join(max_acc_times, by = "file") %>%
+  group_by(file) %>%
+  arrange(time_s) %>%
+  mutate(
+    row_num = row_number(),
+    max_row = which.min(abs(time_s - acc_hig_max.time.)),
+    total_rows = n()
+  ) %>%
+  filter(
+    max_row >= 16 & max_row <= (total_rows - 14)
+  ) %>%
+  filter(
+    row_num >= (max_row - 15) & 
+    row_num <= (max_row + 14)
+  ) %>%
+  select(-row_num, -max_row, -total_rows, -acc_hig_max.time.) %>%
+  ungroup()
+
+# Verify: should have 30 rows per file (or 0 if near edges)
+feature_counts <- pf_max_acc_features %>%
+  count(file)
+
+# Show any files that were excluded due to edge position
+excluded_files <- max_acc_times %>%
+  anti_join(pf_max_acc_features, by = "file")
+
+cat("Files with complete features:", nrow(feature_counts), "\n")
+cat("Files excluded (max too close to edge):", nrow(excluded_files), "\n")
+
+```
+
+
+
+```{r}
+
+# Summary of file counts across key variables
+pf_features_summary <- pf_max_acc_features %>%
+  distinct(file, treatment, clear_passage, centre_hub_contact, blade_contact, c_1_bl) %>%
+  group_by(treatment, clear_passage, centre_hub_contact, blade_contact, c_1_bl) %>%
+  summarise(n_files = n(), .groups = "drop") %>%
+  arrange(treatment, desc(n_files))
+
+# View the summary
+pf_features_summary
+
+# Individual summaries by each variable
+pf_max_acc_features %>%
+  distinct(file, treatment) %>%
+  count(treatment, name = "n_files")
+
+pf_max_acc_features %>%
+  distinct(file, clear_passage) %>%
+  count(clear_passage, name = "n_files")
+
+pf_max_acc_features %>%
+  distinct(file, centre_hub_contact) %>%
+  count(centre_hub_contact, name = "n_files")
+
+pf_max_acc_features %>%
+  distinct(file, blade_contact) %>%
+  count(blade_contact, name = "n_files")
+
+pf_max_acc_features %>%
+  distinct(file, c_1_bl) %>%
+  count(c_1_bl, name = "n_files")
+
+# Cross-tabulation examples
+pf_max_acc_features %>%
+  distinct(file, treatment, blade_contact) %>%
+  count(treatment, blade_contact) %>%
+  pivot_wider(names_from = blade_contact, values_from = n, values_fill = 0)
+
+
+
+```
+
+```{r}
+
+
+pf_max_acc_features_filtered <- pf_max_acc_features %>%
+  group_by(file) %>%
+  filter(
+    clear_passage != "No contact" |  # Keep all contact events
+    (clear_passage == "No contact" & max(higacc_mag_g, na.rm = TRUE) >= 95)  # Only keep "No contact" if >= 95g
+  ) %>%
+  ungroup()
+
+# Check results
+cat("Total files before filter:", n_distinct(pf_max_acc_features$file), "\n")
+cat("Total files after filter:", n_distinct(pf_max_acc_features_filtered$file), "\n")
+
+# Cross-tabulation examples
+pf_max_acc_features_filtered %>%
+  distinct(file, treatment, blade_contact) %>%
+  count(treatment, blade_contact) %>%
+  pivot_wider(names_from = blade_contact, values_from = n, values_fill = 0)
+
+n_distinct(pf_max_acc_features_filtered$file)
+
+```
+
+
+```{r}
+
+write_csv(pf_roi4_hig_3axis, "pf_roi4_hig_3axis.csv") # complete nadir roi (0.2s/0.4s) for all sensors. Total 311
+write_csv(pf_max_acc_features, "pf_max_acc_features.csv") #Acceleration vectors (+/- 15 rows from max) for 500 rpm and 400 rpm (100, 70%) data (50% removed). Any vectors too close to boundary removed (17). Total = 241
+write_csv(pf_max_acc_features_filtered, "pf_max_acc_features_filtered.csv") #Acceleration vectors (+/- 15 rows from max) for 500 rpm and 400 rpm (100, 70%) data (50% removed). Any vectors too close to boundary removed (17). Filtered so only no contact events => 95g included. Total = 130
+
+
+```
+
+
