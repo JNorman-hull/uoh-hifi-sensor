@@ -78,6 +78,10 @@ if (length(missing_from_files) > 0) {
 
 
 
+ADD IN CH CONTACTS
+
+
+
 ```{r}
 
 # Step 1: Filter sensor_index to PF_Test_Rig_2024
@@ -85,7 +89,7 @@ pf_sensors <- sensor_index %>%
   filter(deployment_id == "PF_Test_Rig_2024")
 
 # Steps 2 Process each sensor
-pf_roi4_hig_3axis <- pf_sensors %>%
+pf_roi4_3axis <- pf_sensors %>%
   pull(file) %>%
   unique() %>%
   #head(10) %>%  # Just first 10 sensors for testing
@@ -120,29 +124,30 @@ pf_roi4_hig_3axis <- pf_sensors %>%
     # Step 5-6: Extract matching rows and select 3-axis columns, add file and roi
       read_csv(sensor_file, show_col_types = FALSE) %>%
       filter(time_s >= min_time & time_s <= max_time) %>%
-      select(time_s, higacc_x_g, higacc_y_g, higacc_z_g, higacc_mag_g) %>%
+      select(time_s, higacc_x_g, higacc_y_g, higacc_z_g, higacc_mag_g, inacc_x_ms, inacc_y_ms, inacc_z_ms,	inacc_mag_ms, rot_x_degs,	rot_y_degs,
+             rot_z_degs, rot_mag_degs, pressure_kpa
+             ) %>%
       mutate(file = sensor_name,
              roi = "roi4_nadir") %>%
       select(file, roi, everything()) 
   })
 
 # Check
-head(pf_roi4_hig_3axis)
-unique(pf_roi4_hig_3axis$file)
-pf_roi4_hig_3axis %>%
+head(pf_roi4_3axis)
+unique(pf_roi4_3axis$file)
+pf_roi4_3axis %>%
   count(file)
 
 # Hmm, not all files same length +1 or -1
 
-pf_roi4_hig_3axis %>%
+pf_roi4_3axis %>%
   count(file) %>%
   filter(!n %in% c(400, 800))
 # This is from delineation process
 # Remove rows in cases where 401 or 801, duplicate last row in cases where 799
 
-
 # Standardize row counts: 400 or 800 exactly
-pf_roi4_hig_3axis <- pf_roi4_hig_3axis %>%
+pf_roi4_3axis <- pf_roi4_3axis %>%
   group_by(file) %>%
   mutate(n_rows = n()) %>%
   group_modify(~{
@@ -169,13 +174,12 @@ pf_roi4_hig_3axis <- pf_roi4_hig_3axis %>%
   ungroup()
 
 # Verify the fix
-pf_roi4_hig_3axis %>%
+pf_roi4_3axis %>%
   count(file) %>%
   count(n, name = "n_files")
 
-pf_roi4_hig_3axis %>%
+pf_roi4_3axis %>%
   count(file)
-
 
 ```
 
@@ -183,7 +187,7 @@ pf_roi4_hig_3axis %>%
 
 ```{r}
 # Join with pf_meta, accounting for _imp suffix
-pf_roi4_hig_3axis <- pf_roi4_hig_3axis %>%
+pf_roi4_3axis <- pf_roi4_3axis %>%
   left_join(
     pf_meta %>%
       mutate(file = str_replace(file, "_imp$", "")) %>%  # Remove _imp suffix
@@ -194,12 +198,21 @@ pf_roi4_hig_3axis <- pf_roi4_hig_3axis %>%
   )
 
 # Check the result
-glimpse(pf_roi4_hig_3axis)
+glimpse(pf_roi4_3axis)
 
 # Verify all files matched
-pf_roi4_hig_3axis %>%
+pf_roi4_3axis %>%
   filter(is.na(treatment)) %>%
   distinct(file)
+
+pf_roi4_3axis <- pf_roi4_3axis %>%
+  mutate(
+    roi = if_else(
+      treatment != "400 (50%)",
+      "roi4_nadir_200ms",
+      "roi4_nadir_400ms"
+    )
+  )
 
 
 ```
@@ -333,7 +346,7 @@ n_distinct(pf_max_acc_features_filtered$file)
 
 ```{r}
 
-write_csv(pf_roi4_hig_3axis, "pf_roi4_hig_3axis.csv") # complete nadir roi (0.2s/0.4s) for all sensors. Total 311
+write_csv(pf_roi4_3axis, "pf_roi4_3axis.csv") # complete nadir roi (0.2s/0.4s) for all sensors. Total 311
 write_csv(pf_max_acc_features, "pf_max_acc_features.csv") #Acceleration vectors (+/- 15 rows from max) for 500 rpm and 400 rpm (100, 70%) data (50% removed). Any vectors too close to boundary removed (17). Total = 241
 write_csv(pf_max_acc_features_filtered, "pf_max_acc_features_filtered.csv") #Acceleration vectors (+/- 15 rows from max) for 500 rpm and 400 rpm (100, 70%) data (50% removed). Any vectors too close to boundary removed (17). Filtered so only no contact events => 95g included. Total = 130
 
